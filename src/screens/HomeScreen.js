@@ -1,27 +1,90 @@
-import React, { useContext, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import React, { useContext, useState, useEffect } from 'react';
+import * as Location from 'expo-location';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { EventContext } from '../EventContext';
 
-export default function HomeScreen({ navigation }) {
-  const { events } = useContext(EventContext);
-  const [search, setSearch] = useState('');
+// Calcula la distancia entre dos puntos (en km)
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lat2) return null;
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
-  // Filtra eventos según búsqueda (por título o lugar)
-  const filteredEvents = events.filter(event =>
-    event.title.toLowerCase().includes(search.toLowerCase()) ||
-    event.location.toLowerCase().includes(search.toLowerCase())
-  );
+export default function HomeScreen({ navigation }) {
+  const { events, favorites, toggleFavorite } = useContext(EventContext);
+  const [search, setSearch] = useState('');
+  const [location, setLocation] = useState(null);
+  const [loadingLocation, setLoadingLocation] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'No podemos mostrar eventos cercanos sin acceso a tu ubicación.');
+        setLoadingLocation(false);
+        return;
+      }
+      let loc = await Location.getCurrentPositionAsync({});
+      setLocation(loc.coords);
+      setLoadingLocation(false);
+    })();
+  }, []);
+
+  // Filtrado: busca y muestra solo eventos a menos de 30km (si hay ubicación)
+  const filteredEvents = events
+    .filter(event =>
+      event.title.toLowerCase().includes(search.toLowerCase()) ||
+      event.location.toLowerCase().includes(search.toLowerCase())
+    )
+    .filter(event =>
+      !location ||
+      (event.latitude && event.longitude &&
+        getDistanceKm(location.latitude, location.longitude, event.latitude, event.longitude) < 30)
+    );
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.eventCard}
       onPress={() => navigation.navigate('EventDetail', { event: item })}
     >
-      <Text style={styles.eventTitle}>{item.title}</Text>
-      <Text>{item.date} - {item.location}</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={styles.eventTitle}>{item.title}</Text>
+        <TouchableOpacity
+          onPress={() => toggleFavorite(item.id)}
+          style={{ marginLeft: 10 }}
+        >
+          <Text style={{ fontSize: 22 }}>
+            {favorites.includes(item.id) ? '⭐' : '☆'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      <Text>
+        {item.date} - {item.location}
+        {location && item.latitude && item.longitude
+          ? ` (${getDistanceKm(location.latitude, location.longitude, item.latitude, item.longitude).toFixed(1)} km)`
+          : ''}
+      </Text>
       <Text numberOfLines={2} style={styles.eventDesc}>{item.description}</Text>
     </TouchableOpacity>
   );
+
+  if (loadingLocation) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#888" />
+        <Text>Buscando ubicación...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -36,7 +99,7 @@ export default function HomeScreen({ navigation }) {
         data={filteredEvents}
         renderItem={renderItem}
         keyExtractor={item => item.id}
-        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20 }}>No hay eventos.</Text>}
+        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20 }}>No hay eventos cercanos.</Text>}
         contentContainerStyle={{ paddingBottom: 20 }}
       />
     </View>

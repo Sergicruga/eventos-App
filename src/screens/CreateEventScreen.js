@@ -1,26 +1,36 @@
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 import { EventContext } from '../EventContext';
+import * as Location from 'expo-location';
 
 export default function CreateEventScreen({ navigation }) {
-  const [title, setTitle] = useState('');
-  const [date, setDate] = useState('');
-  const [location, setLocation] = useState('');
-  const [description, setDescription] = useState('');
   const { addEvent } = useContext(EventContext);
 
-  const handleCreateEvent = () => {
-    if (!title || !date || !location || !description) {
-      Alert.alert('Faltan datos', 'Por favor, rellena todos los campos');
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [locationName, setLocationName] = useState('');
+  const [description, setDescription] = useState('');
+
+  const handleCreateEvent = async () => {
+    // Pide la ubicación actual
+    let { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permiso denegado', 'No podemos guardar el evento sin ubicación.');
       return;
     }
-    addEvent({ title, date, location, description });
-    // Borra los campos después de crear
-    setTitle('');
-    setDate('');
-    setLocation('');
-    setDescription('');
-    navigation.navigate('Home');
+    let loc = await Location.getCurrentPositionAsync({});
+
+    addEvent({
+      title,
+      date,
+      location: locationName,
+      description,
+      latitude: loc.coords.latitude,
+      longitude: loc.coords.longitude,
+    });
+
+    Alert.alert('Evento creado', '¡Tu evento se ha guardado!');
+    navigation.goBack();
   };
 
   return (
@@ -34,38 +44,32 @@ export default function CreateEventScreen({ navigation }) {
       />
       <TextInput
         style={styles.input}
-        placeholder="Fecha (YYYY-MM-DD)"
+        placeholder="Fecha"
         value={date}
         onChangeText={setDate}
       />
       <TextInput
         style={styles.input}
         placeholder="Lugar"
-        value={location}
-        onChangeText={setLocation}
+        value={locationName}
+        onChangeText={setLocationName}
       />
       <TextInput
-        style={[styles.input, { height: 80 }]}
+        style={styles.input}
         placeholder="Descripción"
         value={description}
         onChangeText={setDescription}
-        multiline
       />
-      <Button title="Crear Evento" onPress={handleCreateEvent} />
+      <Button title="Crear" onPress={handleCreateEvent} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff' },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 24, textAlign: 'center' },
   input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 15,
-    fontSize: 16,
-    backgroundColor: '#f8f8f8',
+    borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
+    padding: 10, marginBottom: 16, fontSize: 16, backgroundColor: '#f8f8f8'
   },
 });

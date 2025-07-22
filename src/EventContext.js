@@ -1,7 +1,10 @@
 // src/EventContext.js
-import React, { createContext, useState } from 'react';
+import React, { createContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 export const EventContext = createContext();
+const FAVORITES_KEY = 'favoritos_eventos';
 
 export function EventProvider({ children }) {
     const [user, setUser] = useState({
@@ -11,10 +14,12 @@ export function EventProvider({ children }) {
     const [events, setEvents] = useState([
     {
       id: '1',
-      title: 'Fiesta Universitaria',
-      date: '2025-06-15',
-      location: 'Sala X, Sevilla',
-      description: '¡No te pierdas la mejor fiesta del mes!',
+      title: 'Concierto joven',
+      date: '2025-08-10',
+      location: 'Madrid',
+      latitude: 40.4168,
+      longitude: -3.7038,
+      description: 'Concierto en el centro de Madrid.',
       createdBy: 'Usuario', // Añadimos el creador del evento
     },
     {
@@ -35,16 +40,45 @@ export function EventProvider({ children }) {
     },
     ]);
 
-    const addEvent = (event) => {
-        setEvents((prevEvents) => [
-        { ...event, id: Date.now().toString(), createdBy: user.name }, // Añadimos el creador del evento
-        ...prevEvents,
-        ]);
-    };
+    const [favorites, setFavorites] = useState([]); // <-- FAVORITOS
+      useEffect(() => {
+      AsyncStorage.getItem(FAVORITES_KEY)
+        .then(data => {
+          if (data) setFavorites(JSON.parse(data));
+        })
+        .catch(() => {});
+    }, []);
+
+  // Cada vez que cambien, guárdalos
+      useEffect(() => {
+        AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+      }, [favorites]);
+        const addEvent = (event) => {
+          setEvents((prevEvents) => [
+            { ...event, id: Date.now().toString(), createdBy: user.name },
+            ...prevEvents,
+          ]);
+        };
+
     const updateUser = (newUser) => setUser(newUser);
+
+    // Añadir/quitar favoritos
+    const toggleFavorite = (eventId) => {
+      setFavorites((prevFavs) =>
+        prevFavs.includes(eventId)
+          ? prevFavs.filter((id) => id !== eventId)
+          : [...prevFavs, eventId]
+      );
+    };
+    
+
     return (
-    <EventContext.Provider value={{ events, addEvent, user, updateUser }}>
+
+      <EventContext.Provider value={{
+        events, addEvent, user, updateUser,
+        favorites, toggleFavorite
+      }}>
         {children}
-    </EventContext.Provider>
+      </EventContext.Provider>
     );
 }
