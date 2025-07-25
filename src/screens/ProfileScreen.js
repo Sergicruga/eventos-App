@@ -1,9 +1,9 @@
 import React, { useContext, useState } from 'react';
-import { View, Text, TextInput, Button, FlatList, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { EventContext } from '../EventContext';
 import { Alert } from 'react-native';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const { user, updateUser, events } = useContext(EventContext);
 
   const [name, setName] = useState(user.name);
@@ -41,11 +41,15 @@ export default function ProfileScreen() {
         data={userEvents}
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
-          <View style={styles.eventCard}>
+          <TouchableOpacity
+            style={styles.eventCard}
+            onPress={() => navigation.navigate('EventDetail', { event: item })}
+          >
             <Text style={styles.eventTitle}>{item.title}</Text>
             <Text style={styles.eventDesc}>{item.date} - {item.location}</Text>
-          </View>
+          </TouchableOpacity>
         )}
+
         ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#999', marginTop: 20 }}>No has creado eventos aún.</Text>}
       />
     </View>
