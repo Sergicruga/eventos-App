@@ -5,9 +5,13 @@ import HomeScreen from '../screens/HomeScreen';
 import CreateEventScreen from '../screens/CreateEventScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
+import { useColorScheme } from 'react-native';
+
 
 
 const Tab = createBottomTabNavigator();
+const scheme = useColorScheme();
+
 
 export default function TabNavigator() {
   return (

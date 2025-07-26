@@ -13,20 +13,6 @@ export default function CreateEventScreen({ navigation }) {
   const [locationName, setLocationName] = useState('');
   const [description, setDescription] = useState('');
   const [imageUri, setImageUri] = useState(null);
-  const colorScheme = useColorScheme();
-  const theme = colorScheme === 'dark'
-    ? {
-        background: '#18181A',
-        text: '#fff',
-        input: '#232327',
-        border: '#444'
-      }
-    : {
-        background: '#fff',
-        text: '#18181A',
-        input: '#f8f8f8',
-        border: '#ccc'
-      };
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -78,21 +64,18 @@ export default function CreateEventScreen({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Título"
-        placeholderTextColor={colorScheme === 'dark' ? '#aaa' : '#888'}
         value={title}
         onChangeText={setTitle}
       />
       <TextInput
         style={styles.input}
         placeholder="Fecha"
-        placeholderTextColor={colorScheme === 'dark' ? '#aaa' : '#888'}
         value={date}
         onChangeText={setDate}
       />
       <TextInput
         style={styles.input}
         placeholder="Lugar"
-        placeholderTextColor={colorScheme === 'dark' ? '#aaa' : '#888'}
         value={locationName}
         onChangeText={setLocationName}
       />

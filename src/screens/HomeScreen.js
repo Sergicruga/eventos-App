@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import * as Location from 'expo-location';
-import {useColorScheme, View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { EventContext } from '../EventContext';
 
 // Calcula la distancia entre dos puntos (en km)
@@ -24,7 +24,6 @@ export default function HomeScreen({ navigation }) {
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
-  const colorScheme = useColorScheme();
 
   useEffect(() => {
     (async () => {
@@ -86,21 +85,6 @@ export default function HomeScreen({ navigation }) {
       </View>
     );
   }
-  const theme = colorScheme === 'dark'
-    ? {
-        background: '#18181A',
-        text: '#fff',
-        card: '#232327',
-        input: '#232327',
-        border: '#444'
-      }
-    : {
-        background: '#fff',
-        text: '#18181A',
-        card: '#f4f4f4',
-        input: '#f8f8f8',
-        border: '#ccc'
-      };
 
   return (
     <View style={styles.container}>
@@ -108,7 +92,6 @@ export default function HomeScreen({ navigation }) {
       <TextInput
         style={styles.searchInput}
         placeholder="Buscar por título o lugar..."
-        placeholderTextColor={colorScheme === 'dark' ? '#aaa' : '#888'}
         value={search}
         onChangeText={setSearch}
       />
