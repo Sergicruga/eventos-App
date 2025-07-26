@@ -20,7 +20,12 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC5OaOH5s6obmHZNMzw8bO6hXuh7G6I7cw"   
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
