@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Button } from 'react-native';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Button, Linking, Platform, Alert } from 'react-native';
 import { EventContext } from '../EventContext';
 import MapView, { Marker } from 'react-native-maps';
 import { Dimensions } from 'react-native';
@@ -20,18 +20,31 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
 }
 
 export default function EventDetailScreen({ route, navigation }) {
-  const { events,favorites, toggleFavorite, joinEvent, leaveEvent, user } = useContext(EventContext);
+  const { events, favorites, toggleFavorite, joinEvent, leaveEvent, user } = useContext(EventContext);
   const eventId = route.params.event.id;
   const event = events.find(e => e.id === eventId) || route.params.event;
   const showMap = typeof event.latitude === "number" && typeof event.longitude === "number";
   const asistentes = event.asistentes || [];
   const yaApuntado = asistentes.includes(user.name);
 
-  // Si tienes la localización del usuario en contexto, puedes calcular la distancia aquí.
-  // Si no, simplemente no muestres la distancia.
+  // --- NUEVO: función para abrir Google/Apple Maps ---
+  const handleOpenMaps = () => {
+    if (!event.latitude || !event.longitude) {
+      Alert.alert('Ubicación no disponible');
+      return;
+    }
+    const url = Platform.select({
+      ios: `http://maps.apple.com/?ll=${event.latitude},${event.longitude}`,
+      android: `geo:${event.latitude},${event.longitude}?q=${event.latitude},${event.longitude}(${event.title})`,
+      default: `https://www.google.com/maps?q=${event.latitude},${event.longitude}`,
+    });
+    Linking.openURL(url).catch(() =>
+      Alert.alert('Error', 'No se pudo abrir la app de mapas.')
+    );
+  };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
       {event.imageUrl ? (
         <Image source={{ uri: event.imageUrl }} style={styles.image} />
       ) : (
@@ -83,31 +96,34 @@ export default function EventDetailScreen({ route, navigation }) {
         )}
       </View>
       {showMap && (
-        
         <View style={{ alignItems: 'center', width: '100%' }}>
-        <MapView
-          style={{
-            width: Dimensions.get('window').width * 0.9,
-            height: 220,
-            marginTop: 20
-          }}
-          initialRegion={{
-            latitude: Number(event.latitude),
-            longitude: Number(event.longitude),
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          }}
-        >
-          <Marker
-            coordinate={{
-              latitude: Number(event.latitude),
-              longitude: Number(event.longitude)
+          <MapView
+            style={{
+              width: Dimensions.get('window').width * 0.9,
+              height: 220,
+              marginTop: 20
             }}
-            title={event.title}
-            description={event.location}
-          />
-        </MapView>
-      </View>
+            initialRegion={{
+              latitude: Number(event.latitude),
+              longitude: Number(event.longitude),
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+          >
+            <Marker
+              coordinate={{
+                latitude: Number(event.latitude),
+                longitude: Number(event.longitude)
+              }}
+              title={event.title}
+              description={event.location}
+            />
+          </MapView>
+          {/* --- BOTÓN PARA ABRIR EN GOOGLE MAPS --- */}
+          <View style={{ marginTop: 14, marginBottom: 40  }}>
+            <Button title="Ver en el mapa (Google/Apple Maps)" onPress={handleOpenMaps} />
+          </View>
+        </View>
       )}
     </ScrollView>
   );
