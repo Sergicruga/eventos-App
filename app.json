@@ -23,12 +23,18 @@
       "edgeToEdgeEnabled": true,
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyC5OaOH5s6obmHZNMzw8bO6hXuh7G6I7cw"   
+          "apiKey": "AIzaSyC5OaOH5s6obmHZNMzw8bO6hXuh7G6I7cw"
         }
-      }
+      },
+      "package": "com.sergicruga.eventoapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ec7b6a65-2245-4b94-9f89-7183cae09276"
+      }
     }
   }
 }

@@ -2,13 +2,14 @@ import React, { useContext, useState } from 'react';
 import { View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { EventContext } from '../EventContext';
 import { Alert } from 'react-native';
+import { usePushToken } from '../hooks/usePushToken';
 
 export default function ProfileScreen({ navigation }) {
   const { user, updateUser, events } = useContext(EventContext);
 
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
-
+  const token = usePushToken();
   const handleSave = () => {
     updateUser({ name, email });
     Alert.alert('Perfil actualizado', 'Tu perfil ha sido guardado correctamente.');
@@ -52,7 +53,12 @@ export default function ProfileScreen({ navigation }) {
 
         ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#999', marginTop: 20 }}>No has creado eventos aún.</Text>}
       />
+      <Text style={styles.title}>Perfil</Text>
+      <Text style={{ fontSize: 12, color: 'gray' }}>Expo Push Token:</Text>
+      <Text selectable style={{ fontSize: 12 }}>{token ? token : 'Obteniendo token...'}</Text>
+
     </View>
+    
   );
 }
 
