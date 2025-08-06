@@ -1,7 +1,9 @@
 import React, { useContext, useState, useEffect } from 'react';
 import * as Location from 'expo-location';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, Linking } from 'react-native'; // <-- Linking aquí
 import { EventContext } from '../EventContext';
+
+const TICKETMASTER_API_KEY = "jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi"; // <-- pon la tuya
 
 // Calcula la distancia entre dos puntos (en km)
 function getDistanceKm(lat1, lon1, lat2, lon2) {
@@ -19,12 +21,24 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+// Llama a Ticketmaster por ciudad
+async function fetchTicketmasterEvents(city = 'Barcelona') {
+  const url = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${TICKETMASTER_API_KEY}&countryCode=ES&city=${encodeURIComponent(city)}`;
+  const response = await fetch(url);
+  const data = await response.json();
+  const eventos = data._embedded?.eventos || data._embedded?.events;
+  return data._embedded?.events || [];
+}
+
 export default function HomeScreen({ navigation }) {
-  const { events, favorites, toggleFavorite } = useContext(EventContext);
+  const { events } = useContext(EventContext);
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
+  const [apiEvents, setApiEvents] = useState([]);
+  const [loadingApiEvents, setLoadingApiEvents] = useState(true);
 
+  // Ubicación
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -39,11 +53,47 @@ export default function HomeScreen({ navigation }) {
     })();
   }, []);
 
-  // Filtrado: busca y muestra solo eventos a menos de 30km (si hay ubicación)
-  const filteredEvents = events
+  // Ticketmaster
+  useEffect(() => {
+    fetchTicketmasterEvents("Barcelona")
+      .then(events => setApiEvents(events))
+      .catch(() => setApiEvents([]))
+      .finally(() => setLoadingApiEvents(false));
+  }, []);
+
+  // Une tus eventos y los de Ticketmaster
+  const allEvents = [
+    ...events.map(ev => ({
+      ...ev,
+      type: 'local', // Para distinguirlos visualmente
+    })),
+    ...apiEvents
+      .map(ev => {
+        let lat = null, lon = null;
+        const venue = ev._embedded?.venues?.[0];
+        if (venue && venue.location && venue.location.latitude && venue.location.longitude) {
+          lat = parseFloat(venue.location.latitude);
+          lon = parseFloat(venue.location.longitude);
+        }
+        return {
+          id: ev.id,
+          title: ev.name,
+          date: ev.dates?.start?.localDate || '',
+          location: venue?.city?.name || '',
+          description: ev.info || '',
+          latitude: lat,
+          longitude: lon,
+          url: ev.url,
+          type: 'api'
+        };
+      })
+  ];
+
+  // Filtrado buscador y distancia
+  const filteredEvents = allEvents
     .filter(event =>
-      event.title.toLowerCase().includes(search.toLowerCase()) ||
-      event.location.toLowerCase().includes(search.toLowerCase())
+      (event.title?.toLowerCase().includes(search.toLowerCase()) ||
+      event.location?.toLowerCase().includes(search.toLowerCase()))
     )
     .filter(event =>
       !location ||
@@ -51,47 +101,63 @@ export default function HomeScreen({ navigation }) {
         getDistanceKm(location.latitude, location.longitude, event.latitude, event.longitude) < 30)
     );
 
+  // Abre el enlace del evento (corregido)
+  const handleOpenUrl = (item) => {
+    let openUrl = item.url;
+
+    try {
+      const urlObj = new URL(item.url);
+      if (urlObj.hostname.includes('tm7508.net') && urlObj.searchParams.has('u')) {
+        openUrl = decodeURIComponent(urlObj.searchParams.get('u'));
+      }
+    } catch (e) {
+      // Si falla el parseo, sigue con la URL original
+    }
+
+    if (openUrl && openUrl.startsWith('http')) {
+      Linking.openURL(openUrl).catch(() => {
+        Alert.alert("No se puede abrir el enlace", "Ha ocurrido un error al abrir el enlace.");
+      });
+    } else {
+      Alert.alert("Enlace inválido", "Este evento no tiene un enlace válido.");
+    }
+  };
+
   const renderItem = ({ item }) => (
     <TouchableOpacity
-      style={styles.eventCard}
-      onPress={() => navigation.navigate('EventDetail', { event: item })}
+      style={[styles.eventCard, item.type === 'api' && { borderColor: '#1976d2', borderWidth: 1 }]}
+      onPress={() => {
+        if (item.type === 'local') {
+          navigation.navigate('EventDetail', { event: item });
+        } else {
+          handleOpenUrl(item);
+        }
+      }}
     >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={styles.eventTitle}>{item.title}</Text>
-        <TouchableOpacity
-          onPress={() => toggleFavorite(item.id)}
-          style={{ marginLeft: 10 }}
-        >
-          <Text style={{ fontSize: 22 }}>
-            {favorites.includes(item.id) ? '⭐' : '☆'}
-          </Text>
-        </TouchableOpacity>
+        <Text style={styles.eventTitle}>
+          {item.title}
+        </Text>
       </View>
-      <Text>
-        {item.date} - {item.location}
-        {location && item.latitude && item.longitude
-          ? ` (${getDistanceKm(location.latitude, location.longitude, item.latitude, item.longitude).toFixed(1)} km)`
-          : ''}
-      </Text>
-      <Text numberOfLines={2} style={styles.eventDesc}>{item.description}</Text>
+      <Text>{item.date} | {item.location}</Text>
+      <Text numberOfLines={2}>{item.description}</Text>
     </TouchableOpacity>
   );
 
-  if (loadingLocation) {
+  if (loadingLocation || loadingApiEvents) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#888" />
-        <Text>Buscando ubicación...</Text>
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#1976d2" />
+        <Text>Cargando eventos...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Eventos cerca de ti</Text>
       <TextInput
-        style={styles.searchInput}
-        placeholder="Buscar por título o lugar..."
+        style={styles.input}
+        placeholder="Buscar evento o ciudad..."
         value={search}
         onChangeText={setSearch}
       />
@@ -99,24 +165,24 @@ export default function HomeScreen({ navigation }) {
         data={filteredEvents}
         renderItem={renderItem}
         keyExtractor={item => item.id}
-        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20 }}>No hay eventos cercanos.</Text>}
-        contentContainerStyle={{ paddingBottom: 20 }}
+        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 32 }}>No hay eventos para mostrar.</Text>}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
-  searchInput: {
-    borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
-    padding: 8, marginBottom: 16, fontSize: 16, backgroundColor: '#f8f8f8'
+  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
+  input: {
+    borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 8, marginBottom: 10
   },
   eventCard: {
-    backgroundColor: '#f4f4f4', borderRadius: 12,
-    padding: 16, marginBottom: 16, elevation: 2,
+    padding: 12,
+    marginVertical: 6,
+    borderRadius: 10,
+    backgroundColor: "#F3F7FA",
+    elevation: 1
   },
-  eventTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
-  eventDesc: { color: '#666', marginTop: 8 },
+  eventTitle: { fontSize: 16, fontWeight: 'bold', color: "#1976d2" },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' }
 });
