@@ -3,9 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native
 import { EventContext } from '../EventContext';
 
 export default function FavoritesScreen({ navigation }) {
-  const { events, favorites } = useContext(EventContext);
-
-  const favEvents = events.filter(e => favorites.includes(e.id));
+  const { favorites } = useContext(EventContext);
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
@@ -22,9 +20,9 @@ export default function FavoritesScreen({ navigation }) {
     <View style={styles.container}>
       <Text style={styles.title}>Tus eventos favoritos</Text>
       <FlatList
-        data={favEvents}
+        data={favorites}
         renderItem={renderItem}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => `${item.type || 'local'}-${String(item.id)}`}
         ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20 }}>Aún no has marcado favoritos.</Text>}
         contentContainerStyle={{ paddingBottom: 20 }}
       />

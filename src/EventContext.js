@@ -45,7 +45,6 @@ export function EventProvider({ children }) {
       },
     ]);
 
-
     const [favorites, setFavorites] = useState([]); // <-- FAVORITOS
       useEffect(() => {
       AsyncStorage.getItem(FAVORITES_KEY)
@@ -53,7 +52,14 @@ export function EventProvider({ children }) {
           if (data) setFavorites(JSON.parse(data));
         })
         .catch(() => {});
-    }, []);
+      }, []);
+      useEffect(() => {
+      AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+      }, [favorites]);
+
+      useEffect(() => {
+        AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+      }, [events]);
 
   // Cada vez que cambien, guárdalos
       useEffect(() => {
@@ -91,12 +97,16 @@ export function EventProvider({ children }) {
     const updateUser = (newUser) => setUser(newUser);
 
     // Añadir/quitar favoritos
-    const toggleFavorite = (eventId) => {
-      setFavorites((prevFavs) =>
-        prevFavs.includes(eventId)
-          ? prevFavs.filter((id) => id !== eventId)
-          : [...prevFavs, eventId]
-      );
+    const toggleFavorite = (event) => {
+      setFavorites((prevFavs) => {
+        // ¿Ya está como favorito (por ID)?
+        const already = prevFavs.some(fav => fav.id === event.id);
+        if (already) {
+          return prevFavs.filter(fav => fav.id !== event.id);
+        } else {
+          return [event, ...prevFavs];
+        }
+      });
     };
     // --- NUEVO: apuntarse a un evento
     const joinEvent = (eventId) => {

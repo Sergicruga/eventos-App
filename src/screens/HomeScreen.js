@@ -1,9 +1,11 @@
 import React, { useContext, useState, useEffect } from 'react';
 import * as Location from 'expo-location';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, Linking } from 'react-native'; // <-- Linking aquí
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, Linking } from 'react-native';
 import { EventContext } from '../EventContext';
+import { Image } from 'react-native';
 
-const TICKETMASTER_API_KEY = "jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi"; // <-- pon la tuya
+// Usa tu propia API key real aquí
+const TICKETMASTER_API_KEY = "jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi";
 
 // Calcula la distancia entre dos puntos (en km)
 function getDistanceKm(lat1, lon1, lat2, lon2) {
@@ -26,12 +28,11 @@ async function fetchTicketmasterEvents(city = 'Barcelona') {
   const url = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${TICKETMASTER_API_KEY}&countryCode=ES&city=${encodeURIComponent(city)}`;
   const response = await fetch(url);
   const data = await response.json();
-  const eventos = data._embedded?.eventos || data._embedded?.events;
   return data._embedded?.events || [];
 }
 
 export default function HomeScreen({ navigation }) {
-  const { events } = useContext(EventContext);
+  const { events, favorites, toggleFavorite } = useContext(EventContext);
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
@@ -84,7 +85,9 @@ export default function HomeScreen({ navigation }) {
           latitude: lat,
           longitude: lon,
           url: ev.url,
-          type: 'api'
+          image: ev.images?.[0]?.url || null,
+          type: 'api',
+          images: ev.images || [], // Para compatibilidad con EventDetailScreen
         };
       })
   ];
@@ -101,19 +104,29 @@ export default function HomeScreen({ navigation }) {
         getDistanceKm(location.latitude, location.longitude, event.latitude, event.longitude) < 30)
     );
 
-  // Abre el enlace del evento (corregido)
+  // Render de la estrella de favoritos
+  function FavoriteStar({ eventId }) {
+    const isFavorite = (event) => favorites.some(fav => fav.id === event.id);
+    return (
+      <TouchableOpacity
+        onPress={() => toggleFavorite(eventId)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        style={{ marginLeft: 10 }}
+      >
+        <Text style={{ fontSize: 24 }}>{isFavorite ? '⭐' : '☆'}</Text>
+      </TouchableOpacity>
+    );
+  }
+
+  // Abre el enlace del evento (solo usado si haces un botón aparte)
   const handleOpenUrl = (item) => {
     let openUrl = item.url;
-
     try {
       const urlObj = new URL(item.url);
       if (urlObj.hostname.includes('tm7508.net') && urlObj.searchParams.has('u')) {
         openUrl = decodeURIComponent(urlObj.searchParams.get('u'));
       }
-    } catch (e) {
-      // Si falla el parseo, sigue con la URL original
-    }
-
+    } catch (e) {}
     if (openUrl && openUrl.startsWith('http')) {
       Linking.openURL(openUrl).catch(() => {
         Alert.alert("No se puede abrir el enlace", "Ha ocurrido un error al abrir el enlace.");
@@ -122,25 +135,34 @@ export default function HomeScreen({ navigation }) {
       Alert.alert("Enlace inválido", "Este evento no tiene un enlace válido.");
     }
   };
+  // justo antes del render:
+  const deduped = [];
+  const seen = new Set();
+    for (const ev of filteredEvents) {
+      const k = `${ev.type || 'local'}-${String(ev.id)}`;
+      if (!seen.has(k)) {
+        seen.add(k);
+        deduped.push(ev);
+      }
+    }
+
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={[styles.eventCard, item.type === 'api' && { borderColor: '#1976d2', borderWidth: 1 }]}
-      onPress={() => {
-        if (item.type === 'local') {
-          navigation.navigate('EventDetail', { event: item });
-        } else {
-          handleOpenUrl(item);
-        }
-      }}
+      onPress={() => navigation.navigate('EventDetail', { event: item })}
     >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={styles.eventTitle}>
           {item.title}
         </Text>
+        <FavoriteStar eventId={item.id} />
       </View>
       <Text>{item.date} | {item.location}</Text>
       <Text numberOfLines={2}>{item.description}</Text>
+      {item.image && (
+        <Image source={{ uri: item.image }} style={{ width: "100%", height: 120, borderRadius: 8, marginTop: 5 }} />
+      )}
     </TouchableOpacity>
   );
 
@@ -164,7 +186,7 @@ export default function HomeScreen({ navigation }) {
       <FlatList
         data={filteredEvents}
         renderItem={renderItem}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => `${item.type || 'local'}-${String(item.id)}`}
         ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 32 }}>No hay eventos para mostrar.</Text>}
       />
     </View>

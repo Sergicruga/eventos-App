@@ -1,143 +1,105 @@
 import React, { useContext } from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Button, Linking, Platform, Alert } from 'react-native';
+import { View, Text, Image, StyleSheet, Button, Alert, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { EventContext } from '../EventContext';
-import MapView, { Marker } from 'react-native-maps';
-import { Dimensions } from 'react-native';
 
-function getDistanceKm(lat1, lon1, lat2, lon2) {
-  if (!lat1 || !lat2) return null;
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+export default function EventDetailScreen({ route }) {
+  const { event } = route.params;
+  const { favorites, toggleFavorite, joinEvent, leaveEvent, user, events } = useContext(EventContext);
 
-export default function EventDetailScreen({ route, navigation }) {
-  const { events, favorites, toggleFavorite, joinEvent, leaveEvent, user } = useContext(EventContext);
-  const eventId = route.params.event.id;
-  const event = events.find(e => e.id === eventId) || route.params.event;
-  const showMap = typeof event.latitude === "number" && typeof event.longitude === "number";
-  const asistentes = event.asistentes || [];
-  const yaApuntado = asistentes.includes(user.name);
+  const isFavorite = favorites.includes(event.id);
+  const image = event.images && event.images[0] ? event.images[0].url : event.image || null;
 
-  // --- NUEVO: función para abrir Google/Apple Maps ---
-  const handleOpenMaps = () => {
-    if (!event.latitude || !event.longitude) {
-      Alert.alert('Ubicación no disponible');
-      return;
+  // ¿El usuario ya se ha apuntado?
+  const localEvent = events.find(e => e.id === event.id);
+  const isJoined = !!(localEvent && localEvent.asistentes && localEvent.asistentes.includes(user.name));
+
+  const handlePress = () => {
+    if (event.type === 'api') {
+      let openUrl = event.url;
+      try {
+        // Si es un enlace de afiliado de ticketmaster, saca la URL limpia
+        const urlObj = new URL(event.url);
+        if (urlObj.hostname.includes('tm7508.net') && urlObj.searchParams.has('u')) {
+          openUrl = decodeURIComponent(urlObj.searchParams.get('u'));
+        }
+      } catch {}
+      if (openUrl && openUrl.startsWith('http')) {
+        Linking.openURL(openUrl).catch(() => {
+          Alert.alert("No se puede abrir el enlace", "Ha ocurrido un error al abrir el enlace.");
+        });
+      } else {
+        Alert.alert("Enlace inválido", "Este evento no tiene un enlace válido.");
+      }
+    } else {
+      if (!isJoined) {
+        joinEvent(event.id);
+        Alert.alert("¡Genial!", "Te has apuntado a este evento.");
+      } else {
+        leaveEvent(event.id);
+        Alert.alert("Cancelado", "Ya no vas a este evento.");
+      }
     }
-    const url = Platform.select({
-      ios: `http://maps.apple.com/?ll=${event.latitude},${event.longitude}`,
-      android: `geo:${event.latitude},${event.longitude}?q=${event.latitude},${event.longitude}(${event.title})`,
-      default: `https://www.google.com/maps?q=${event.latitude},${event.longitude}`,
-    });
-    Linking.openURL(url).catch(() =>
-      Alert.alert('Error', 'No se pudo abrir la app de mapas.')
-    );
   };
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      {event.imageUrl ? (
-        <Image source={{ uri: event.imageUrl }} style={styles.image} />
-      ) : (
-        <View style={[styles.image, { backgroundColor: "#ddd", justifyContent: "center", alignItems: "center" }]}>
-          <Text style={{ color: "#999" }}>Sin imagen</Text>
-        </View>
-      )}
-      <View style={styles.header}>
-        <Text style={styles.title}>{event.title}</Text>
-        <TouchableOpacity onPress={() => toggleFavorite(event.id)}>
-          <Text style={{ fontSize: 30, marginLeft: 10 }}>
-            {favorites.includes(event.id) ? '⭐' : '☆'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.info}>
-        {event.date} — {event.location}
-        {event.latitude && event.longitude
-          ? `\n(${event.latitude.toFixed(4)}, ${event.longitude.toFixed(4)})`
-          : ''}
-      </Text>
-      <Text style={styles.desc}>{event.description}</Text>
-      {/* --- BOTÓN ¡VOY! / DESAPUNTARSE --- */}
-      <View style={{ marginHorizontal: 16, marginVertical: 10 }}>
-        {yaApuntado ? (
-          <Button
-            title="¡Ya no voy!"
-            color="#ff4d4d"
-            onPress={() => leaveEvent(event.id)}
-          />
-        ) : (
-          <Button
-            title="¡Voy!"
-            color="#4caf50"
-            onPress={() => joinEvent(event.id)}
-          />
-        )}
-      </View>
+  // (Opcional) Mostrar mapa y botón abrir en Google Maps SOLO en eventos locales
+  const showMap = event.latitude && event.longitude && event.type !== 'api';
 
-      {/* --- LISTA DE ASISTENTES --- */}
-      <View style={styles.assistantsBox}>
-        <Text style={styles.assistantsTitle}>Asistentes:</Text>
-        {event.asistentes && event.asistentes.length > 0 ? (
-          event.asistentes.map((name, i) => (
-            <Text key={i} style={styles.assistant}>{name}</Text>
-          ))
-        ) : (
-          <Text style={styles.assistant}>Nadie se ha apuntado aún.</Text>
-        )}
-      </View>
+  return (
+    <ScrollView style={styles.container}>
+      {/* Estrella de favoritos arriba a la derecha */}
+      <TouchableOpacity
+        onPress={() => toggleFavorite(event)}
+        style={{ position: "absolute", right: 20, top: 18, zIndex: 10 }}
+        hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+      >
+        <Text style={{ fontSize: 32 }}>{isFavorite ? '⭐' : '☆'}</Text>
+      </TouchableOpacity>
+
+      {image && <Image source={{ uri: image }} style={styles.image} />}
+      <Text style={styles.title}>{event.title}</Text>
+      <Text style={styles.date}>{event.date} | {event.location}</Text>
+      <Text style={styles.description}>{event.description || "Sin descripción"}</Text>
+
+      {/* (Opcional) Mapa y botón abrir en Maps */}
       {showMap && (
-        <View style={{ alignItems: 'center', width: '100%' }}>
-          <MapView
-            style={{
-              width: Dimensions.get('window').width * 0.9,
-              height: 220,
-              marginTop: 20
+        <View style={{ marginVertical: 14 }}>
+          <Button
+            title="Ver ubicación en Google Maps"
+            color="#1976d2"
+            onPress={() => {
+              const url = `https://www.google.com/maps/search/?api=1&query=${event.latitude},${event.longitude}`;
+              Linking.openURL(url).catch(() =>
+                Alert.alert("No se puede abrir Maps", "Comprueba tu conexión.")
+              );
             }}
-            initialRegion={{
-              latitude: Number(event.latitude),
-              longitude: Number(event.longitude),
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            }}
-          >
-            <Marker
-              coordinate={{
-                latitude: Number(event.latitude),
-                longitude: Number(event.longitude)
-              }}
-              title={event.title}
-              description={event.location}
-            />
-          </MapView>
-          {/* --- BOTÓN PARA ABRIR EN GOOGLE MAPS --- */}
-          <View style={{ marginTop: 14, marginBottom: 40  }}>
-            <Button title="Ver en el mapa (Google/Apple Maps)" onPress={handleOpenMaps} />
-          </View>
+          />
         </View>
       )}
+
+      <View style={{ marginVertical: 28 }}>
+        {/* Botón para comprar entradas o apuntarse/desapuntarse */}
+        {event.type === 'api' ? (
+          <Button
+            title="Comprar entradas"
+            onPress={handlePress}
+            color="#1976d2"
+          />
+        ) : (
+          <Button
+            title={isJoined ? "Ya no voy" : "¡Ya voy!"}
+            onPress={handlePress}
+            color={isJoined ? "#d32f2f" : "green"}
+          />
+        )}
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  image: { width: "100%", height: 180, marginBottom: 14, borderRadius: 0 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16 },
-  title: { fontSize: 24, fontWeight: 'bold', flex: 1 },
-  info: { fontSize: 16, color: "#666", marginHorizontal: 16, marginBottom: 10 },
-  desc: { fontSize: 16, marginHorizontal: 16, marginBottom: 32, color: "#333" },
-  assistantsBox: {backgroundColor: "#f9f9f9", marginHorizontal: 16, borderRadius: 8,
-      padding: 12, marginBottom: 32, marginTop: 12, },
-  assistantsTitle: { fontWeight: "bold", fontSize: 16, marginBottom: 6 },
-  assistant: { color: "#333", marginBottom: 3 },
+  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
+  image: { width: "100%", height: 220, borderRadius: 12, marginBottom: 12 },
+  title: { fontSize: 22, fontWeight: "bold", marginBottom: 8, paddingRight: 42 }, // deja espacio para la estrella
+  date: { color: "#1976d2", marginBottom: 8 },
+  description: { fontSize: 16, marginBottom: 10 }
 });
