@@ -2,10 +2,12 @@ import React, { useContext } from 'react';
 import { View, Text, Image, StyleSheet, Button, Alert, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { EventContext } from '../EventContext';
 import MapView, { Marker } from 'react-native-maps';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function EventDetailScreen({ route }) {
   const { event } = route.params;
   const { favorites, toggleFavorite, joinEvent, leaveEvent, user, events } = useContext(EventContext);
+  const insets = useSafeAreaInsets();
 
   const isFavorite = favorites.includes(event.id);
   const image = event.images && event.images[0] ? event.images[0].url : event.image || null;
@@ -23,17 +25,17 @@ export default function EventDetailScreen({ route }) {
         }
       } catch {}
       if (openUrl && openUrl.startsWith('http')) {
-        Linking.openURL(openUrl).catch(() => Alert.alert("No se puede abrir el enlace", "Ha ocurrido un error."));
+        Linking.openURL(openUrl).catch(() => Alert.alert('No se puede abrir el enlace', 'Ha ocurrido un error.'));
       } else {
-        Alert.alert("Enlace inválido", "Este evento no tiene un enlace válido.");
+        Alert.alert('Enlace inválido', 'Este evento no tiene un enlace válido.');
       }
     } else {
       if (!isJoined) {
         joinEvent(event.id);
-        Alert.alert("¡Genial!", "Te has apuntado a este evento.");
+        Alert.alert('¡Genial!', 'Te has apuntado a este evento.');
       } else {
         leaveEvent(event.id);
-        Alert.alert("Cancelado", "Ya no vas a este evento.");
+        Alert.alert('Cancelado', 'Ya no vas a este evento.');
       }
     }
   };
@@ -41,7 +43,10 @@ export default function EventDetailScreen({ route }) {
   const showMap = event.latitude != null && event.longitude != null;
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}  // <-- correcto: prop, no hijo
+    >
       <TouchableOpacity
         onPress={() => toggleFavorite(event.id, event)}
         style={{ position: 'absolute', right: 20, top: 18, zIndex: 10 }}
@@ -50,7 +55,7 @@ export default function EventDetailScreen({ route }) {
         <Text style={{ fontSize: 32 }}>{isFavorite ? '⭐' : '☆'}</Text>
       </TouchableOpacity>
 
-      {image && <Image source={{ uri: image }} style={styles.image} />}
+      {image ? <Image source={{ uri: image }} style={styles.image} /> : null}
       <Text style={styles.title}>{event.title}</Text>
       <Text style={styles.date}>{event.date} | {event.location}</Text>
       <Text style={styles.description}>{event.description || 'Sin descripción'}</Text>
@@ -75,7 +80,7 @@ export default function EventDetailScreen({ route }) {
         </View>
       )}
 
-      <View style={{ marginVertical: 28 }}>
+      <View style={{ marginTop: 20, marginBottom: insets.bottom + 12 }}>
         {event.type === 'api' ? (
           <Button title="Comprar entradas" onPress={handlePress} color="#1976d2" />
         ) : (

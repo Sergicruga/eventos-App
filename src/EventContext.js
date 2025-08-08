@@ -20,6 +20,7 @@ export function EventProvider({ children }) {
       longitude: -3.7038,
       description: 'Concierto en el centro de Madrid.',
       createdBy: 'Usuario',
+      asistentes: [],
     },
     {
       id: '2',
@@ -30,6 +31,7 @@ export function EventProvider({ children }) {
       longitude: -3.6883,
       description: 'Bandas emergentes en directo.',
       createdBy: 'Usuario',
+      asistentes: [],
     },
     {
       id: '3',
@@ -40,6 +42,7 @@ export function EventProvider({ children }) {
       longitude: 2.1698,
       description: 'Torneos de Mario Kart y FIFA.',
       createdBy: 'Usuario',
+      asistentes: [],
     },
   ]);
 
@@ -84,8 +87,12 @@ export function EventProvider({ children }) {
   }, [events]);
 
   const addEvent = (event) => {
-    setEvents(prev => [{ ...event, id: Date.now().toString(), createdBy: user.name }, ...prev]);
+    setEvents(prev => [
+      { ...event, id: Date.now().toString(), createdBy: user.name, asistentes: [] },
+      ...prev,
+    ]);
   };
+
 
   const updateUser = (newUser) => setUser(newUser);
 
