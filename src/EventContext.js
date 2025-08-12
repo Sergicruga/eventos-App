@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import * as ImagePicker from 'expo-image-picker';
 export const EventContext = createContext();
 
 const EVENTS_KEY = 'eventos_guardados';
@@ -13,6 +13,7 @@ export function EventProvider({ children }) {
   const [events, setEvents] = useState([
     {
       id: '1',
+      imageUri: null,
       title: 'Concierto joven',
       date: '2025-08-10',
       location: 'Madrid',
@@ -24,6 +25,7 @@ export function EventProvider({ children }) {
     },
     {
       id: '2',
+      imageUri: null,
       title: 'Concierto Indie',
       date: '2025-06-20',
       location: 'Auditorio Río, Madrid',
@@ -35,6 +37,7 @@ export function EventProvider({ children }) {
     },
     {
       id: '3',
+      imageUri: null,
       title: 'Tarde de Gaming',
       date: '2025-06-22',
       location: 'eSports Bar, Barcelona',

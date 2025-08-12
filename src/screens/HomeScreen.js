@@ -19,7 +19,7 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-async function fetchTicketmasterEvents(city = 'Barcelona') {
+async function fetchTicketmasterEvents(city = 'madrid') {
   const url = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${TICKETMASTER_API_KEY}&countryCode=ES&city=${encodeURIComponent(city)}`;
   const res = await fetch(url);
   const data = await res.json();
@@ -56,7 +56,9 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   const allEvents = [
-    ...events.map(ev => ({ ...ev, type: 'local' })),
+    ...events.map(ev => ({ ...ev, type: 'local', 
+      image: ev.imageUri ?? ev.image?? null, })),
+    
     ...apiEvents.map(ev => {
       const venue = ev._embedded?.venues?.[0];
       const lat = venue?.location?.latitude ? parseFloat(venue.location.latitude) : null;
@@ -129,22 +131,30 @@ export default function HomeScreen({ navigation }) {
       />
       <FlatList
         data={deduped}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.eventCard, item.type === 'api' && { borderColor: '#1976d2', borderWidth: 1 }]}
-            onPress={() => navigation.navigate('EventDetail', { event: item })}
-          >
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.eventTitle}>{item.title}</Text>
-              <FavoriteStar item={item} />
-            </View>
-            <Text>{item.date} | {item.location}</Text>
-            <Text numberOfLines={2}>{item.description}</Text>
-            {item.image ? (
-              <Image source={{ uri: item.image }} style={{ width: '100%', height: 120, borderRadius: 8, marginTop: 5 }} />
-            ) : null}
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const img = item.image ?? item.imageUrl ?? null; // 👈 definir aquí
+
+          return (
+            <TouchableOpacity
+              style={[styles.eventCard, item.type === 'api' && { borderColor: '#1976d2', borderWidth: 1 }]}
+              onPress={() => navigation.navigate('EventDetail', { event: item })}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={styles.eventTitle}>{item.title}</Text>
+                <FavoriteStar item={item} />
+              </View>
+              <Text>{item.date} | {item.location}</Text>
+              <Text numberOfLines={2}>{item.description}</Text>
+
+              {img ? (
+                <Image
+                  source={{ uri: img }}
+                  style={{ width: '100%', height: 120, borderRadius: 8, marginTop: 5 }}
+                />
+              ) : null}
+            </TouchableOpacity>
+          );
+        }}
         keyExtractor={(item) => `${item.type || 'local'}-${String(item.id)}`}
         ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 32 }}>No hay eventos para mostrar.</Text>}
       />

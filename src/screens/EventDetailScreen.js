@@ -10,7 +10,13 @@ export default function EventDetailScreen({ route }) {
   const insets = useSafeAreaInsets();
 
   const isFavorite = favorites.includes(event.id);
-  const image = event.images && event.images[0] ? event.images[0].url : event.image || null;
+  const image =
+    (event.images && event.images[0]?.url) ??
+    event.image ??
+    event.imageUrl ??
+    null;
+
+  {image ? <Image source={{ uri: image }} style={styles.image} /> : null}
 
   const localEvent = events.find(e => e.id === event.id);
   const isJoined = !!(localEvent && localEvent.asistentes && localEvent.asistentes.includes(user.name));

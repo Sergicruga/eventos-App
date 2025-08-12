@@ -15,16 +15,21 @@ export default function CreateEventScreen({ navigation }) {
   const [imageUri, setImageUri] = useState(null);
 
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.7,
-    });
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Permiso requerido', 'Necesitas permitir acceso a tus fotos.');
+    return;
+  }
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: [ImagePicker.MediaType.Image], // 👈 evita el warning
+    allowsEditing: true,
+    quality: 0.7,
+  });
+  if (!result.canceled && result.assets?.[0]?.uri) {
+    setImageUri(result.assets[0].uri);
+  }
+};
 
-    if (!result.canceled && result.assets && result.assets[0]?.uri) {
-      setImageUri(result.assets[0].uri);
-    }
-  };
 
   const handleCreateEvent = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
@@ -66,30 +71,34 @@ export default function CreateEventScreen({ navigation }) {
         placeholder="Título"
         value={title}
         onChangeText={setTitle}
+        placeholderTextColor={"#F20C0C"}
       />
       <TextInput
         style={styles.input}
         placeholder="Fecha"
         value={date}
         onChangeText={setDate}
+        placeholderTextColor={"#F20C0C"}
       />
       <TextInput
         style={styles.input}
         placeholder="Lugar"
         value={locationName}
         onChangeText={setLocationName}
+        placeholderTextColor={"#F20C0C"}
       />
       <View style={styles.pickerWrapper}>
         <Picker
           selectedValue={type}
           onValueChange={setType}
           style={styles.picker}
+          
         >
-          <Picker.Item label="Selecciona tipo de evento" value="" />
-          <Picker.Item label="Concierto" value="Concierto" />
-          <Picker.Item label="Fiesta" value="Fiesta" />
-          <Picker.Item label="Deportivo" value="Deportivo" />
-          <Picker.Item label="Otro" value="Otro" />
+          <Picker.Item label="Selecciona tipo de evento" value="" color="#F20C0C" />
+          <Picker.Item label="Concierto" value="Concierto" color="#F20C0C" />
+          <Picker.Item label="Fiesta" value="Fiesta" color="#F20C0C"/>
+          <Picker.Item label="Deportivo" value="Deportivo" color="#F20C0C"/>
+          <Picker.Item label="Otro" value="Otro" color="#F20C0C"/>
         </Picker>
       </View>
       <TextInput
@@ -97,6 +106,7 @@ export default function CreateEventScreen({ navigation }) {
         placeholder="Descripción"
         value={description}
         onChangeText={setDescription}
+        placeholderTextColor={"#F20C0C"}
       />
       <Button title="Crear" onPress={handleCreateEvent} />
     </View>
@@ -105,7 +115,7 @@ export default function CreateEventScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 24, textAlign: 'center' },
+  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 24, textAlign: 'center', },
   input: {
     borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
     padding: 10, marginBottom: 16, fontSize: 16, backgroundColor: '#f8f8f8'
