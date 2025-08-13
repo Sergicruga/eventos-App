@@ -2,6 +2,8 @@ import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 export const EventContext = createContext();
+import { Alert } from 'react-native';
+
 
 const EVENTS_KEY = 'eventos_guardados';
 const FAVORITES_KEY = 'favoritos_eventos_ids';
@@ -90,13 +92,54 @@ export function EventProvider({ children }) {
   }, [events]);
 
   const addEvent = (event) => {
+    const todayMid = new Date(); todayMid.setHours(0,0,0,0);
+    const eventTime = new Date(updatedEvent.date).getTime();
+    if (isNaN(eventTime) || eventTime < todayMid.getTime()) {
+      Alert.alert('Fecha inválida', 'No puedes poner una fecha anterior a hoy.');
+      return;
+    }
     setEvents(prev => [
       { ...event, id: Date.now().toString(), createdBy: user.name, asistentes: [] },
       ...prev,
     ]);
   };
+  const normalizeEvent = (ev) => ({
+    ...ev,
+    image: ev.image ?? ev.imageUrl ?? ev.imageUri ?? null,
+    imageUrl: undefined,
+    imageUri: undefined,
+});
+  const updateEvent = (updatedEvent) => {
+    const todayMid = new Date(); todayMid.setHours(0,0,0,0);
+    const t = new Date(updatedEvent.date).getTime();
+    if (isNaN(t) || t < todayMid.getTime()) {
+      Alert.alert('Fecha inválida', 'No puedes poner una fecha anterior a hoy.');
+      return;
+    }
+    const u = normalizeEvent(updatedEvent);
+    setEvents(prev => {
+      const idx = prev.findIndex(ev => ev.id === updatedEvent.id);
+      if (idx === -1) {
+        // No existía (probablemente era un evento de la API) → lo añadimos como local
+        const nuevo = {
+          ...u,
+          type: 'local',
+          createdBy: u.createdBy ?? (user?.name ?? 'Usuario'),
+          asistentes: u.asistentes ?? [],
+        };
+        return [nuevo, ...prev];
+      }
+      // Existe → merge
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...u };
+      return next;
+    });
+  };
 
 
+  const deleteEvent = (eventId) => {
+    setEvents(prev => prev.filter(ev => ev.id !== eventId));
+  };
   const updateUser = (newUser) => setUser(newUser);
 
   // Toggle favorito: recibe ID y opcionalmente el evento (para snapshot si no es local)
@@ -154,7 +197,7 @@ export function EventProvider({ children }) {
 
   return (
     <EventContext.Provider
-      value={{ events, addEvent, user, updateUser, favorites, favoriteItems, toggleFavorite, joinEvent, leaveEvent }}
+      value={{ events, addEvent, updateEvent, deleteEvent, user, updateUser, favorites, favoriteItems, toggleFavorite, joinEvent, leaveEvent }}
     >
       {children}
     </EventContext.Provider>

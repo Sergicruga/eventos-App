@@ -13,7 +13,10 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Necesitamos acceder a tus fotos para elegir la imagen del evento"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -33,8 +36,10 @@
     },
     "extra": {
       "eas": {
-        "projectId": "ec7b6a65-2245-4b94-9f89-7183cae09276"
-      }
-    }
+    "plugins": ["expo-image-picker"]
   }
+  
+}
+  }
+  
 }

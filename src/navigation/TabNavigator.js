@@ -5,6 +5,7 @@ import HomeScreen from '../screens/HomeScreen';
 import CreateEventScreen from '../screens/CreateEventScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
+import EditEventScreen from '../screens/EditEventScreen';
 
 
 const Tab = createBottomTabNavigator();
@@ -16,7 +17,6 @@ export default function TabNavigator() {
       <Tab.Screen name="CreateEvent" component={CreateEventScreen} options={{ title: 'Crear Evento' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
       <Tab.Screen name="Favorites" component={FavoritesScreen} options={{ title: 'Favoritos' }} />
-      
     </Tab.Navigator>
   );
 }

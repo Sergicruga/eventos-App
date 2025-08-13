@@ -4,6 +4,7 @@ import { EventContext } from '../EventContext';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
+import { safePickImage } from '../utils/safePickImage';
 
 export default function CreateEventScreen({ navigation }) {
   const { addEvent } = useContext(EventContext);
@@ -15,8 +16,8 @@ export default function CreateEventScreen({ navigation }) {
   const [imageUri, setImageUri] = useState(null);
 
   const pickImage = async () => {
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (status !== 'granted') {
+  const uri = await safePickImage();
+  if (uri) setImageUri(uri); {
     Alert.alert('Permiso requerido', 'Necesitas permitir acceso a tus fotos.');
     return;
   }

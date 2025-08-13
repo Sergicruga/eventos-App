@@ -1,25 +1,35 @@
-import React, { useContext } from 'react';
+import React, { useContext, useMemo } from 'react';
 import { View, Text, Image, StyleSheet, Button, Alert, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import { EventContext } from '../EventContext';
-import MapView, { Marker } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import MapView, { Marker } from 'react-native-maps';
 
-export default function EventDetailScreen({ route }) {
+
+export default function EventDetailScreen({ route, navigation }) {
   const { event } = route.params;
-  const { favorites, toggleFavorite, joinEvent, leaveEvent, user, events } = useContext(EventContext);
+  const { events, favorites, toggleFavorite, joinEvent, leaveEvent, user } = useContext(EventContext);
   const insets = useSafeAreaInsets();
 
-  const isFavorite = favorites.includes(event.id);
+  const current = useMemo(
+    () => events.find(e => e.id === event.id) ?? event,
+    [events, event.id, event]
+  );
+
+  const isFavorite = favorites.includes(current.id);
+  const isJoined = !!(current.asistentes && current.asistentes.includes(user.name));
+
   const image =
-    (event.images && event.images[0]?.url) ??
-    event.image ??
-    event.imageUrl ??
+    current.images?.[0]?.url ??
+    current.image ??
+    current.imageUrl ??
+    current.imageUri ??
     null;
 
   {image ? <Image source={{ uri: image }} style={styles.image} /> : null}
 
   const localEvent = events.find(e => e.id === event.id);
-  const isJoined = !!(localEvent && localEvent.asistentes && localEvent.asistentes.includes(user.name));
+  const showMap = localEvent && localEvent.latitude != null && localEvent.longitude != null;
+
 
   const handlePress = () => {
     if (event.type === 'api') {
@@ -46,8 +56,6 @@ export default function EventDetailScreen({ route }) {
     }
   };
 
-  const showMap = event.latitude != null && event.longitude != null;
-
   return (
     <ScrollView
       style={styles.container}
@@ -61,10 +69,10 @@ export default function EventDetailScreen({ route }) {
         <Text style={{ fontSize: 32 }}>{isFavorite ? '⭐' : '☆'}</Text>
       </TouchableOpacity>
 
-      {image ? <Image source={{ uri: image }} style={styles.image} /> : null}
-      <Text style={styles.title}>{event.title}</Text>
-      <Text style={styles.date}>{event.date} | {event.location}</Text>
-      <Text style={styles.description}>{event.description || 'Sin descripción'}</Text>
+     {image ? <Image source={{ uri: image }} style={styles.image} /> : null}
+      <Text style={styles.title}>{current.title}</Text>
+      <Text style={styles.date}>{current.date} | {current.location}</Text>
+      <Text style={styles.description}>{current.description || 'Sin descripción'}</Text>
 
       {showMap && (
         <View style={{ height: 220, borderRadius: 12, overflow: 'hidden', marginVertical: 12 }}>
@@ -87,15 +95,42 @@ export default function EventDetailScreen({ route }) {
       )}
 
       <View style={{ marginTop: 20, marginBottom: insets.bottom + 12 }}>
-        {event.type === 'api' ? (
+        {current.type === 'api' ? (
           <Button title="Comprar entradas" onPress={handlePress} color="#1976d2" />
         ) : (
           <Button title={isJoined ? 'Ya no voy' : '¡Ya voy!'} onPress={handlePress} color={isJoined ? '#d32f2f' : 'green'} />
         )}
+        {event.createdBy === user.name && (
+          <Button
+            title="Eliminar evento"
+            color="red"
+            onPress={() => {
+              Alert.alert('Confirmar', '¿Seguro que quieres eliminar este evento?', [
+                { text: 'Cancelar', style: 'cancel' },
+                { text: 'Eliminar', style: 'destructive', onPress: () => {
+                  deleteEvent(event.id);
+                  navigation.goBack();
+                }},
+              ]);
+            }}
+            
+          />
+        )}
+        {event.createdBy === user.name && (
+          <View style={{ marginTop: 12 }}>
+            <Button
+              title="Editar evento"
+              onPress={() => navigation.navigate('EditEvent', { event })}
+              color="#1976d2"
+            />
+          </View>
+        )}
       </View>
+      
     </ScrollView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: '#fff' },

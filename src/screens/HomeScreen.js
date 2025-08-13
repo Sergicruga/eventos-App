@@ -2,6 +2,7 @@ import React, { useContext, useState, useEffect } from 'react';
 import * as Location from 'expo-location';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, Linking, Image } from 'react-native';
 import { EventContext } from '../EventContext';
+import { safePickImage } from '../utils/safePickImage';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
 
@@ -57,7 +58,7 @@ export default function HomeScreen({ navigation }) {
 
   const allEvents = [
     ...events.map(ev => ({ ...ev, type: 'local', 
-      image: ev.imageUri ?? ev.image?? null, })),
+      image: ev.image ?? ev.imageUrl ?? ev.imageUri ?? null, })),
     
     ...apiEvents.map(ev => {
       const venue = ev._embedded?.venues?.[0];
@@ -132,7 +133,7 @@ export default function HomeScreen({ navigation }) {
       <FlatList
         data={deduped}
         renderItem={({ item }) => {
-          const img = item.image ?? item.imageUrl ?? null; // 👈 definir aquí
+          const img = item.image ?? item.imageUrl ?? item.imageUri ?? null; // 👈 definir aquí
 
           return (
             <TouchableOpacity
