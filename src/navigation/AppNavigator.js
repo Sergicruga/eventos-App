@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import TabNavigator from './TabNavigator';
 import EventDetailScreen from '../screens/EventDetailScreen';
 import EditEventScreen from '../screens/EditEventScreen';
+import CreateEventScreen from '../screens/CreateEventScreen';
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
@@ -22,6 +23,11 @@ export default function AppNavigator() {
         name="EditEvent"
         component={EditEventScreen}
         options={{ title: 'Editar evento' }}
+      />
+      <Stack.Screen
+        name="CreateEventScreen"
+        component={CreateEventScreen}
+        options={{ title: 'Crear evento' }}
       />
     </Stack.Navigator>
   );

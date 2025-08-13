@@ -1,8 +1,20 @@
-import React, { useContext, useState, useEffect } from 'react';
-import * as Location from 'expo-location';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, Linking, Image } from 'react-native';
+import React, { useContext, useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Image,
+  TextInput,
+  ActivityIndicator,
+  Dimensions,
+} from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventContext } from '../EventContext';
-import { safePickImage } from '../utils/safePickImage';
+import * as Location from 'expo-location';
+import { useNavigation } from '@react-navigation/native';
+import styles from './HomeScreen.styles';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
 
@@ -20,26 +32,29 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-async function fetchTicketmasterEvents(city = 'madrid') {
+async function fetchTicketmasterEvents(city = 'Barcelona') {
   const url = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${TICKETMASTER_API_KEY}&countryCode=ES&city=${encodeURIComponent(city)}`;
   const res = await fetch(url);
   const data = await res.json();
   return data._embedded?.events || [];
 }
 
-export default function HomeScreen({ navigation }) {
+const CARD_MARGIN = 10;
+const CARD_WIDTH = (Dimensions.get('window').width - CARD_MARGIN * 3) / 2;
+
+export default function HomeScreen() {
   const { events, favorites, toggleFavorite } = useContext(EventContext);
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [apiEvents, setApiEvents] = useState([]);
   const [loadingApiEvents, setLoadingApiEvents] = useState(true);
+  const navigation = useNavigation();
 
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso denegado', 'No podemos mostrar eventos cercanos sin acceso a tu ubicación.');
         setLoadingLocation(false);
         return;
       }
@@ -57,15 +72,13 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   const allEvents = [
-    ...events.map(ev => ({ ...ev, type: 'local', 
-      image: ev.image ?? ev.imageUrl ?? ev.imageUri ?? null, asistentes: ev.asistentes ?? [], // 👈 preserva})),
-    })),
+    ...events.map(ev => ({ ...ev, type: 'local' })),
     ...apiEvents.map(ev => {
       const venue = ev._embedded?.venues?.[0];
       const lat = venue?.location?.latitude ? parseFloat(venue.location.latitude) : null;
       const lon = venue?.location?.longitude ? parseFloat(venue.location.longitude) : null;
       return {
-        id: `tm-${ev.id}`, // evita colisiones
+        id: `tm-${ev.id}`,
         title: ev.name,
         date: ev.dates?.start?.localDate || '',
         location: venue?.city?.name || '',
@@ -88,28 +101,60 @@ export default function HomeScreen({ navigation }) {
     .filter(e =>
       !location ||
       (e.latitude != null && e.longitude != null &&
-        getDistanceKm(location.latitude, location.longitude, e.latitude, e.longitude) < 30)
+        getDistanceKm(location.latitude, location.longitude, e.latitude, e.longitude) < 1000)
     );
 
   // Elimina duplicados por (type-id)
   const deduped = [];
   const seen = new Set();
   for (const ev of filteredEvents) {
-    const k = `${ev.type || 'local'}-${String(ev.id)}`;
-    if (!seen.has(k)) {
-      seen.add(k);
+    const key = `${ev.type}-${ev.id}`;
+    if (!seen.has(key)) {
       deduped.push(ev);
+      seen.add(key);
     }
   }
 
-  function FavoriteStar({ item }) {
-    const isFav = favorites.includes(item.id);
+  function renderEventCard({ item }) {
     return (
-      <View onStartShouldSetResponder={() => true} style={{ marginLeft: 10 }}>
-        <TouchableOpacity onPress={() => toggleFavorite(item.id, item)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={{ fontSize: 24 }}>{isFav ? '⭐' : '☆'}</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate('EventDetail', { event: item })}
+      >
+        <View style={styles.imageWrapper}>
+          <Image
+            source={
+              item.image
+                ? { uri: item.image }
+                : require('../../assets/iconoApp.png')
+            }
+            style={styles.cardImage}
+            resizeMode="cover"
+          />
+          <TouchableOpacity
+            style={styles.favoriteIcon}
+            onPress={() => toggleFavorite(item.id, item)}
+          >
+            <Ionicons
+              name={favorites.includes(item.id) ? 'star' : 'star-outline'}
+              size={26}
+              color={favorites.includes(item.id) ? '#FFD700' : '#fff'}
+            />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.overlay}>
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <Text style={styles.cardDate}>
+            {item.date}
+          </Text>
+          <Text style={styles.cardLocation} numberOfLines={1}>
+            <Ionicons name="location-outline" size={14} color="#fff" /> {item.location}
+          </Text>
+        </View>
+      </TouchableOpacity>
     );
   }
 
@@ -117,56 +162,45 @@ export default function HomeScreen({ navigation }) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#1976d2" />
-        <Text>Cargando eventos...</Text>
+        <Text style={{ marginTop: 12, color: '#1976d2', fontWeight: '600' }}>Cargando eventos...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <TextInput
-        style={styles.input}
-        placeholder="Buscar evento o ciudad..."
-        value={search}
-        onChangeText={setSearch}
-      />
+      <Text style={styles.header}>Eventos cerca de ti</Text>
+      <View style={styles.searchBarWrapper}>
+        <Ionicons name="search" size={20} color="#1976d2" style={{ marginRight: 8 }} />
+        <TextInput
+          style={styles.searchBar}
+          placeholder="Buscar eventos, ciudades..."
+          placeholderTextColor="#1976d2"
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
       <FlatList
         data={deduped}
-        renderItem={({ item }) => {
-          const img = item.image ?? item.imageUrl ?? item.imageUri ?? null; // 👈 definir aquí
-
-          return (
-            <TouchableOpacity
-              style={[styles.eventCard, item.type === 'api' && { borderColor: '#1976d2', borderWidth: 1 }]}
-              onPress={() => navigation.navigate('EventDetail', { event: item })}
-            >
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={styles.eventTitle}>{item.title}</Text>
-                <FavoriteStar item={item} />
-              </View>
-              <Text>{item.date} | {item.location}</Text>
-              <Text numberOfLines={2}>{item.description}</Text>
-
-              {img ? (
-                <Image
-                  source={{ uri: img }}
-                  style={{ width: '100%', height: 120, borderRadius: 8, marginTop: 5 }}
-                />
-              ) : null}
-            </TouchableOpacity>
-          );
-        }}
-        keyExtractor={(item) => `${item.type || 'local'}-${String(item.id)}`}
-        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 32 }}>No hay eventos para mostrar.</Text>}
+        keyExtractor={item => item.id}
+        renderItem={renderEventCard}
+        numColumns={2}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.centered}>
+            <Ionicons name="sad-outline" size={48} color="#1976d2" />
+            <Text style={{ color: '#1976d2', marginTop: 8 }}>No se encontraron eventos.</Text>
+          </View>
+        }
       />
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => navigation.navigate('CreateEventScreen')}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={32} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 8, marginBottom: 10 },
-  eventCard: { padding: 12, marginVertical: 6, borderRadius: 10, backgroundColor: '#F3F7FA', elevation: 1 },
-  eventTitle: { fontSize: 16, fontWeight: 'bold', color: '#1976d2' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-});
