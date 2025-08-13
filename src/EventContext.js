@@ -13,42 +13,7 @@ export function EventProvider({ children }) {
   const [user, setUser] = useState({ name: 'Usuario', email: '' });
 
   const [events, setEvents] = useState([
-    {
-      id: '1',
-      imageUri: null,
-      title: 'Concierto joven',
-      date: '2025-08-10',
-      location: 'Madrid',
-      latitude: 40.4168,
-      longitude: -3.7038,
-      description: 'Concierto en el centro de Madrid.',
-      createdBy: 'Usuario',
-      asistentes: [],
-    },
-    {
-      id: '2',
-      imageUri: null,
-      title: 'Concierto Indie',
-      date: '2025-06-20',
-      location: 'Auditorio Río, Madrid',
-      latitude: 40.4001,
-      longitude: -3.6883,
-      description: 'Bandas emergentes en directo.',
-      createdBy: 'Usuario',
-      asistentes: [],
-    },
-    {
-      id: '3',
-      imageUri: null,
-      title: 'Tarde de Gaming',
-      date: '2025-06-22',
-      location: 'eSports Bar, Barcelona',
-      latitude: 41.3870,
-      longitude: 2.1698,
-      description: 'Torneos de Mario Kart y FIFA.',
-      createdBy: 'Usuario',
-      asistentes: [],
-    },
+
   ]);
 
   // Favoritos = IDs y un mapa con el “snapshot” del evento
