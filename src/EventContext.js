@@ -92,10 +92,12 @@ export function EventProvider({ children }) {
   }, [events]);
 
   const addEvent = (event) => {
-    const todayMid = new Date(); todayMid.setHours(0,0,0,0);
-    const eventTime = new Date(updatedEvent.date).getTime();
-    if (isNaN(eventTime) || eventTime < todayMid.getTime()) {
-      Alert.alert('Fecha inválida', 'No puedes poner una fecha anterior a hoy.');
+    // Espera fecha en ISO: YYYY-MM-DD
+    const eventMs = Date.parse(event.date);
+    const now = new Date();
+    const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    if (Number.isNaN(eventMs) || eventMs < todayMid) {
+      Alert.alert('Fecha inválida', 'No puedes crear un evento con una fecha pasada.');
       return;
     }
     setEvents(prev => [
@@ -108,11 +110,12 @@ export function EventProvider({ children }) {
     image: ev.image ?? ev.imageUrl ?? ev.imageUri ?? null,
     imageUrl: undefined,
     imageUri: undefined,
-});
+  });
   const updateEvent = (updatedEvent) => {
-    const todayMid = new Date(); todayMid.setHours(0,0,0,0);
-    const t = new Date(updatedEvent.date).getTime();
-    if (isNaN(t) || t < todayMid.getTime()) {
+    const t = Date.parse(updatedEvent.date);
+    const now = new Date();
+    const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    if (Number.isNaN(t) || t < todayMid) {
       Alert.alert('Fecha inválida', 'No puedes poner una fecha anterior a hoy.');
       return;
     }

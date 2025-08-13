@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import {
-  View, Text, TextInput, Button, StyleSheet, Alert, Image, TouchableOpacity,
-  Platform, Modal
+  View, Text, TextInput, StyleSheet, Alert, Image, TouchableOpacity,
+  Platform, Modal, ScrollView, KeyboardAvoidingView
 } from 'react-native';
 import { EventContext } from '../EventContext';
 import * as Location from 'expo-location';
@@ -16,9 +16,9 @@ export default function CreateEventScreen({ navigation }) {
   // Campos
   const [type, setType] = useState('');
   const [title, setTitle] = useState('');
-  const [date, setDate] = useState(new Date()); // usar Date real
+  const [date, setDate] = useState(new Date());
   const [showCal, setShowCal] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+
   const [locationName, setLocationName] = useState('');
   const [coords, setCoords] = useState({ latitude: null, longitude: null });
   const [hasLocPerm, setHasLocPerm] = useState(false);
@@ -50,35 +50,30 @@ export default function CreateEventScreen({ navigation }) {
 
   // ---------- Imagen ----------
   const pickImage = async () => {
-  // Pide permisos
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== 'granted') {
       Alert.alert('Permiso requerido', 'Necesitas permitir acceso a tus fotos.');
       return;
     }
+    const options =
+      ImagePicker.MediaType
+        ? { mediaTypes: [ImagePicker.MediaType.Image], allowsEditing: true, quality: 0.7 }
+        : { mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.7 };
 
-    // Abre galería (API actual)
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, // ✅ en Expo managed funciona este
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.7,
-    });
+    const result = await ImagePicker.launchImageLibraryAsync(options);
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
+    if (!result.canceled && result.assets?.[0]?.uri) {
       setImageUri(result.assets[0].uri);
     }
   };
 
-
   // ---------- Fecha ----------
- 
   const formattedDate = () => {
-    // YYYY-MM-DD (o lo que prefieras guardar/mostrar)
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
-    return `${d}-${m}-${y}`;
+    // Mostramos DD-MM-YYYY pero al guardar usas este mismo formato
+    return `${y}-${m}-${d}`;
   };
 
   // ---------- Mapa / ubicación ----------
@@ -109,13 +104,11 @@ export default function CreateEventScreen({ navigation }) {
           'Ubicación seleccionada';
         setLocationName(name);
       }
-    } catch {
-      // silencioso
-    }
+    } catch {}
   };
 
   const acceptMap = () => {
-    if (!coords.latitude || !coords.longitude) {
+    if (coords.latitude == null || coords.longitude == null) {
       Alert.alert('Ubicación', 'Mantén pulsado en el mapa para colocar el marcador.');
       return;
     }
@@ -123,8 +116,8 @@ export default function CreateEventScreen({ navigation }) {
   };
 
   // ---------- Guardar ----------
+  const [description, setDescription] = useState('');
   const handleCreateEvent = async () => {
-    // Validaciones mínimas
     if (!title.trim()) {
       Alert.alert('Falta título', 'Pon un título al evento.');
       return;
@@ -143,7 +136,7 @@ export default function CreateEventScreen({ navigation }) {
 
     addEvent({
       title: title.trim(),
-      date: formattedDate(),
+      date: formattedDate(), // tu EventContext valida con new Date(), si prefieres YYYY-MM-DD cámbialo aquí
       location: locationName.trim(),
       description: description.trim(),
       type,
@@ -156,108 +149,117 @@ export default function CreateEventScreen({ navigation }) {
     navigation.goBack();
   };
 
-  // Descripción (estado separado para mantener tu estructura)
-  const [description, setDescription] = useState('');
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Crear Evento</Text>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        contentContainerStyle={{ padding: 24, paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"   // <- para que los toques no se pierdan
+      >
+        <Text style={styles.title}>Crear Evento</Text>
 
-      {/* Imagen */}
-      <TouchableOpacity onPress={pickImage}>
-        <View style={styles.imagePicker}>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.image} />
-          ) : (
-            <Text style={{ color: '#888' }}>Seleccionar foto del evento</Text>
-          )}
-        </View>
-      </TouchableOpacity>
-
-      {/* Título */}
-      <TextInput
-        style={styles.input}
-        placeholder="Título"
-        value={title}
-        onChangeText={setTitle}
-        placeholderTextColor="#F20C0C"
-      />
-
-      {/* Fecha */}
-      <View style={{ marginBottom: 12 }}>
-        <Text style={styles.label}>Fecha</Text>
-        <TouchableOpacity
-          onPress={() => setShowCal(true)}
-          style={styles.dateButton}
-        >
-          <Text style={styles.dateText}>{formattedDate()}</Text>
-        </TouchableOpacity>
-        <Modal visible={showCal} animationType="slide" transparent>
-          <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.3)', justifyContent:'center' }}>
-            <View style={{ margin:16, borderRadius:12, backgroundColor:'#fff', overflow:'hidden' }}>
-              <Calendar
-                minDate={new Date().toISOString().slice(0,10)}
-                onDayPress={(day) => {
-                  const [y, m, d] = day.dateString.split('-').map(Number);
-                  setDate(new Date(y, m - 1, d));
-                  setShowCal(false);
-                }}
-                markedDates={(() => {
-                  const ok = date instanceof Date && !isNaN(date.getTime());
-                  if (!ok) return {};
-                  const k = date.toISOString().slice(0, 10); // "YYYY-MM-DD"
-                  return { [k]: { selected: true } };
-                })()}
-              />
-
-              <Button title="Cerrar" onPress={() => setShowCal(false)} />
-            </View>
+        {/* Imagen */}
+        <TouchableOpacity onPress={pickImage}>
+          <View style={styles.imagePicker}>
+            {imageUri ? (
+              <Image source={{ uri: imageUri }} style={styles.image} />
+            ) : (
+              <Text style={{ color: '#888' }}>Seleccionar foto del evento</Text>
+            )}
           </View>
-        </Modal>
-      </View>
+        </TouchableOpacity>
 
-      {/* Ubicación */}
-      <View style={{ marginBottom: 12 }}>
-        <Text style={styles.label}>Ubicación</Text>
-        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <TextInput
-            style={[styles.input, { flex: 1, marginBottom: 0 }]}
-            placeholder="Nombre del lugar (se autocompleta desde el mapa)"
-            value={locationName}
-            onChangeText={setLocationName}
-            placeholderTextColor="#F20C0C"
-          />
-          <Button title="Mapa" onPress={openMap} />
+        {/* Título */}
+        <TextInput
+          style={styles.input}
+          placeholder="Título"
+          value={title}
+          onChangeText={setTitle}
+          placeholderTextColor="#F20C0C"
+        />
+
+        {/* Fecha */}
+        <View style={{ marginBottom: 12, zIndex: 1 }}>
+          <Text style={styles.label}>Fecha</Text>
+          <TouchableOpacity onPress={() => setShowCal(true)} style={[styles.dateButton, { padding: 12 }]}>
+            <Text style={styles.dateText}>{formattedDate()}</Text>
+          </TouchableOpacity>
+          <Modal visible={showCal} animationType="slide" transparent>
+            <View style={{ flex:1, backgroundColor:'rgba(0,0,0,0.3)', justifyContent:'center' }}>
+              <View style={{ margin:16, borderRadius:12, backgroundColor:'#fff', overflow:'hidden' }}>
+                <Calendar
+                  minDate={new Date().toISOString().slice(0,10)}
+                  onDayPress={(day) => {
+                    const [y, m, d] = day.dateString.split('-').map(Number);
+                    setDate(new Date(y, m - 1, d));
+                    setShowCal(false);
+                  }}
+                  markedDates={(() => {
+                    const ok = date instanceof Date && !isNaN(date.getTime());
+                    if (!ok) return {};
+                    const k = date.toISOString().slice(0, 10);
+                    return { [k]: { selected: true } };
+                  })()}
+                />
+                <TouchableOpacity onPress={() => setShowCal(false)} style={[styles.secondaryBtn, { margin: 12 }]}>
+                  <Text style={styles.secondaryBtnText}>Cerrar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
         </View>
-        {coords.latitude != null && coords.longitude != null ? (
-          <Text style={{ marginTop: 6 }}>
-            Lat: {coords.latitude.toFixed(5)} | Lon: {coords.longitude.toFixed(5)}
-          </Text>
-        ) : null}
-      </View>
 
-      {/* Tipo */}
-      <View style={styles.pickerWrapper}>
-        <Picker selectedValue={type} onValueChange={setType} style={styles.picker}>
-          <Picker.Item label="Selecciona tipo de evento" value="" color="#F20C0C" />
-          <Picker.Item label="Concierto" value="Concierto" color="#F20C0C" />
-          <Picker.Item label="Fiesta" value="Fiesta" color="#F20C0C" />
-          <Picker.Item label="Deportivo" value="Deportivo" color="#F20C0C" />
-          <Picker.Item label="Otro" value="Otro" color="#F20C0C" />
-        </Picker>
-      </View>
+        {/* Ubicación */}
+        <View style={{ marginBottom: 12 }}>
+          <Text style={styles.label}>Ubicación</Text>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <TextInput
+              style={[styles.input, { flex: 1, marginBottom: 0 }]}
+              placeholder="Nombre del lugar (se autocompleta desde el mapa)"
+              value={locationName}
+              onChangeText={setLocationName}
+              placeholderTextColor="#F20C0C"
+            />
+            <TouchableOpacity onPress={openMap} style={styles.smallBtn}>
+              <Text style={styles.smallBtnText}>MAPA</Text>
+            </TouchableOpacity>
+          </View>
+          {coords.latitude != null && coords.longitude != null ? (
+            <Text style={{ marginTop: 6 }}>
+              Lat: {coords.latitude.toFixed(5)} | Lon: {coords.longitude.toFixed(5)}
+            </Text>
+          ) : null}
+        </View>
 
-      {/* Descripción */}
-      <TextInput
-        style={styles.input}
-        placeholder="Descripción"
-        value={description}
-        onChangeText={setDescription}
-        placeholderTextColor="#F20C0C"
-        multiline
-      />
+        {/* Tipo */}
+        <View style={[styles.pickerWrapper, { zIndex: 1 }]}>
+          <Picker selectedValue={type} onValueChange={setType} style={styles.picker}>
+            <Picker.Item label="Selecciona tipo de evento" value="" color="#F20C0C" />
+            <Picker.Item label="Concierto" value="Concierto" color="#F20C0C" />
+            <Picker.Item label="Fiesta" value="Fiesta" color="#F20C0C" />
+            <Picker.Item label="Deportivo" value="Deportivo" color="#F20C0C" />
+            <Picker.Item label="Otro" value="Otro" color="#F20C0C" />
+          </Picker>
+        </View>
 
-      <Button title="Crear" onPress={handleCreateEvent} />
+        {/* Descripción */}
+        <TextInput
+          style={styles.input}
+          placeholder="Descripción"
+          value={description}
+          onChangeText={setDescription}
+          placeholderTextColor="#F20C0C"
+          multiline
+        />
+
+        {/* Botón Crear (custom, con zIndex/elevation) */}
+        <TouchableOpacity
+          onPress={() => { console.log('CLICK CREAR'); handleCreateEvent(); }}
+          activeOpacity={0.85}
+          style={styles.primaryBtn}
+        >
+          <Text style={styles.primaryBtnText}>Crear</Text>
+        </TouchableOpacity>
+      </ScrollView>
 
       {/* Modal Mapa */}
       <Modal visible={mapVisible} animationType="slide">
@@ -282,18 +284,21 @@ export default function CreateEventScreen({ navigation }) {
             <Text style={{ fontWeight: '600' }}>
               Mantén pulsado para colocar el marcador. Luego pulsa “Usar ubicación”.
             </Text>
-            <Button title="Usar ubicación" onPress={acceptMap} />
-            <View style={{ height: 8 }} />
-            <Button title="Cancelar" color="#d32f2f" onPress={() => setMapVisible(false)} />
+            <TouchableOpacity onPress={acceptMap} style={styles.primaryBtn}>
+              <Text style={styles.primaryBtnText}>Usar ubicación</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setMapVisible(false)} style={[styles.secondaryBtn, { marginTop: 8 }]}>
+              <Text style={styles.secondaryBtnText}>Cancelar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: '#fff' },
   title: { fontSize: 24, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
 
   input: {
@@ -307,7 +312,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
     marginBottom: 12, backgroundColor: '#f8f8f8'
   },
-  picker: { height: 44 },
+  picker: { height: 55 },
 
   imagePicker: {
     alignItems: 'center', justifyContent: 'center', height: 160, marginBottom: 12,
@@ -317,7 +322,35 @@ const styles = StyleSheet.create({
 
   dateButton: {
     borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
-    padding: 12, backgroundColor: '#f8f8f8'
+    backgroundColor: '#f8f8f8'
   },
-  dateText: { fontSize: 16 }
+  dateText: { fontSize: 16 },
+
+  primaryBtn: {
+    marginTop: 12,
+    backgroundColor: '#1976d2',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    zIndex: 10,        // por encima del Picker en Android
+    elevation: 2,
+  },
+  primaryBtnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+
+  secondaryBtn: {
+    backgroundColor: '#e0e0e0',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  secondaryBtnText: { color: '#333', fontWeight: '600' },
+
+  smallBtn: {
+    backgroundColor: '#1976d2',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  smallBtnText: { color: '#fff', fontWeight: '600' },
 });
