@@ -13,7 +13,7 @@ export async function safePickImage() {
     allowsEditing: true,
     quality: 0.7,
     ...(hasNewApi
-      ? { mediaTypes: [ImagePicker.MediaType.Image] }
+      ? { mediaTypes: ImagePicker.MediaType.Image }
       : { mediaTypes: ImagePicker.MediaTypeOptions.Images }
     ),
   };

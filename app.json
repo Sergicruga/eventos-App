@@ -15,7 +15,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "Necesitamos acceder a tus fotos para elegir la imagen del evento"
+        "NSPhotoLibraryUsageDescription": "Necesitamos acceder a tus fotos para elegir la imagen del evento",
+        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para elegir el lugar del evento."
       }
     },
     "android": {
