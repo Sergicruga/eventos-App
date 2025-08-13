@@ -14,7 +14,7 @@ export default function EventDetailScreen({ route, navigation }) {
     () => events.find(e => e.id === event.id) ?? event,
     [events, event.id, event]
   );
-
+  const asistentes = current.asistentes ?? [];
   const isFavorite = favorites.includes(current.id);
   const isJoined = !!(current.asistentes && current.asistentes.includes(user.name));
 
@@ -93,6 +93,20 @@ export default function EventDetailScreen({ route, navigation }) {
           </MapView>
         </View>
       )}
+      <View style={{ marginTop: 12 }}>
+        <Text style={{ fontWeight: 'bold' }}>
+          Asistentes ({asistentes.length})
+        </Text>
+        {asistentes.length > 0 ? (
+          <View style={{ marginTop: 6 }}>
+            {asistentes.map((nombre, idx) => (
+              <Text key={`${current.id}-as-${idx}`}>• {nombre}</Text>
+            ))}
+          </View>
+        ) : (
+          <Text style={{ color: '#777', marginTop: 4 }}>Sé el primero en apuntarte</Text>
+        )}
+      </View>
 
       <View style={{ marginTop: 20, marginBottom: insets.bottom + 12 }}>
         {current.type === 'api' ? (
@@ -101,20 +115,21 @@ export default function EventDetailScreen({ route, navigation }) {
           <Button title={isJoined ? 'Ya no voy' : '¡Ya voy!'} onPress={handlePress} color={isJoined ? '#d32f2f' : 'green'} />
         )}
         {event.createdBy === user.name && (
-          <Button
-            title="Eliminar evento"
-            color="red"
-            onPress={() => {
-              Alert.alert('Confirmar', '¿Seguro que quieres eliminar este evento?', [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Eliminar', style: 'destructive', onPress: () => {
-                  deleteEvent(event.id);
-                  navigation.goBack();
-                }},
-              ]);
-            }}
-            
-          />
+          <View style={{ marginTop: 12 }}>
+            <Button
+              title="Eliminar evento"
+              color="red"
+              onPress={() => {
+                Alert.alert('Confirmar', '¿Seguro que quieres eliminar este evento?', [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Eliminar', style: 'destructive', onPress: () => {
+                    deleteEvent(event.id);
+                    navigation.goBack();
+                  }},
+                ]);
+              }}            
+            />
+          </View>
         )}
         {event.createdBy === user.name && (
           <View style={{ marginTop: 12 }}>

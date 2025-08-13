@@ -58,8 +58,8 @@ export default function HomeScreen({ navigation }) {
 
   const allEvents = [
     ...events.map(ev => ({ ...ev, type: 'local', 
-      image: ev.image ?? ev.imageUrl ?? ev.imageUri ?? null, })),
-    
+      image: ev.image ?? ev.imageUrl ?? ev.imageUri ?? null, asistentes: ev.asistentes ?? [], // 👈 preserva})),
+    })),
     ...apiEvents.map(ev => {
       const venue = ev._embedded?.venues?.[0];
       const lat = venue?.location?.latitude ? parseFloat(venue.location.latitude) : null;

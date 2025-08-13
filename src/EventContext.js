@@ -131,7 +131,12 @@ export function EventProvider({ children }) {
       }
       // Existe → merge
       const next = [...prev];
-      next[idx] = { ...next[idx], ...u };
+      next[idx] = { 
+        ...prevEvent,
+        ...updatedEvent,
+      // 👇 preserva asistentes si no lo manda el form
+        asistentes: updatedEvent.asistentes ?? prevEvent.asistentes ?? [],
+      };
       return next;
     });
   };

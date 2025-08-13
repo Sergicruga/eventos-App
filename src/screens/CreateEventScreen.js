@@ -19,12 +19,9 @@ export default function CreateEventScreen({ navigation }) {
   const [date, setDate] = useState(new Date()); // usar Date real
   const [showCal, setShowCal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  
-
   const [locationName, setLocationName] = useState('');
   const [coords, setCoords] = useState({ latitude: null, longitude: null });
   const [hasLocPerm, setHasLocPerm] = useState(false);
-
   const [imageUri, setImageUri] = useState(null);
 
   // Modal mapa
