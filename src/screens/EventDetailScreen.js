@@ -7,7 +7,7 @@ import MapView, { Marker } from 'react-native-maps';
 
 export default function EventDetailScreen({ route, navigation }) {
   const { event } = route.params;
-  const { events, favorites, toggleFavorite, joinEvent, leaveEvent, user } = useContext(EventContext);
+  const { events, favorites, toggleFavorite, joinEvent, leaveEvent, user, deleteEvent } = useContext(EventContext);
   const insets = useSafeAreaInsets();
 
   const current = useMemo(
@@ -54,6 +54,20 @@ export default function EventDetailScreen({ route, navigation }) {
         Alert.alert('Cancelado', 'Ya no vas a este evento.');
       }
     }
+  };
+  const handleDelete = () => {
+    Alert.alert('Eliminar evento', '¿Seguro que quieres eliminarlo?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: () => {
+          deleteEvent(current.id);   // 👈 aquí se llama al contexto
+          // Si estabas en el detalle, cierra
+          if (navigation?.goBack) navigation.goBack();
+        },
+      },
+    ]);
   };
 
   return (
