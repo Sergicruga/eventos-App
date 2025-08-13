@@ -253,7 +253,7 @@ export default function CreateEventScreen({ navigation }) {
 
         {/* Botón Crear (custom, con zIndex/elevation) */}
         <TouchableOpacity
-          onPress={() => { console.log('CLICK CREAR'); handleCreateEvent(); }}
+          onPress={() => { handleCreateEvent(); }}
           activeOpacity={0.85}
           style={styles.primaryBtn}
         >
