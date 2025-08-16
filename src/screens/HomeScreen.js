@@ -43,7 +43,7 @@ const CARD_MARGIN = 10;
 const CARD_WIDTH = (Dimensions.get('window').width - CARD_MARGIN * 3) / 2;
 
 export default function HomeScreen() {
-  const { events, favorites, toggleFavorite } = useContext(EventContext);
+  const { communityEvents, favorites, toggleFavorite } = useContext(EventContext);
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
@@ -72,7 +72,7 @@ export default function HomeScreen() {
   }, []);
 
   const allEvents = [
-    ...events.map(ev => ({ ...ev, type: 'local' })),
+    ...communityEvents.map(ev => ({ ...ev, type: 'local' })),
     ...apiEvents.map(ev => {
       const venue = ev._embedded?.venues?.[0];
       const lat = venue?.location?.latitude ? parseFloat(venue.location.latitude) : null;

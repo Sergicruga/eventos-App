@@ -174,7 +174,7 @@ export default function CreateEventScreen({ navigation }) {
           placeholder="Título"
           value={title}
           onChangeText={setTitle}
-          placeholderTextColor="#F20C0C"
+          placeholderTextColor="#333"
         />
 
         {/* Fecha */}
@@ -214,10 +214,10 @@ export default function CreateEventScreen({ navigation }) {
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <TextInput
               style={[styles.input, { flex: 1, marginBottom: 0 }]}
-              placeholder="Nombre del lugar (se autocompleta desde el mapa)"
+              placeholder="Nombre del lugar "
               value={locationName}
               onChangeText={setLocationName}
-              placeholderTextColor="#F20C0C"
+              placeholderTextColor="#333"
             />
             <TouchableOpacity onPress={openMap} style={styles.smallBtn}>
               <Text style={styles.smallBtnText}>MAPA</Text>
@@ -231,13 +231,14 @@ export default function CreateEventScreen({ navigation }) {
         </View>
 
         {/* Tipo */}
+        
         <View style={[styles.pickerWrapper, { zIndex: 1 }]}>
-          <Picker selectedValue={type} onValueChange={setType} style={styles.picker}>
-            <Picker.Item label="Selecciona tipo de evento" value="" color="#F20C0C" />
-            <Picker.Item label="Concierto" value="Concierto" color="#F20C0C" />
-            <Picker.Item label="Fiesta" value="Fiesta" color="#F20C0C" />
-            <Picker.Item label="Deportivo" value="Deportivo" color="#F20C0C" />
-            <Picker.Item label="Otro" value="Otro" color="#F20C0C" />
+          <Picker selectedValue={type} onValueChange={setType} style={[styles.picker, { color: '#000' }]}> 
+            <Picker.Item label="Selecciona un tipo" value="" color="#fff" />
+            <Picker.Item label="Concierto" value="Concierto" color="#fff" />
+            <Picker.Item label="Fiesta" value="Fiesta" color="#fff" />
+            <Picker.Item label="Deportivo" value="Deportivo" color="#fff" />
+            <Picker.Item label="Otro" value="Otro" color="#fff" />
           </Picker>
         </View>
 
@@ -247,7 +248,7 @@ export default function CreateEventScreen({ navigation }) {
           placeholder="Descripción"
           value={description}
           onChangeText={setDescription}
-          placeholderTextColor="#F20C0C"
+          placeholderTextColor="#333"
           multiline
         />
 
@@ -310,7 +311,7 @@ const styles = StyleSheet.create({
 
   pickerWrapper: {
     borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
-    marginBottom: 12, backgroundColor: '#f8f8f8'
+    marginBottom: 12, backgroundColor: '#f8f8f8',
   },
   picker: { height: 55 },
 

@@ -1,9 +1,10 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
-export const EventContext = createContext();
+import * as ImagePicker from 'expo-image-picker'; // (lo mantengo por si lo usas en otras pantallas)
+import * as Location from 'expo-location';
 import { Alert } from 'react-native';
 
+export const EventContext = createContext();
 
 const EVENTS_KEY = 'eventos_guardados';
 const FAVORITES_KEY = 'favoritos_eventos_ids';
@@ -12,9 +13,12 @@ const FAVORITES_MAP_KEY = 'favoritos_eventos_map';
 export function EventProvider({ children }) {
   const [user, setUser] = useState({ name: 'Usuario', email: '' });
 
-  const [events, setEvents] = useState([
+  const [events, setEvents] = useState([]);
 
-  ]);
+  // NUEVO: ubicación global
+  const [coords, setCoords] = useState(null);    // { latitude, longitude }
+  const [city, setCity] = useState(null);        // p.ej. "Madrid"
+  const [locLoading, setLocLoading] = useState(true);
 
   // Favoritos = IDs y un mapa con el “snapshot” del evento
   const [favorites, setFavorites] = useState([]);          // string[]
@@ -34,12 +38,39 @@ export function EventProvider({ children }) {
         if (savedEvents) {
           const arr = JSON.parse(savedEvents);
           arr.forEach(ev => {
-            if (ev.latitude) ev.latitude = Number(ev.latitude);
-            if (ev.longitude) ev.longitude = Number(ev.longitude);
+            if (ev.latitude != null) ev.latitude = Number(ev.latitude);
+            if (ev.longitude != null) ev.longitude = Number(ev.longitude);
+            // Normalizamos imagen para compatibilidad antigua
+            ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
           });
           setEvents(arr);
         }
       } catch {}
+    })();
+  }, []);
+
+  // NUEVO: Detectar ubicación al abrir la app (y ciudad aprox.)
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setLocLoading(false);
+          return;
+        }
+        const loc = await Location.getCurrentPositionAsync({});
+        const c = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        setCoords(c);
+
+        try {
+          const places = await Location.reverseGeocodeAsync(c);
+          const first = places?.[0];
+          const cityName = first?.city || first?.subregion || first?.region || null;
+          setCity(cityName);
+        } catch {}
+      } finally {
+        setLocLoading(false);
+      }
     })();
   }, []);
 
@@ -66,16 +97,35 @@ export function EventProvider({ children }) {
       return;
     }
     setEvents(prev => [
-      { ...event, id: Date.now().toString(), createdBy: user.name, asistentes: [] },
+      {
+        ...event,
+        // normalizamos imagen en la creación
+        image: event.image ?? event.imageUrl ?? event.imageUri ?? null,
+        id: Date.now().toString(),
+        createdBy: user.name,
+        asistentes: [],
+      },
       ...prev,
     ]);
   };
+  // EventContext
+  const isMine = (ev) => {
+    // Caso 1: tiene createdById
+    if (ev?.createdById && user?.id) return ev.createdById === user.id;
+
+    // Caso 2: legado, solo texto
+    if (ev?.createdBy && user?.name) {
+      return ev.createdBy.trim().toLowerCase() === user.name.trim().toLowerCase();
+    }
+    return false;
+  };
+
+
   const normalizeEvent = (ev) => ({
     ...ev,
     image: ev.image ?? ev.imageUrl ?? ev.imageUri ?? null,
-    imageUrl: undefined,
-    imageUri: undefined,
   });
+
   const updateEvent = (updatedEvent) => {
     const t = Date.parse(updatedEvent.date);
     const now = new Date();
@@ -85,10 +135,11 @@ export function EventProvider({ children }) {
       return;
     }
     const u = normalizeEvent(updatedEvent);
+
     setEvents(prev => {
-      const idx = prev.findIndex(ev => ev.id === updatedEvent.id);
+      const idx = prev.findIndex(ev => ev.id === u.id);
       if (idx === -1) {
-        // No existía (probablemente era un evento de la API) → lo añadimos como local
+        // No existía (por ejemplo, venía de API y lo conviertes a local)
         const nuevo = {
           ...u,
           type: 'local',
@@ -97,22 +148,23 @@ export function EventProvider({ children }) {
         };
         return [nuevo, ...prev];
       }
-      // Existe → merge
+      // Existe → merge (ARREGLO: usar prev[idx] en vez de prevEvent inexistente)
       const next = [...prev];
-      next[idx] = { 
-        ...prevEvent,
-        ...updatedEvent,
-      // 👇 preserva asistentes si no lo manda el form
-        asistentes: updatedEvent.asistentes ?? prevEvent.asistentes ?? [],
+      const prevEv = prev[idx];
+      next[idx] = {
+        ...prevEv,
+        ...u,
+        // preserva asistentes si no lo manda el form
+        asistentes: u.asistentes ?? prevEv.asistentes ?? [],
       };
       return next;
     });
   };
 
-
   const deleteEvent = (eventId) => {
     setEvents(prev => prev.filter(ev => ev.id !== eventId));
   };
+
   const updateUser = (newUser) => setUser(newUser);
 
   // Toggle favorito: recibe ID y opcionalmente el evento (para snapshot si no es local)
@@ -168,9 +220,23 @@ export function EventProvider({ children }) {
     );
   };
 
+  // NUEVO: selectores
+  const myEvents = useMemo(() => events.filter(isMine), [events, user]);
+  const communityEvents = useMemo(() => events.filter(e => !isMine(e)), [events, user]);
+
+
   return (
     <EventContext.Provider
-      value={{ events, addEvent, updateEvent, deleteEvent, user, updateUser, favorites, favoriteItems, toggleFavorite, joinEvent, leaveEvent }}
+      value={{
+        // existentes
+        events, addEvent, updateEvent, deleteEvent,
+        user, updateUser,
+        favorites, favoriteItems, toggleFavorite, joinEvent, leaveEvent,
+
+        // NUEVO expuesto
+        coords, city, locLoading,
+        myEvents, communityEvents,
+      }}
     >
       {children}
     </EventContext.Provider>
