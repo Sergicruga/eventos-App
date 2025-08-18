@@ -94,18 +94,15 @@ export default function CreateEventScreen({ navigation }) {
     setCoords({ latitude, longitude });
     try {
       const res = await Location.reverseGeocodeAsync({ latitude, longitude });
-      if (res && res[0]) {
-        const r = res[0];
-        const name =
-          r.name ||
-          `${r.street || ''} ${r.postalCode || ''}`.trim() ||
-          r.city ||
-          r.region ||
-          'Ubicación seleccionada';
-        setLocationName(name);
+      if (res?.length) {
+        setLocationName(formatAddress(res[0])); // 👈 aquí el cambio clave
+      } else {
+        setLocationName(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
       }
-    } catch {}
-  };
+      } catch {
+        setLocationName(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+      }
+    };
 
   const acceptMap = () => {
     if (coords.latitude == null || coords.longitude == null) {
@@ -116,38 +113,76 @@ export default function CreateEventScreen({ navigation }) {
   };
 
   // ---------- Guardar ----------
+  const formatAddress = (a) => {
+  // a: { name, street, streetNumber, city, subregion, region, postalCode, country, ... }
+  const line1Parts = [];
+
+  if (a.street) line1Parts.push(a.street);
+  if (a.streetNumber) line1Parts.push(String(a.streetNumber));
+  if (!a.street && a.name) line1Parts.push(String(a.name));
+
+  const line1 = line1Parts.join(' ').trim();
+
+  const city = a.city || a.subregion;
+  const line2Parts = [city, a.region].filter(Boolean);
+
+  const parts = [line1, ...line2Parts, a.postalCode, a.country].filter(Boolean);
+  const seen = new Set();
+  const dedup = parts.filter(p => {
+    const key = p.trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return dedup.join(', ').trim() || [a.name, a.country].filter(Boolean).join(', ');
+};
+  const normalizeDate = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d));
+  const looksLikeOnlyNumber = (s) => /^\d+$/.test((s || '').trim());
   const [description, setDescription] = useState('');
   const handleCreateEvent = async () => {
-    if (!title.trim()) {
-      Alert.alert('Falta título', 'Pon un título al evento.');
-      return;
-    }
-    if (!locationName.trim() || coords.latitude == null || coords.longitude == null) {
-      Alert.alert('Falta ubicación', 'Elige una ubicación en el mapa.');
-      return;
-    }
+  const { status } = await Location.requestForegroundPermissionsAsync();
+  if (status !== 'granted') {
+    Alert.alert('Permiso denegado', 'No podemos guardar el evento sin ubicación.');
+    return;
+  }
 
-    const todayMid = new Date(); todayMid.setHours(0,0,0,0);
-    const selectedMid = new Date(date); selectedMid.setHours(0,0,0,0);
-    if (selectedMid.getTime() < todayMid.getTime()) {
-      Alert.alert('Fecha inválida', 'No puedes crear un evento con fecha pasada.');
-      return;
+  try {
+    let baseCoords = coords?.latitude != null ? coords : (await Location.getCurrentPositionAsync({})).coords;
+
+    let resolvedAddress = locationName?.trim();
+    if (!resolvedAddress) {
+      const results = await Location.reverseGeocodeAsync({
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude,
+      });
+
+      if (results && results.length > 0) {
+        resolvedAddress = formatAddress(results[0]);
+        // 👇 opcional: autocompleta el input
+        setLocationName(resolvedAddress);
+      }
     }
 
     addEvent({
-      title: title.trim(),
-      date: formattedDate(), // tu EventContext valida con new Date(), si prefieres YYYY-MM-DD cámbialo aquí
-      location: locationName.trim(),
-      description: description.trim(),
+      title,
+      date: normalizate(date),// 👈 asegúrate de pasarlo como string si usas Date
+      location: resolvedAddress || `${loc.coords.latitude.toFixed(5)}, ${loc.coords.longitude.toFixed(5)}`,
+      description,
       type,
       image: imageUri || 'https://placehold.co/600x300?text=Evento',
-      latitude: coords.latitude,
-      longitude: coords.longitude,
+      latitude: loc.coords.latitude,
+      longitude: loc.coords.longitude,
     });
 
     Alert.alert('Evento creado', '¡Tu evento se ha guardado!');
     navigation.goBack();
-  };
+  } catch (e) {
+    console.warn(e);
+    Alert.alert('Error', 'No se pudo obtener la ubicación.');
+  }
+};
+
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
