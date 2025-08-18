@@ -14,6 +14,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventContext } from '../EventContext';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
@@ -119,18 +120,18 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity
         style={styles.card}
-        activeOpacity={0.85}
+        activeOpacity={0.88}
         onPress={() => navigation.navigate('EventDetail', { event: item })}
       >
         <View style={styles.imageWrapper}>
           <Image
-            source={
-              item.image
-                ? { uri: item.image }
-                : require('../../assets/iconoApp.png')
-            }
+            source={item.image ? { uri: item.image } : require('../../assets/iconoApp.png')}
             style={styles.cardImage}
             resizeMode="cover"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(35,69,103,0.45)', 'rgba(35,69,103,0.7)']}
+            style={styles.gradientOverlay}
           />
           <TouchableOpacity
             style={styles.favoriteIcon}
@@ -138,20 +139,20 @@ export default function HomeScreen() {
           >
             <Ionicons
               name={favorites.includes(item.id) ? 'star' : 'star-outline'}
-              size={26}
-              color={favorites.includes(item.id) ? '#FFD700' : '#fff'}
+              size={24}
+              color={favorites.includes(item.id) ? '#FFD700' : '#5a7bb6'}
             />
           </TouchableOpacity>
         </View>
         <View style={styles.overlay}>
-          <Text style={styles.cardTitle} numberOfLines={2}>
+          <Text style={styles.cardTitle} numberOfLines={2} ellipsizeMode="tail">
             {item.title}
           </Text>
-          <Text style={styles.cardDate}>
+          <Text style={styles.cardDate} numberOfLines={1} ellipsizeMode="tail">
             {item.date}
           </Text>
-          <Text style={styles.cardLocation} numberOfLines={1}>
-            <Ionicons name="location-outline" size={14} color="#fff" /> {item.location}
+          <Text style={styles.cardLocation} numberOfLines={1} ellipsizeMode="tail">
+            <Ionicons name="location-outline" size={14} color="#5a7bb6" /> {item.location}
           </Text>
         </View>
       </TouchableOpacity>
@@ -185,7 +186,8 @@ export default function HomeScreen() {
         keyExtractor={item => item.id}
         renderItem={renderEventCard}
         numColumns={2}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { alignItems: 'center' }]} // Add alignItems: 'center'
+        columnWrapperStyle={{ justifyContent: 'center' }} // Center cards in each row
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.centered}>
