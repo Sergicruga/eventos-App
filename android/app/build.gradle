@@ -87,7 +87,7 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.eventoapp"
+    namespace 'com.sergicruga.eventoapp'
     defaultConfig {
         applicationId 'com.sergicruga.eventoapp'
         minSdkVersion rootProject.ext.minSdkVersion
