@@ -5,6 +5,9 @@ import pkg from "pg";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+
 
 dotenv.config();
 const { Pool } = pkg;
@@ -12,6 +15,11 @@ const { Pool } = pkg;
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use((req, _res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  if (req.method !== 'GET') console.log('BODY:', req.body);
+  next();
+});
 
 const port = process.env.PORT || 4000;
 
@@ -180,6 +188,78 @@ app.post('/events/:eventId/comments', async (req, res) => {
   );
   res.status(201).json(result.rows[0]);
 });
+// =================== AUTH (registro / login) ===================
+const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_super_largo_cámbialo";
+
+// crea tokens
+function signToken(payload) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
+}
+
+/**
+ * POST /auth/register
+ * body: { name, email, password }
+ * devuelve: { user: {id,name,email}, token }
+ */
+app.post("/auth/register", async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password)
+      return res.status(400).json({ message: "Campos obligatorios" });
+
+    // ¿email ya existe?
+    const exists = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
+    if (exists.rowCount > 0)
+      return res.status(409).json({ message: "El email ya está registrado" });
+
+    const hash = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      `INSERT INTO users (name, email, password)
+       VALUES ($1, $2, $3)
+       RETURNING id, name, email`,
+      [name, email, hash]
+    );
+
+    const user = result.rows[0];
+    const token = signToken({ id: user.id, email: user.email });
+    res.json({ user, token });
+  } catch (e) {
+    console.error("REGISTER ERROR:", e);
+    res.status(500).json({ message: "Error registrando usuario" });
+  }
+});
+
+/**
+ * POST /auth/login
+ * body: { email, password }
+ * devuelve: { user: {id,name,email}, token }
+ */
+app.post("/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password)
+      return res.status(400).json({ message: "Email y contraseña requeridos" });
+
+    const result = await pool.query(
+      "SELECT id, name, email, password FROM users WHERE email = $1",
+      [email]
+    );
+    if (result.rowCount === 0)
+      return res.status(401).json({ message: "Credenciales inválidas" });
+
+    const userRow = result.rows[0];
+    const ok = await bcrypt.compare(password, userRow.password);
+    if (!ok) return res.status(401).json({ message: "Credenciales inválidas" });
+
+    const user = { id: userRow.id, name: userRow.name, email: userRow.email };
+    const token = signToken({ id: user.id, email: user.email });
+    res.json({ user, token });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Error al iniciar sesión" });
+  }
+});
+
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`✅ API escuchando en http://localhost:${port}`);

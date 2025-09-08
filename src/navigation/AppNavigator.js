@@ -1,34 +1,67 @@
-import React from 'react';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import TabNavigator from './TabNavigator';
-import EventDetailScreen from '../screens/EventDetailScreen';
-import EditEventScreen from '../screens/EditEventScreen';
-import CreateEventScreen from '../screens/CreateEventScreen';
+// src/navigation/AppNavigator.js
+import React, { useContext } from "react";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { ActivityIndicator, View } from "react-native";
+import { AuthContext } from "../context/AuthContext";
+
+// PÚBLICAS
+import WelcomeScreen from "../screens/WelcomeScreen";
+import LoginScreen from "../screens/LoginScreen";
+import RegisterScreen from "../screens/RegisterScreen";
+
+// PRIVADAS
+import TabNavigator from "./TabNavigator"; // <-- tu TabNavigator existente
+import EventDetail from "../screens/EventDetailScreen";
+import CreateEventScreen from "../screens/CreateEventScreen";
+// importa aquí cualquier otra pantalla "modal" o de detalle que abras desde tabs
+
 const Stack = createNativeStackNavigator();
 
-export default function AppNavigator() {
+function PublicStack() {
   return (
     <Stack.Navigator>
+      <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Login" component={LoginScreen} options={{ title: "Iniciar sesión" }} />
+      <Stack.Screen name="Register" component={RegisterScreen} options={{ title: "Crear cuenta" }} />
+    </Stack.Navigator>
+  );
+}
+
+function PrivateStack() {
+  return (
+    <Stack.Navigator>
+      {/* Primer screen: tus pestañas */}
       <Stack.Screen
-        name="Main"
+        name="Tabs"
         component={TabNavigator}
-        options={{ headerShown: false }} // Oculta la cabecera para las pestañas
+        options={{ headerShown: false }}
       />
+      {/* Pantallas por encima del Tab, accesibles desde cualquier pestaña */}
       <Stack.Screen
         name="EventDetail"
-        component={EventDetailScreen}
-        options={{ title: 'Detalle del Evento' }}
-      />
-      <Stack.Screen
-        name="EditEvent"
-        component={EditEventScreen}
-        options={{ title: 'Editar evento' }}
+        component={EventDetail}
+        options={{ title: "Detalle" }}
       />
       <Stack.Screen
         name="CreateEventScreen"
         component={CreateEventScreen}
-        options={{ title: 'Crear evento' }}
+        options={{ title: "Nuevo evento" }}
       />
+      {/* añade aquí más screens de detalle si las tienes */}
     </Stack.Navigator>
   );
+}
+
+export default function AppNavigator() {
+  const { token, loading } = useContext(AuthContext);
+
+  if (loading) {
+    return (
+      <View style={{ flex:1, justifyContent:"center", alignItems:"center" }}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  return token ? <PrivateStack /> : <PublicStack />;
 }
