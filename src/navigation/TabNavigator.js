@@ -6,6 +6,7 @@ import HomeScreen from '../screens/HomeScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import EditEventScreen from '../screens/EditEventScreen';
+import FriendsScreen from '../screens/FriendsScreen';
 
 
 const Tab = createBottomTabNavigator();
@@ -28,6 +29,7 @@ export default function TabNavigator() {
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Inicio' }} />
       <Tab.Screen name="Favorites" component={FavoritesScreen} options={{ title: 'Favoritos' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
+      <Tab.Screen name="Amigos" component={FriendsScreen} />
     </Tab.Navigator>
   );
 }

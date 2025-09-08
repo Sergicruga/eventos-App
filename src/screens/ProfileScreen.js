@@ -1,78 +1,87 @@
-import React, { useContext, useState } from 'react';
-import { View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
-import { EventContext } from '../EventContext';
-import { Alert } from 'react-native';
-import { usePushToken } from '../hooks/usePushToken';
+import React, { useContext, useState } from "react";
+import { View, Text, TextInput, Button, Image, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { EventContext } from "../EventContext";
 
-export default function ProfileScreen({ navigation }) {
-  const { user, updateUser, events } = useContext(EventContext);
+const API_URL = "http://localhost:4000";
 
-  const [name, setName] = useState(user.name);
-  const [email, setEmail] = useState(user.email);
-  const token = usePushToken();
-  const handleSave = () => {
-    updateUser({ name, email });
-    Alert.alert('Perfil actualizado', 'Tu perfil ha sido guardado correctamente.');
-    // Opcional: puedes mostrar una alerta de "perfil guardado"
+export default function ProfileScreen() {
+  const { user, updateUser } = useContext(EventContext);
+  const [name, setName] = useState(user.name || "");
+  const [photo, setPhoto] = useState(user.photo || null);
+  const [saving, setSaving] = useState(false);
+
+  // Cambiar nombre
+  const saveName = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${API_URL}/users/${user.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      updateUser({ ...user, name });
+      Alert.alert("Nombre actualizado");
+    } catch {
+      Alert.alert("Error actualizando nombre");
+    }
+    setSaving(false);
   };
 
-  // Filtrar solo los eventos creados por este usuario
-  const userEvents = events.filter(ev => ev.createdBy === user.name);
+  // Cambiar foto
+  const pickPhoto = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      uploadPhoto(result.assets[0].uri);
+    }
+  };
+
+  const uploadPhoto = async (uri) => {
+    setSaving(true);
+    const formData = new FormData();
+    formData.append("photo", {
+      uri,
+      name: "profile.jpg",
+      type: "image/jpeg",
+    });
+    try {
+      const res = await fetch(`${API_URL}/users/${user.id}/photo`, {
+        method: "POST",
+        headers: { "Content-Type": "multipart/form-data" },
+        body: formData,
+      });
+      const data = await res.json();
+      setPhoto(`${API_URL}${data.photo}`);
+      updateUser({ ...user, photo: data.photo });
+      Alert.alert("Foto actualizada");
+    } catch {
+      Alert.alert("Error subiendo foto");
+    }
+    setSaving(false);
+  };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Perfil de Usuario</Text>
+    <View style={{ flex: 1, alignItems: "center", padding: 24 }}>
+      <TouchableOpacity onPress={pickPhoto}>
+        <Image
+          source={photo ? { uri: photo.startsWith("http") ? photo : `${API_URL}${photo}` } : require("../../assets/icon.png")}
+          style={{ width: 120, height: 120, borderRadius: 60, marginBottom: 16 }}
+        />
+        <Text style={{ color: "#1976d2", marginBottom: 16 }}>Cambiar foto</Text>
+      </TouchableOpacity>
+      <Text>Nombre:</Text>
       <TextInput
-        style={styles.input}
-        placeholder="Nombre"
         value={name}
         onChangeText={setName}
+        style={{ borderWidth: 1, borderRadius: 6, padding: 8, width: "80%", marginBottom: 16 }}
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        keyboardType="email-address"
-      />
-      <Button title="Guardar Perfil" onPress={handleSave} />
-
-      <Text style={[styles.title, { fontSize: 18, marginTop: 32 }]}>Tus eventos creados</Text>
-      <FlatList
-        data={userEvents}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.eventCard}
-            onPress={() => navigation.navigate('EventDetail', { event: item })}
-          >
-            <Text style={styles.eventTitle}>{item.title}</Text>
-            <Text style={styles.eventDesc}>{item.date} - {item.location}</Text>
-          </TouchableOpacity>
-        )}
-
-        ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#999', marginTop: 20 }}>No has creado eventos aún.</Text>}
-      />
-      <Text style={styles.title}>Perfil</Text>
-      <Text style={{ fontSize: 12, color: 'gray' }}>Expo Push Token:</Text>
-      <Text selectable style={{ fontSize: 12 }}>{token ? token : 'Obteniendo token...'}</Text>
-
+      <Button title="Guardar nombre" onPress={saveName} disabled={saving} />
+      {saving && <ActivityIndicator style={{ marginTop: 16 }} />}
     </View>
-    
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 18, textAlign: 'center' },
-  input: {
-    borderWidth: 1, borderColor: '#ccc', borderRadius: 8,
-    padding: 10, marginBottom: 10, fontSize: 16, backgroundColor: '#f8f8f8'
-  },
-  eventCard: {
-    backgroundColor: '#f4f4f4', borderRadius: 10,
-    padding: 12, marginBottom: 12
-  },
-  eventTitle: { fontWeight: 'bold', fontSize: 16 },
-  eventDesc: { color: '#666' },
-});

@@ -10,6 +10,9 @@ const EVENTS_KEY = 'eventos_guardados';
 const FAVORITES_KEY = 'favoritos_eventos_ids';
 const FAVORITES_MAP_KEY = 'favoritos_eventos_map';
 
+// Cambia esto a la URL de tu backend si es necesario
+const API_URL = "http://localhost:4000";
+
 export function EventProvider({ children }) {
   const [user, setUser] = useState({ name: 'Usuario', email: '' });
 
@@ -24,28 +27,52 @@ export function EventProvider({ children }) {
   const [favorites, setFavorites] = useState([]);          // string[]
   const [favoriteItems, setFavoriteItems] = useState({});  // { [id]: EventSnapshot }
 
-  // Cargar persistencia
+  // Cargar persistencia y eventos desde backend
   useEffect(() => {
     (async () => {
       try {
-        const [favIds, favMap, savedEvents] = await Promise.all([
+        const [favIds, favMap] = await Promise.all([
           AsyncStorage.getItem(FAVORITES_KEY),
           AsyncStorage.getItem(FAVORITES_MAP_KEY),
-          AsyncStorage.getItem(EVENTS_KEY),
         ]);
         if (favIds) setFavorites(JSON.parse(favIds));
         if (favMap) setFavoriteItems(JSON.parse(favMap));
-        if (savedEvents) {
-          const arr = JSON.parse(savedEvents);
-          arr.forEach(ev => {
-            if (ev.latitude != null) ev.latitude = Number(ev.latitude);
-            if (ev.longitude != null) ev.longitude = Number(ev.longitude);
-            // Normalizamos imagen para compatibilidad antigua
-            ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
-          });
-          setEvents(arr);
-        }
       } catch {}
+      // Cargar eventos desde el backend
+      try {
+        const res = await fetch(`${API_URL}/events`);
+        const data = await res.json();
+        // Mapeo de campos del backend a frontend
+        const mapped = data.map(ev => ({
+          id: String(ev.id),
+          title: ev.title,
+          description: ev.description,
+          date: ev.event_at?.slice(0, 10) ?? "",
+          location: ev.location,
+          type: ev.type,
+          image: ev.image,
+          latitude: ev.latitude,
+          longitude: ev.longitude,
+          createdBy: ev.created_by || "Desconocido",
+          asistentes: [],
+        }));
+        setEvents(mapped);
+        AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(mapped)).catch(()=>{});
+      } catch {
+        // Si falla, cargar de almacenamiento local
+        try {
+          const savedEvents = await AsyncStorage.getItem(EVENTS_KEY);
+          if (savedEvents) {
+            const arr = JSON.parse(savedEvents);
+            arr.forEach(ev => {
+              if (ev.latitude != null) ev.latitude = Number(ev.latitude);
+              if (ev.longitude != null) ev.longitude = Number(ev.longitude);
+              ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
+            });
+            setEvents(arr);
+          }
+        } catch {}
+      }
     })();
   }, []);
 
@@ -87,8 +114,8 @@ export function EventProvider({ children }) {
     AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(events)).catch(()=>{});
   }, [events]);
 
-  const addEvent = (event) => {
-    // Espera fecha en ISO: YYYY-MM-DD
+  // Cambiado: ahora agrega evento vía backend
+  const addEvent = async (event) => {
     const eventMs = Date.parse(event.date);
     const now = new Date();
     const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -96,30 +123,55 @@ export function EventProvider({ children }) {
       Alert.alert('Fecha inválida', 'No puedes crear un evento con una fecha pasada.');
       return;
     }
-    setEvents(prev => [
-      {
-        ...event,
-        // normalizamos imagen en la creación
-        image: event.image ?? event.imageUrl ?? event.imageUri ?? null,
-        id: Date.now().toString(),
-        createdBy: user.name,
-        asistentes: [],
-      },
-      ...prev,
-    ]);
+    try {
+      const res = await fetch(`${API_URL}/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: event.title,
+          description: event.description,
+          event_at: event.date,
+          location: event.location,
+          type: event.type,
+          image: event.image,
+          latitude: event.latitude,
+          longitude: event.longitude,
+          created_by: user.name,
+        }),
+      });
+      const saved = await res.json();
+      setEvents(prev => [
+        {
+          ...event,
+          id: String(saved.id),
+          createdBy: user.name,
+          asistentes: [],
+        },
+        ...prev,
+      ]);
+    } catch (e) {
+      // fallback local si falla el backend
+      setEvents(prev => [
+        {
+          ...event,
+          image: event.image ?? event.imageUrl ?? event.imageUri ?? null,
+          id: Date.now().toString(),
+          createdBy: user.name,
+          asistentes: [],
+        },
+        ...prev,
+      ]);
+    }
   };
+
   // EventContext
   const isMine = (ev) => {
-    // Caso 1: tiene createdById
     if (ev?.createdById && user?.id) return ev.createdById === user.id;
-
-    // Caso 2: legado, solo texto
     if (ev?.createdBy && user?.name) {
       return ev.createdBy.trim().toLowerCase() === user.name.trim().toLowerCase();
     }
     return false;
   };
-
 
   const normalizeEvent = (ev) => ({
     ...ev,
@@ -139,7 +191,6 @@ export function EventProvider({ children }) {
     setEvents(prev => {
       const idx = prev.findIndex(ev => ev.id === u.id);
       if (idx === -1) {
-        // No existía (por ejemplo, venía de API y lo conviertes a local)
         const nuevo = {
           ...u,
           type: 'local',
@@ -148,13 +199,11 @@ export function EventProvider({ children }) {
         };
         return [nuevo, ...prev];
       }
-      // Existe → merge (ARREGLO: usar prev[idx] en vez de prevEvent inexistente)
       const next = [...prev];
       const prevEv = prev[idx];
       next[idx] = {
         ...prevEv,
         ...u,
-        // preserva asistentes si no lo manda el form
         asistentes: u.asistentes ?? prevEv.asistentes ?? [],
       };
       return next;
@@ -167,7 +216,6 @@ export function EventProvider({ children }) {
 
   const updateUser = (newUser) => setUser(newUser);
 
-  // Toggle favorito: recibe ID y opcionalmente el evento (para snapshot si no es local)
   const toggleFavorite = (eventId, eventObj) => {
     setFavorites(prev => {
       const isFav = prev.includes(eventId);
@@ -220,20 +268,15 @@ export function EventProvider({ children }) {
     );
   };
 
-  // NUEVO: selectores
   const myEvents = useMemo(() => events.filter(isMine), [events, user]);
   const communityEvents = useMemo(() => events.filter(e => !isMine(e)), [events, user]);
-
 
   return (
     <EventContext.Provider
       value={{
-        // existentes
         events, addEvent, updateEvent, deleteEvent,
         user, updateUser,
         favorites, favoriteItems, toggleFavorite, joinEvent, leaveEvent,
-
-        // NUEVO expuesto
         coords, city, locLoading,
         myEvents, communityEvents,
       }}

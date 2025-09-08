@@ -1,9 +1,11 @@
-import React, { useContext, useMemo } from 'react';
-import { View, Text, Image, StyleSheet, Button, Alert, ScrollView, TouchableOpacity, Linking } from 'react-native';
+import React, { useContext, useMemo, useState, useEffect } from 'react';
+import { View, Text, Image, StyleSheet, Button, Alert, ScrollView, TouchableOpacity, Linking, TextInput, FlatList, ActivityIndicator } from 'react-native';
 import { EventContext } from '../EventContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 
+
+const API_URL = "http://localhost:4000";
 
 export default function EventDetailScreen({ route, navigation }) {
   const { event } = route.params;
@@ -69,6 +71,40 @@ export default function EventDetailScreen({ route, navigation }) {
       },
     ]);
   };
+
+  // Comentarios
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState("");
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const fetchComments = async () => {
+    setLoadingComments(true);
+    try {
+      const res = await fetch(`${API_URL}/events/${event.id}/comments`);
+      setComments(await res.json());
+    } catch {
+      setComments([]);
+    }
+    setLoadingComments(false);
+  };
+
+  const sendComment = async () => {
+    if (!newComment.trim()) return;
+    setSending(true);
+    try {
+      await fetch(`${API_URL}/events/${event.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, comment: newComment }),
+      });
+      setNewComment("");
+      fetchComments();
+    } catch {}
+    setSending(false);
+  };
+
+  useEffect(() => { fetchComments(); }, [event.id]);
 
   return (
     <ScrollView
@@ -155,7 +191,37 @@ export default function EventDetailScreen({ route, navigation }) {
           </View>
         )}
       </View>
-      
+
+      {/* Comentarios */}
+      <View style={{ marginTop: 24 }}>
+        <Text style={{ fontWeight: "bold", fontSize: 16, marginBottom: 8 }}>Comentarios:</Text>
+        {loadingComments ? (
+          <ActivityIndicator />
+        ) : (
+          <FlatList
+            data={comments}
+            keyExtractor={item => String(item.id)}
+            renderItem={({ item }) => (
+              <View style={styles.commentContainer}>
+                <Text style={styles.commentName}>{item.name}</Text>
+                <Text>{item.comment}</Text>
+                <Text style={styles.commentDate}>{new Date(item.created_at).toLocaleString()}</Text>
+              </View>
+            )}
+            ListEmptyComponent={<Text>No hay comentarios.</Text>}
+          />
+        )}
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
+          <TextInput
+            value={newComment}
+            onChangeText={setNewComment}
+            placeholder="Escribe un comentario..."
+            style={styles.commentInput}
+            editable={!sending}
+          />
+          <Button title="Enviar" onPress={sendComment} disabled={sending || !newComment.trim()} />
+        </View>
+      </View>
     </ScrollView>
   );
 }
@@ -167,4 +233,27 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: 'bold', marginBottom: 8, paddingRight: 42 },
   date: { color: '#1976d2', marginBottom: 8 },
   description: { fontSize: 16, marginBottom: 10 },
+  commentContainer: {
+    marginVertical: 4,
+    backgroundColor: "#f3f3f3",
+    borderRadius: 6,
+    padding: 8,
+  },
+  commentName: {
+    fontWeight: "bold",
+    marginBottom: 2,
+  },
+  commentDate: {
+    fontSize: 10,
+    color: "#888",
+    marginTop: 2,
+  },
+  commentInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: 8,
+    marginRight: 8,
+    backgroundColor: "#fff",
+  },
 });
