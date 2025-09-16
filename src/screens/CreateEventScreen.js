@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Alert, Image, TouchableOpacity,
-  Platform, Modal, ScrollView, KeyboardAvoidingView
+  Platform, Modal, ScrollView, KeyboardAvoidingView, ActivityIndicator
 } from 'react-native';
 import { EventContext } from '../EventContext';
 import * as Location from 'expo-location';
@@ -33,6 +33,8 @@ export default function CreateEventScreen({ navigation }) {
     longitudeDelta: 0.05,
   });
 
+  const [loadingPerm, setLoadingPerm] = useState(true);
+
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -45,6 +47,7 @@ export default function CreateEventScreen({ navigation }) {
           longitude: loc.coords.longitude
         }));
       }
+      setLoadingPerm(false);
     })();
   }, []);
 
@@ -55,12 +58,12 @@ export default function CreateEventScreen({ navigation }) {
       Alert.alert('Permiso requerido', 'Necesitas permitir acceso a tus fotos.');
       return;
     }
-    const options =
-      ImagePicker.MediaType
-        ? { mediaTypes: [ImagePicker.MediaType.Image], allowsEditing: true, quality: 0.7 }
-        : { mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, quality: 0.7 };
 
-    const result = await ImagePicker.launchImageLibraryAsync(options);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+    });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
       setImageUri(result.assets[0].uri);
@@ -72,7 +75,6 @@ export default function CreateEventScreen({ navigation }) {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
-    // Mostramos DD-MM-YYYY pero al guardar usas este mismo formato
     return `${y}-${m}-${d}`;
   };
 
@@ -95,14 +97,14 @@ export default function CreateEventScreen({ navigation }) {
     try {
       const res = await Location.reverseGeocodeAsync({ latitude, longitude });
       if (res?.length) {
-        setLocationName(formatAddress(res[0])); // 👈 aquí el cambio clave
+        setLocationName(formatAddress(res[0]));
       } else {
         setLocationName(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
       }
-      } catch {
-        setLocationName(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
-      }
-    };
+    } catch {
+      setLocationName(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+    }
+  };
 
   const acceptMap = () => {
     if (coords.latitude == null || coords.longitude == null) {
@@ -112,84 +114,96 @@ export default function CreateEventScreen({ navigation }) {
     setMapVisible(false);
   };
 
-  // ---------- Guardar ----------
+  // ---------- Utils ----------
   const formatAddress = (a) => {
-  // a: { name, street, streetNumber, city, subregion, region, postalCode, country, ... }
-  const line1Parts = [];
+    // a: { name, street, streetNumber, city, subregion, region, postalCode, country, ... }
+    const line1Parts = [];
+    if (a.street) line1Parts.push(a.street);
+    if (a.streetNumber) line1Parts.push(String(a.streetNumber));
+    if (!a.street && a.name) line1Parts.push(String(a.name));
+    const line1 = line1Parts.join(' ').trim();
 
-  if (a.street) line1Parts.push(a.street);
-  if (a.streetNumber) line1Parts.push(String(a.streetNumber));
-  if (!a.street && a.name) line1Parts.push(String(a.name));
+    const city = a.city || a.subregion;
+    const line2Parts = [city, a.region].filter(Boolean);
 
-  const line1 = line1Parts.join(' ').trim();
-
-  const city = a.city || a.subregion;
-  const line2Parts = [city, a.region].filter(Boolean);
-
-  const parts = [line1, ...line2Parts, a.postalCode, a.country].filter(Boolean);
-  const seen = new Set();
-  const dedup = parts.filter(p => {
-    const key = p.trim().toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  return dedup.join(', ').trim() || [a.name, a.country].filter(Boolean).join(', ');
-};
-  const normalizeDate = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d));
-  const looksLikeOnlyNumber = (s) => /^\d+$/.test((s || '').trim());
-  const [description, setDescription] = useState('');
-  const handleCreateEvent = async () => {
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== 'granted') {
-    Alert.alert('Permiso denegado', 'No podemos guardar el evento sin ubicación.');
-    return;
-  }
-
-  try {
-    let baseCoords = coords?.latitude != null ? coords : (await Location.getCurrentPositionAsync({})).coords;
-
-    let resolvedAddress = locationName?.trim();
-    if (!resolvedAddress) {
-      const results = await Location.reverseGeocodeAsync({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-      });
-
-      if (results && results.length > 0) {
-        resolvedAddress = formatAddress(results[0]);
-        // 👇 opcional: autocompleta el input
-        setLocationName(resolvedAddress);
-      }
-    }
-
-    addEvent({
-      title,
-      date: normalizate(date),// 👈 asegúrate de pasarlo como string si usas Date
-      location: resolvedAddress || `${loc.coords.latitude.toFixed(5)}, ${loc.coords.longitude.toFixed(5)}`,
-      description,
-      type,
-      image: imageUri || 'https://placehold.co/600x300?text=Evento',
-      latitude: loc.coords.latitude,
-      longitude: loc.coords.longitude,
+    const parts = [line1, ...line2Parts, a.postalCode, a.country].filter(Boolean);
+    const seen = new Set();
+    const dedup = parts.filter(p => {
+      const key = p.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
 
-    Alert.alert('Evento creado', '¡Tu evento se ha guardado!');
-    navigation.goBack();
-  } catch (e) {
-    console.warn(e);
-    Alert.alert('Error', 'No se pudo obtener la ubicación.');
-  }
-};
+    return dedup.join(', ').trim() || [a.name, a.country].filter(Boolean).join(', ');
+  };
 
+  const normalizeDate = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d));
+
+  // ---------- Guardar ----------
+  const [description, setDescription] = useState('');
+  const handleCreateEvent = async () => {
+    if (!title.trim()) return Alert.alert('Falta título', 'Introduce un título para el evento.');
+    if (!type) return Alert.alert('Falta tipo', 'Selecciona un tipo de evento.');
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permiso denegado', 'No podemos guardar el evento sin ubicación.');
+      return;
+    }
+
+    try {
+      // Si no has elegido en el mapa, usa la ubicación actual
+      const baseCoords =
+        coords?.latitude != null && coords?.longitude != null
+          ? coords
+          : (await Location.getCurrentPositionAsync({})).coords;
+
+      let resolvedAddress = locationName?.trim();
+      if (!resolvedAddress) {
+        const results = await Location.reverseGeocodeAsync({
+          latitude: baseCoords.latitude,
+          longitude: baseCoords.longitude,
+        });
+        if (results && results.length > 0) {
+          resolvedAddress = formatAddress(results[0]);
+          setLocationName(resolvedAddress); // autocompleta el input
+        }
+      }
+
+      addEvent({
+        title,
+        date: normalizeDate(date), // ✅ nombre correcto
+        location:
+          resolvedAddress ||
+          `${baseCoords.latitude.toFixed(5)}, ${baseCoords.longitude.toFixed(5)}`,
+        description,
+        type,
+        image: imageUri || 'https://placehold.co/600x300?text=Evento',
+        latitude: baseCoords.latitude,
+        longitude: baseCoords.longitude,
+      });
+
+      Alert.alert('Evento creado', '¡Tu evento se ha guardado!');
+      navigation.goBack();
+    } catch (e) {
+      console.warn(e);
+      Alert.alert('Error', 'No se pudo obtener la ubicación.');
+    }
+  };
+
+  if (loadingPerm) {
+    return (
+      <View style={{ flex:1, justifyContent:'center', alignItems:'center' }}>
+        <ActivityIndicator />
+        <Text style={{ marginTop: 8 }}>Cargando permisos…</Text>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        contentContainerStyle={{ padding: 24, paddingBottom: 40 }}
-        keyboardShouldPersistTaps="handled"   // <- para que los toques no se pierdan
-      >
+      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Crear Evento</Text>
 
         {/* Imagen */}
@@ -249,7 +263,7 @@ export default function CreateEventScreen({ navigation }) {
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <TextInput
               style={[styles.input, { flex: 1, marginBottom: 0 }]}
-              placeholder="Nombre del lugar "
+              placeholder="Nombre del lugar"
               value={locationName}
               onChangeText={setLocationName}
               placeholderTextColor="#333"
@@ -266,14 +280,13 @@ export default function CreateEventScreen({ navigation }) {
         </View>
 
         {/* Tipo */}
-        
         <View style={[styles.pickerWrapper, { zIndex: 1 }]}>
-          <Picker selectedValue={type} onValueChange={setType} style={[styles.picker, { color: '#000' }]}> 
-            <Picker.Item label="Selecciona un tipo" value="" color="#fff" />
-            <Picker.Item label="Concierto" value="Concierto" color="#fff" />
-            <Picker.Item label="Fiesta" value="Fiesta" color="#fff" />
-            <Picker.Item label="Deportivo" value="Deportivo" color="#fff" />
-            <Picker.Item label="Otro" value="Otro" color="#fff" />
+          <Picker selectedValue={type} onValueChange={setType} style={[styles.picker, { color: '#000' }]}>
+            <Picker.Item label="Selecciona un tipo" value="" />
+            <Picker.Item label="Concierto" value="Concierto" />
+            <Picker.Item label="Fiesta" value="Fiesta" />
+            <Picker.Item label="Deportivo" value="Deportivo" />
+            <Picker.Item label="Otro" value="Otro" />
           </Picker>
         </View>
 
@@ -287,12 +300,8 @@ export default function CreateEventScreen({ navigation }) {
           multiline
         />
 
-        {/* Botón Crear (custom, con zIndex/elevation) */}
-        <TouchableOpacity
-          onPress={() => { handleCreateEvent(); }}
-          activeOpacity={0.85}
-          style={styles.primaryBtn}
-        >
+        {/* Crear */}
+        <TouchableOpacity onPress={handleCreateEvent} activeOpacity={0.85} style={styles.primaryBtn}>
           <Text style={styles.primaryBtnText}>Crear</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -368,7 +377,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
-    zIndex: 10,        // por encima del Picker en Android
+    zIndex: 10,
     elevation: 2,
   },
   primaryBtnText: { color: '#fff', fontWeight: '600', fontSize: 16 },

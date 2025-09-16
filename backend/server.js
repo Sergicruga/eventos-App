@@ -43,8 +43,8 @@ app.get("/", (_req, res) => res.json({ ok: true, msg: "API viva" }));
 app.get("/events", async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, title, description, event_at, location, type, image, latitude, longitude
-       FROM eventos ORDER BY event_at DESC`
+      `SELECT id, title, description, event_at, location, type, image, latitude, longitude, created_by
+       FROM events ORDER BY event_at DESC`
     );
     res.json(rows);
   } catch (e) {
@@ -55,19 +55,20 @@ app.get("/events", async (_req, res) => {
 
 app.post("/events", async (req, res) => {
   try {
-    const { title, description, event_at, location, type, image, latitude, longitude } = req.body;
+    const { title, description, event_at, location, type, image, latitude, longitude, created_by } = req.body;
     const { rows } = await pool.query(
-      `INSERT INTO eventos (title, description, event_at, location, type, image, latitude, longitude)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO events (title, description, event_at, location, type, image, latitude, longitude, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING *`,
-      [title, description, event_at, location, type, image, latitude, longitude]
+      [title, description, event_at, location, type, image, latitude, longitude, created_by ?? null]
     );
     res.status(201).json(rows[0]);
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Error creando evento" });
+    console.error("PG ERROR:", e.message, e.detail, e.hint);
+    res.status(500).json({ error: "Error creando evento", detail: e.message, pg: e.detail || e.hint });
   }
 });
+
 
 // Search users by name or email
 app.get('/users/search', async (req, res) => {

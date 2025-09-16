@@ -1,4 +1,4 @@
-const BASE_URL = "http://192.168.1.53:4000"; // Ajusta a tu backend (Android emu). iOS: http://localhost:3000
+const BASE_URL = "http://localhost:4000"; // Ajusta a tu backend (Android emu). iOS: http://localhost:3000
 
 export async function registerApi(data) {
   const res = await fetch(`${BASE_URL}/auth/register`, {
