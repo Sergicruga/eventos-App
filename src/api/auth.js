@@ -1,7 +1,7 @@
-const BASE_URL = "http://localhost:4000"; // Ajusta a tu backend (Android emu). iOS: http://localhost:3000
+import { API_URL } from "../api/config";
 
 export async function registerApi(data) {
-  const res = await fetch(`${BASE_URL}/auth/register`, {
+  const res = await fetch(`${API_URL}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -16,7 +16,7 @@ export async function registerApi(data) {
 }
 
 export async function loginApi(data) {
-  const res = await fetch(`${BASE_URL}/auth/login`, {
+  const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
