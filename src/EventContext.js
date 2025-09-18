@@ -12,9 +12,9 @@ const FAVORITES_MAP_KEY = 'favoritos_eventos_map';
 
 // ✅ IP LAN fija (tu PC) para dispositivo físico
 const API_URL = Platform.select({
-  ios: 'http://192.168.50.125:4000',     // iPhone real o simulador
-  android: 'http://192.168.50.125:4000', // Android real o emulador físico
-  default: 'http://192.168.50.125:4000'  // por si acaso
+  ios: 'http://192.168.51.53:4000',     // iPhone real o simulador
+  android: 'http://192.168.51.53:4000', // Android real o emulador físico
+  default: 'http://192.168.51.53:4000'  // por si acaso
 });
 
 export function EventProvider({ children }) {

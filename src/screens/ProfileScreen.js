@@ -5,14 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { EventContext } from "../EventContext";
 import { AuthContext } from "../context/AuthContext";
-
-// BASE de API según plataforma / entorno
-const API_URL =
-  Platform.select({
-    android: "http://10.0.2.2:4000", // emulador Android
-    ios: "http://localhost:4000",    // simulador iOS
-    default: "http://localhost:4000" // desarrollo en web/Expo Go con túnel: cámbialo por tu IP local si usas dispositivo
-  });
+import { API_URL } from '../api/config';
 
 export default function ProfileScreen() {
   const { user, updateUser } = useContext(EventContext);

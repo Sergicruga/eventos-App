@@ -1,10 +1,5 @@
 import { Platform } from "react-native";
-
-const API_URL = Platform.select({
-  android: "http://10.0.2.2:4000",  // emulador Android
-  ios: "http://localhost:4000",      // simulador iOS
-  default: "http://localhost:4000",  // Expo Go web/dispositivo: cámbialo por tu IP local si usas físico
-});
+import { API_URL } from '../api/config';
 
 export async function listEvents() {
   const res = await fetch(`${API_URL}/events`);

@@ -3,9 +3,7 @@ import { View, Text, Image, StyleSheet, Button, Alert, ScrollView, TouchableOpac
 import { EventContext } from '../EventContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
-
-
-const API_URL = "http://localhost:4000";
+import { API_URL } from '../api/config';
 
 export default function EventDetailScreen({ route, navigation }) {
   const { event } = route.params;
