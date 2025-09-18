@@ -1,6 +1,6 @@
 import React, { useContext, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
-import { EventContext } from '../EventContext';
+import { EventContext } from '../screens/EventContext';
 
 export default function FavoritesScreen({ navigation }) {
   const { favorites, favoriteItems } = useContext(EventContext);

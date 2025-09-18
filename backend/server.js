@@ -43,8 +43,12 @@ app.get("/", (_req, res) => res.json({ ok: true, msg: "API viva" }));
 app.get("/events", async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, title, description, event_at, location, type, image, latitude, longitude, created_by
-       FROM events ORDER BY event_at DESC`
+      `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
++             e.latitude, e.longitude, e.created_by,
++             u.name AS created_by_name
++      FROM events e
++      LEFT JOIN users u ON u.id = e.created_by
++      ORDER BY e.event_at DESC`
     );
     res.json(rows);
   } catch (e) {
@@ -56,16 +60,26 @@ app.get("/events", async (_req, res) => {
 app.post("/events", async (req, res) => {
   try {
     const { title, description, event_at, location, type, image, latitude, longitude, created_by } = req.body;
+     // created_by debe ser integer o null
+    const createdByInt = created_by ? Number(created_by) : null;
     const { rows } = await pool.query(
       `INSERT INTO events (title, description, event_at, location, type, image, latitude, longitude, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       RETURNING *`,
-      [title, description, event_at, location, type, image, latitude, longitude, created_by ?? null]
+       RETURNING id, title, description, event_at, location, type, image, latitude, longitude, created_by`,
+       [title, description, event_at, location, type, image, latitude, longitude, createdByInt]
     );
-    res.status(201).json(rows[0]);
+    // Añade created_by_name en la respuesta para que el front lo pinte sin otra query
+    const row = rows[0];
+    if (row?.created_by) {
+      const u = await pool.query(`SELECT name FROM users WHERE id=$1`, [row.created_by]);
+      row.created_by_name = u.rows[0]?.name || null;
+    } else {
+      row.created_by_name = null;
+    }
+    res.status(201).json(rows);
   } catch (e) {
     console.error("PG ERROR:", e.message, e.detail, e.hint);
-    res.status(500).json({ error: "Error creando evento", detail: e.message, pg: e.detail || e.hint });
+    res.status(500).json({ error: "Error creando evento", detail: e.message});
   }
 });
 

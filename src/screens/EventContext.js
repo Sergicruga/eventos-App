@@ -1,24 +1,20 @@
 // src/EventContext.js
-import React, { createContext, useState, useEffect, useMemo } from 'react';
+import React, { useContext, createContext, useState, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Alert, Platform  } from 'react-native';
-
+import { AuthContext } from "../context/AuthContext"; 
+import { API_URL } from '../api/config';
 export const EventContext = createContext();
 
 const EVENTS_KEY = 'eventos_guardados';
 const FAVORITES_KEY = 'favoritos_eventos_ids';
 const FAVORITES_MAP_KEY = 'favoritos_eventos_map';
 
-// ✅ IP LAN fija (tu PC) para dispositivo físico
-const API_URL = Platform.select({
-  ios: 'http://192.168.51.53:4000',     // iPhone real o simulador
-  android: 'http://192.168.51.53:4000', // Android real o emulador físico
-  default: 'http://192.168.51.53:4000'  // por si acaso
-});
-
 export function EventProvider({ children }) {
   const [user, setUser] = useState({ name: 'Usuario', email: '' });
+  const auth = AuthContext ? useContext(AuthContext) : null;
+  const effectiveUser = auth?.user ?? user;
   const [events, setEvents] = useState([]);
 
   // Ubicación global
@@ -123,7 +119,7 @@ export function EventProvider({ children }) {
   });
 
   const isMine = (ev) => {
-    if (ev?.createdById && user?.id) return ev.createdById === user.id;
+    if (ev?.createdById && effectiveUser?.id) return String(ev.createdById) === String(effectiveUser.id);
     if (ev?.createdBy && user?.name) {
       return ev.createdBy.trim().toLowerCase() === user.name.trim().toLowerCase();
     }
@@ -150,7 +146,7 @@ export function EventProvider({ children }) {
         image: event.image ?? null,
         latitude: event.latitude ?? null,
         longitude: event.longitude ?? null,
-        created_by: user.name,
+        created_by: effectiveUser?.id ?? null,
       };
 
       const res = await fetch(`${API_URL}/events`, {
@@ -184,7 +180,8 @@ export function EventProvider({ children }) {
         image: saved.image ?? (event.image ?? null),
         latitude: saved.latitude != null ? Number(saved.latitude) : (event.latitude ?? null),
         longitude: saved.longitude != null ? Number(saved.longitude) : (event.longitude ?? null),
-        createdBy: saved?.created_by ?? user.name,
+        createdById: data?.created_by ?? null, 
+        createdBy: data?.created_by_name ?? effectiveUser?.name ?? user.name, 
         asistentes: [],
       };
 
