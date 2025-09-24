@@ -50,7 +50,7 @@ app.get("/events", async (req, res) => {
       const { rows } = await pool.query(
         `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
                 e.latitude, e.longitude, e.created_by
-           FROM eventos e
+           FROM events e
           ORDER BY e.event_at DESC`
       );
       return res.json(rows);
@@ -61,7 +61,7 @@ app.get("/events", async (req, res) => {
       `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
               e.latitude, e.longitude, e.created_by,
               (f.user_id IS NOT NULL) AS is_favorite
-         FROM eventos e
+         FROM events e
     LEFT JOIN event_favorites f
            ON f.event_id = e.id
           AND f.user_id = $1::bigint   -- 👈 cast para evitar integer=text
@@ -316,7 +316,7 @@ app.get('/users/:userId/favorites/events', async (req, res) => {
   const result = await pool.query(
     `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image, e.latitude, e.longitude
      FROM event_favorites f
-     JOIN eventos e ON e.id = f.event_id
+     JOIN events e ON e.id = f.event_id
      WHERE f.user_id = $1
      ORDER BY e.event_at DESC`,
     [userId]
@@ -326,29 +326,41 @@ app.get('/users/:userId/favorites/events', async (req, res) => {
 
 // Marcar favorito
 app.post('/favorites', async (req, res) => {
-  const { userId, eventId } = req.body;
-  if (!userId || !eventId) return res.status(400).json({ error: 'userId y eventId requeridos' });
-
-  await pool.query(
-    `INSERT INTO event_favorites (user_id, event_id)
-     VALUES ($1, $2)
-     ON CONFLICT DO NOTHING`,
-    [userId, eventId]
-  );
-  res.json({ success: true });
+  try {
+    const userId = Number(req.body.userId);
+    const eventId = Number(req.body.eventId);
+    console.log('POST /favorites', { userId, eventId });
+    if (!Number.isInteger(userId) || !Number.isInteger(eventId)) {
+      return res.status(400).json({ error: 'userId/eventId inválidos' });
+    }
+    await pool.query(
+      `INSERT INTO event_favorites (user_id, event_id)
+       VALUES ($1::bigint, $2::bigint) ON CONFLICT DO NOTHING`,
+      [userId, eventId]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error('POST /favorites ERROR:', e);
+    res.status(500).json({ error: 'Error añadiendo favorito' });
+  }
 });
 
-// Quitar favorito
 app.delete('/favorites', async (req, res) => {
-  const { userId, eventId } = req.body;
-  if (!userId || !eventId) return res.status(400).json({ error: 'userId y eventId requeridos' });
-
-  await pool.query(
-    `DELETE FROM event_favorites WHERE user_id = $1 AND event_id = $2`,
-    [userId, eventId]
-  );
-  res.json({ success: true });
+  try {
+    const userId = Number(req.body.userId);
+    const eventId = Number(req.body.eventId);
+    console.log('DELETE /favorites', { userId, eventId });
+    await pool.query(
+      `DELETE FROM event_favorites WHERE user_id = $1::bigint AND event_id = $2::bigint`,
+      [userId, eventId]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error('DELETE /favorites ERROR:', e);
+    res.status(500).json({ error: 'Error quitando favorito' });
+  }
 });
+
 // === ASISTENTES ===
 
 // Apuntarse a un evento

@@ -269,52 +269,64 @@ export function EventProvider({ children }) {
   const updateUser = (newUser) => setUser(newUser);
 
   // Favoritos
-  const toggleFavorite = async (eventId, eventObj) => {
-    // Actualización optimista (instantánea)
-    const alreadyFav = favorites.includes(eventId);
-    setFavorites(prev => (alreadyFav ? prev.filter(id => id !== eventId) : [eventId, ...prev]));
+  const isNumericId = (id) => /^\d+$/.test(String(id));
+const dbIdFrom = (id) => (isNumericId(id) ? Number(id) : null);
 
-    // Mantén tu mapa de items como antes
-    if (!alreadyFav && eventObj) {
-      setFavoriteItems(prevMap => ({
-        ...prevMap,
-        [eventId]: {
-          id: String(eventObj.id),
-          title: eventObj.title || '',
-          date: eventObj.date || '',
-          location: eventObj.location || '',
-          description: eventObj.description || '',
-          image: eventObj.image || (eventObj.images?.[0]?.url ?? null),
-          type: eventObj.type || 'local',
-          latitude: eventObj.latitude != null ? Number(eventObj.latitude) : null,
-          longitude: eventObj.longitude != null ? Number(eventObj.longitude) : null,
-        },
-      }));
+const toggleFavorite = async (eventId, eventObj) => {
+  const alreadyFav = favorites.includes(eventId);
+
+  // UI optimista (como ya tenías)
+  setFavorites(prev => (alreadyFav ? prev.filter(id => id !== eventId) : [eventId, ...prev]));
+  if (!alreadyFav && eventObj) {
+    setFavoriteItems(prevMap => ({
+      ...prevMap,
+      [eventId]: {
+        id: String(eventObj.id),
+        title: eventObj.title || '',
+        date: eventObj.date || '',
+        location: eventObj.location || '',
+        description: eventObj.description || '',
+        image: eventObj.image || (eventObj.images?.[0]?.url ?? null),
+        type: eventObj.type || 'local',
+        latitude: eventObj.latitude != null ? Number(eventObj.latitude) : null,
+        longitude: eventObj.longitude != null ? Number(eventObj.longitude) : null,
+      },
+    }));
+  }
+  if (alreadyFav) {
+    setFavoriteItems(prevMap => {
+      const copy = { ...prevMap };
+      delete copy[eventId];
+      return copy;
+    });
+  }
+
+  // Persistencia en BD solo si hay usuario y el id es numérico (evento de tu BD)
+  try {
+    const uid = auth?.user?.id;
+    const dbId = dbIdFrom(eventId);
+
+    console.log('[toggleFavorite] uid=', uid, 'eventId=', eventId, 'dbId=', dbId);
+
+    if (!uid || dbId == null) {
+      // Ticketmaster u otro externo → se queda solo local
+      return;
     }
+
     if (alreadyFav) {
-      setFavoriteItems(prevMap => {
-        const copy = { ...prevMap };
-        delete copy[eventId];
-        return copy;
-      });
+      console.log('[toggleFavorite] DELETE /favorites', { userId: uid, eventId: dbId });
+      await removeFavorite(uid, dbId);
+    } else {
+      console.log('[toggleFavorite] POST /favorites', { userId: uid, eventId: dbId });
+      await addFavorite(uid, dbId);
     }
+  } catch (e) {
+    console.warn('toggleFavorite (persistencia) error:', e.message);
+    // revert del optimista
+    setFavorites(prev => (alreadyFav ? [eventId, ...prev] : prev.filter(id => id !== eventId)));
+  }
+};
 
-    // Persistencia en BD sólo si: hay usuario y el id es numérico (evento de BD)
-    try {
-      const uid = auth?.user?.id;
-      const dbId = dbIdFrom(eventId);
-      if (!uid || dbId == null) return; // ej. favoritos de Ticketmaster quedan locales
-      if (alreadyFav) {
-        await removeFavorite(uid, dbId);
-      } else {
-        await addFavorite(uid, dbId);
-      }
-    } catch (e) {
-      console.warn('toggleFavorite (persistencia) error:', e.message);
-      // Deshacer si falló la persistencia
-      setFavorites(prev => (alreadyFav ? [eventId, ...prev] : prev.filter(id => id !== eventId)));
- }
-  };
 
   // Asistir / salir (local)
   const joinEvent = async (eventId) => {

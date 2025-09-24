@@ -111,7 +111,7 @@ export default function EventDetailScreen({ route, navigation }) {
       contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}  // <-- correcto: prop, no hijo
     >
       <TouchableOpacity
-        onPress={() => toggleFavorite(event.id, event)}
+        onPress={() => toggleFavorite(current.id, current)}
         style={{ position: 'absolute', right: 20, top: 18, zIndex: 10 }}
         hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
       >
