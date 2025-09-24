@@ -324,7 +324,7 @@ app.get('/users/:userId/favorites/events', async (req, res) => {
   const result = await pool.query(
     `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image, e.latitude, e.longitude
      FROM event_favorites f
-     JOIN eventos e ON e.id = f.event_id
+     JOIN events e ON e.id = f.event_id
      WHERE f.user_id = $1
      ORDER BY e.event_at DESC`,
     [userId]
