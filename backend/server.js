@@ -43,24 +43,12 @@ app.get("/", (_req, res) => res.json({ ok: true, msg: "API viva" }));
 // /events a prueba de tipos (PostgreSQL)
 app.get("/events", async (req, res) => {
   try {
-    const userId = req.query.userId ? Number(req.query.userId) : null;
-
-    // SIN userId: SELECT limpio
-    if (!userId) {
-      const { rows } = await pool.query(
-        `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
-                e.latitude, e.longitude, e.created_by
-           FROM eventos e
-          ORDER BY e.event_at DESC`
-      );
-      return res.json(rows);
-    }
-
-    // CON userId: LEFT JOIN favoritos (cast explícito para evitar integer=text)
+    // Always use the correct table name
     const { rows } = await pool.query(
-      `SELECT id, title, description, event_at, location, type, image, latitude, longitude, created_by
-       FROM events
-       ORDER BY event_at DESC`
+      `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+              e.latitude, e.longitude, e.created_by
+         FROM events e
+        ORDER BY e.event_at DESC`
     );
     res.json(rows);
   } catch (e) {
