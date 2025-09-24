@@ -3,7 +3,8 @@ import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { EventContext } from './EventContext';              // <-- ruta corregida
 import { AuthContext } from '../context/AuthContext';
-import { getFavoriteEvents } from '../api/favorites';        // usa el endpoint /users/:id/favorites/events
+import { getFavoriteEvents } from '../api/favorites'; 
+import { API_URL } from '../api/config';       // usa el endpoint /users/:id/favorites/events
 
 export default function FavoritesScreen({ navigation }) {
   const { favorites, favoriteItems } = useContext(EventContext);
@@ -14,13 +15,19 @@ export default function FavoritesScreen({ navigation }) {
 
   useEffect(() => {
     let mounted = true;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 7000);
     (async () => {
       try {
         if (!user?.id) {
           setServerFavs([]);
           return;
         }
-        const data = await getFavoriteEvents(user.id);
+        const res = await fetch(`${API_URL}/users/${user.id}/favorites/events`, {
+         signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
         // Normalizamos al mismo shape que usas en la app (id, title, date, location, image, description)
         const mapped = (data || []).map(e => ({
           id: String(e.id),
@@ -37,6 +44,7 @@ export default function FavoritesScreen({ navigation }) {
       } catch (e) {
         console.warn('Error cargando favoritos de BD:', e.message);
       } finally {
+        clearTimeout(timeout);
         if (mounted) setLoading(false);
       }
     })();
