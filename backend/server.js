@@ -43,16 +43,13 @@ app.get("/", (_req, res) => res.json({ ok: true, msg: "API viva" }));
 app.get("/events", async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
-+             e.latitude, e.longitude, e.created_by,
-+             u.name AS created_by_name
-+      FROM events e
-+      LEFT JOIN users u ON u.id = e.created_by
-+      ORDER BY e.event_at DESC`
+      `SELECT id, title, description, event_at, location, type, image, latitude, longitude, created_by
+       FROM events
+       ORDER BY event_at DESC`
     );
     res.json(rows);
   } catch (e) {
-    console.error(e);
+    console.error("PG ERROR:", e);
     res.status(500).json({ error: "Error listando eventos" });
   }
 });
@@ -180,28 +177,29 @@ app.delete('/friends', async (req, res) => {
 // Obtener comentarios de un evento
 app.get('/events/:eventId/comments', async (req, res) => {
   const { eventId } = req.params;
-  const result = await pool.query(
-    `SELECT c.id, c.comment, c.created_at, u.name, u.photo
-     FROM event_comments c
-     JOIN users u ON u.id = c.user_id
-     WHERE c.event_id = $1
-     ORDER BY c.created_at ASC`,
+  const { rows } = await pool.query(
+    `SELECT ec.id, ec.comment, ec.created_at, u.name
+     FROM event_comments ec
+     JOIN users u ON ec.user_id = u.id
+     WHERE ec.event_id = $1
+     ORDER BY ec.created_at DESC`,
     [eventId]
   );
-  res.json(result.rows);
+  res.json(rows);
 });
 
 // Añadir comentario a un evento
 app.post('/events/:eventId/comments', async (req, res) => {
   const { eventId } = req.params;
   const { userId, comment } = req.body;
-  if (!userId || !comment) return res.status(400).json({ error: 'Datos requeridos' });
-  const result = await pool.query(
+  if (!userId || !comment) return res.status(400).json({ error: 'userId y comment requeridos' });
+  const { rows } = await pool.query(
     `INSERT INTO event_comments (event_id, user_id, comment)
-     VALUES ($1, $2, $3) RETURNING id, comment, created_at`,
+     VALUES ($1, $2, $3)
+     RETURNING id, comment, created_at`,
     [eventId, userId, comment]
   );
-  res.status(201).json(result.rows[0]);
+  res.status(201).json(rows[0]);
 });
 // =================== AUTH (registro / login) ===================
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_super_largo_cámbialo";
@@ -275,6 +273,31 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
+// Marcar evento como favorito
+app.post('/events/:eventId/favorite', async (req, res) => {
+  const { eventId } = req.params;
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId requerido' });
+  await pool.query(
+    `INSERT INTO event_favorites (user_id, event_id)
+     VALUES ($1, $2)
+     ON CONFLICT DO NOTHING`,
+    [userId, eventId]
+  );
+  res.json({ success: true });
+});
+
+// Quitar favorito
+app.delete('/events/:eventId/favorite', async (req, res) => {
+  const { eventId } = req.params;
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId requerido' });
+  await pool.query(
+    `DELETE FROM event_favorites WHERE user_id = $1 AND event_id = $2`,
+    [userId, eventId]
+  );
+  res.json({ success: true });
+});
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`✅ API escuchando en http://localhost:${port}`);

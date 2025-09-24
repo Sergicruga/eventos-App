@@ -195,19 +195,16 @@ export default function EventDetailScreen({ route, navigation }) {
         <Text style={{ fontWeight: "bold", fontSize: 16, marginBottom: 8 }}>Comentarios:</Text>
         {loadingComments ? (
           <ActivityIndicator />
+        ) : comments.length > 0 ? (
+          comments.map(item => (
+            <View key={item.id} style={styles.commentContainer}>
+              <Text style={styles.commentName}>{item.name}</Text>
+              <Text>{item.comment}</Text>
+              <Text style={styles.commentDate}>{new Date(item.created_at).toLocaleString()}</Text>
+            </View>
+          ))
         ) : (
-          <FlatList
-            data={comments}
-            keyExtractor={item => String(item.id)}
-            renderItem={({ item }) => (
-              <View style={styles.commentContainer}>
-                <Text style={styles.commentName}>{item.name}</Text>
-                <Text>{item.comment}</Text>
-                <Text style={styles.commentDate}>{new Date(item.created_at).toLocaleString()}</Text>
-              </View>
-            )}
-            ListEmptyComponent={<Text>No hay comentarios.</Text>}
-          />
+          <Text>No hay comentarios.</Text>
         )}
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8 }}>
           <TextInput
