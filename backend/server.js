@@ -50,7 +50,7 @@ app.get("/events", async (req, res) => {
       const { rows } = await pool.query(
         `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
                 e.latitude, e.longitude, e.created_by
-           FROM eventos e
+           FROM events e
           ORDER BY e.event_at DESC`
       );
       return res.json(rows);
