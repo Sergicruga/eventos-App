@@ -40,8 +40,23 @@ pool.connect()
 // health
 app.get("/", (_req, res) => res.json({ ok: true, msg: "API viva" }));
 
-app.get("/events", async (_req, res) => {
+// /events a prueba de tipos (PostgreSQL)
+app.get("/events", async (req, res) => {
   try {
+    const userId = req.query.userId ? Number(req.query.userId) : null;
+
+    // SIN userId: SELECT limpio
+    if (!userId) {
+      const { rows } = await pool.query(
+        `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+                e.latitude, e.longitude, e.created_by
+           FROM eventos e
+          ORDER BY e.event_at DESC`
+      );
+      return res.json(rows);
+    }
+
+    // CON userId: LEFT JOIN favoritos (cast explícito para evitar integer=text)
     const { rows } = await pool.query(
       `SELECT id, title, description, event_at, location, type, image, latitude, longitude, created_by
        FROM events
@@ -53,6 +68,7 @@ app.get("/events", async (_req, res) => {
     res.status(500).json({ error: "Error listando eventos" });
   }
 });
+
 
 app.post("/events", async (req, res) => {
   try {
@@ -302,3 +318,107 @@ app.delete('/events/:eventId/favorite', async (req, res) => {
 app.listen(port, "0.0.0.0", () => {
   console.log(`✅ API escuchando en http://localhost:${port}`);
 });
+// === FAVORITOS ===
+
+// Obtener IDs de favoritos de un usuario
+app.get('/users/:userId/favorites', async (req, res) => {
+  const { userId } = req.params;
+  const result = await pool.query(
+    `SELECT event_id FROM event_favorites WHERE user_id = $1`,
+    [userId]
+  );
+  res.json(result.rows.map(r => r.event_id));
+});
+
+// Obtener eventos favoritos completos
+app.get('/users/:userId/favorites/events', async (req, res) => {
+  const { userId } = req.params;
+  const result = await pool.query(
+    `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image, e.latitude, e.longitude
+     FROM event_favorites f
+     JOIN eventos e ON e.id = f.event_id
+     WHERE f.user_id = $1
+     ORDER BY e.event_at DESC`,
+    [userId]
+  );
+  res.json(result.rows);
+});
+
+// Marcar favorito
+app.post('/favorites', async (req, res) => {
+  const { userId, eventId } = req.body;
+  if (!userId || !eventId) return res.status(400).json({ error: 'userId y eventId requeridos' });
+
+  await pool.query(
+    `INSERT INTO event_favorites (user_id, event_id)
+     VALUES ($1, $2)
+     ON CONFLICT DO NOTHING`,
+    [userId, eventId]
+  );
+  res.json({ success: true });
+});
+
+// Quitar favorito
+app.delete('/favorites', async (req, res) => {
+  const { userId, eventId } = req.body;
+  if (!userId || !eventId) return res.status(400).json({ error: 'userId y eventId requeridos' });
+
+  await pool.query(
+    `DELETE FROM event_favorites WHERE user_id = $1 AND event_id = $2`,
+    [userId, eventId]
+  );
+  res.json({ success: true });
+});
+// === ASISTENTES ===
+
+// Apuntarse a un evento
+app.post('/attendees', async (req, res) => {
+  const { userId, eventId } = req.body;
+  if (!userId || !eventId) return res.status(400).json({ error: 'userId y eventId requeridos' });
+
+  await pool.query(
+    `INSERT INTO event_attendees (user_id, event_id)
+     VALUES ($1, $2)
+     ON CONFLICT DO NOTHING`,
+    [userId, eventId]
+  );
+  res.json({ success: true });
+});
+
+// Dejar de asistir
+app.delete('/attendees', async (req, res) => {
+  const { userId, eventId } = req.body;
+  if (!userId || !eventId) return res.status(400).json({ error: 'userId y eventId requeridos' });
+
+  await pool.query(
+    `DELETE FROM event_attendees WHERE user_id = $1 AND event_id = $2`,
+    [userId, eventId]
+  );
+  res.json({ success: true });
+});
+
+// Listar asistentes (nombres y foto)
+app.get('/events/:eventId/attendees', async (req, res) => {
+  const { eventId } = req.params;
+  const result = await pool.query(
+    `SELECT u.id, u.name, u.photo
+     FROM event_attendees a
+     JOIN users u ON u.id = a.user_id
+     WHERE a.event_id = $1
+     ORDER BY u.name ASC`,
+    [eventId]
+  );
+  res.json(result.rows);
+});
+
+// (Opcional) comprobar si un usuario asiste
+app.get('/events/:eventId/attendees/:userId', async (req, res) => {
+  const { eventId, userId } = req.params;
+  const r = await pool.query(
+    `SELECT 1 FROM event_attendees WHERE event_id = $1 AND user_id = $2`,
+    [eventId, userId]
+  );
+  res.json({ attending: r.rowCount > 0 });
+});
+
+

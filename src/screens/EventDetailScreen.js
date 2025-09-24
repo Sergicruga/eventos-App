@@ -4,10 +4,12 @@ import { EventContext } from './EventContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import { API_URL } from '../api/config';
+import { AuthContext } from '../context/AuthContext';
 
 export default function EventDetailScreen({ route, navigation }) {
   const { event } = route.params;
-  const { events, favorites, toggleFavorite, joinEvent, leaveEvent, user, deleteEvent } = useContext(EventContext);
+  const { events, favorites, toggleFavorite, joinEvent, leaveEvent, deleteEvent } = useContext(EventContext);
+  const { user } = useContext(AuthContext); // <- user.id y user.name reales
   const insets = useSafeAreaInsets();
 
   const current = useMemo(
@@ -25,7 +27,6 @@ export default function EventDetailScreen({ route, navigation }) {
     current.imageUri ??
     null;
 
-  {image ? <Image source={{ uri: image }} style={styles.image} /> : null}
 
   const localEvent = events.find(e => e.id === event.id);
   const showMap = localEvent && localEvent.latitude != null && localEvent.longitude != null;
