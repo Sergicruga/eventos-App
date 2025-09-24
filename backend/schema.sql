@@ -43,6 +43,15 @@ CREATE TABLE IF NOT EXISTS event_comments (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- EVENT COMMENTS
+CREATE TABLE IF NOT EXISTS event_comments (
+  id SERIAL PRIMARY KEY,
+  event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  comment TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Índices útiles
 CREATE INDEX IF NOT EXISTS idx_event_attendees_user ON event_attendees(user_id);
 CREATE INDEX IF NOT EXISTS idx_event_attendees_event ON event_attendees(event_id);
