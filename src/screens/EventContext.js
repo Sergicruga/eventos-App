@@ -5,7 +5,11 @@ import * as Location from 'expo-location';
 import { Alert, Platform  } from 'react-native';
 import { AuthContext } from "../context/AuthContext"; 
 import { API_URL } from '../api/config';
+import { getFavoriteIds, addFavorite, removeFavorite } from '../api/favorites';
+import { attend as apiAttend, unattend as apiUnattend } from '../api/attendees';
 export const EventContext = createContext();
+const isNumericId = (id) => /^\d+$/.test(String(id));      // ej: "15" → true, "tm-123" → false
+const dbIdFrom = (id) => (isNumericId(id) ? Number(id) : null);
 
 const EVENTS_KEY = 'eventos_guardados';
 const FAVORITES_KEY = 'favoritos_eventos_ids';
@@ -111,6 +115,25 @@ export function EventProvider({ children }) {
   useEffect(() => {
     AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(events)).catch(() => {});
   }, [events]);
+  // Sincroniza favoritos desde BD si hay usuario logueado (fusiona con los locales que no sean de BD)
+  useEffect(() => {
+    (async () => {
+      const uid = auth?.user?.id;
+      if (!uid) return; // sin usuario => mantenemos favoritos locales
+      try {
+        const serverIds = await getFavoriteIds(uid); // [1,5,9,...]
+        // Convertimos a strings como usas en 'favorites'
+        const serverAsStrings = serverIds.map(String);
+
+        // Mantiene favoritos locales que NO son de BD (ej. Ticketmaster "tm-...")
+        const localNonDb = favorites.filter((fid) => !isNumericId(fid));
+        const merged = Array.from(new Set([...serverAsStrings, ...localNonDb]));
+        setFavorites(merged);
+      } catch (e) {
+        console.warn('No se pudieron cargar favoritos del servidor:', e.message);
+      }
+    })();
+  }, [auth?.user?.id]);
 
   // Helpers
   const normalizeEvent = (ev) => ({
@@ -246,57 +269,109 @@ export function EventProvider({ children }) {
   const updateUser = (newUser) => setUser(newUser);
 
   // Favoritos
-  const toggleFavorite = (eventId, eventObj) => {
-    setFavorites(prev => {
-      const isFav = prev.includes(eventId);
-      if (isFav) {
-        setFavoriteItems(prevMap => {
-          const copy = { ...prevMap };
-          delete copy[eventId];
-          return copy;
-        });
-        return prev.filter(id => id !== eventId);
+  const toggleFavorite = async (eventId, eventObj) => {
+    // Actualización optimista (instantánea)
+    const alreadyFav = favorites.includes(eventId);
+    setFavorites(prev => (alreadyFav ? prev.filter(id => id !== eventId) : [eventId, ...prev]));
+
+    // Mantén tu mapa de items como antes
+    if (!alreadyFav && eventObj) {
+      setFavoriteItems(prevMap => ({
+        ...prevMap,
+        [eventId]: {
+          id: String(eventObj.id),
+          title: eventObj.title || '',
+          date: eventObj.date || '',
+          location: eventObj.location || '',
+          description: eventObj.description || '',
+          image: eventObj.image || (eventObj.images?.[0]?.url ?? null),
+          type: eventObj.type || 'local',
+          latitude: eventObj.latitude != null ? Number(eventObj.latitude) : null,
+          longitude: eventObj.longitude != null ? Number(eventObj.longitude) : null,
+        },
+      }));
+    }
+    if (alreadyFav) {
+      setFavoriteItems(prevMap => {
+        const copy = { ...prevMap };
+        delete copy[eventId];
+        return copy;
+      });
+    }
+
+    // Persistencia en BD sólo si: hay usuario y el id es numérico (evento de BD)
+    try {
+      const uid = auth?.user?.id;
+      const dbId = dbIdFrom(eventId);
+      if (!uid || dbId == null) return; // ej. favoritos de Ticketmaster quedan locales
+      if (alreadyFav) {
+        await removeFavorite(uid, dbId);
       } else {
-        if (eventObj) {
-          setFavoriteItems(prevMap => ({
-            ...prevMap,
-            [eventId]: {
-              id: String(eventObj.id),
-              title: eventObj.title || '',
-              date: eventObj.date || '',
-              location: eventObj.location || '',
-              description: eventObj.description || '',
-              image: eventObj.image || (eventObj.images?.[0]?.url ?? null),
-              type: eventObj.type || 'local',
-              latitude: eventObj.latitude != null ? Number(eventObj.latitude) : null,
-              longitude: eventObj.longitude != null ? Number(eventObj.longitude) : null,
-            },
-          }));
-        }
-        return [eventId, ...prev];
+        await addFavorite(uid, dbId);
       }
-    });
+    } catch (e) {
+      console.warn('toggleFavorite (persistencia) error:', e.message);
+      // Deshacer si falló la persistencia
+      setFavorites(prev => (alreadyFav ? [eventId, ...prev] : prev.filter(id => id !== eventId)));
+ }
   };
 
   // Asistir / salir (local)
-  const joinEvent = (eventId) => {
+  const joinEvent = async (eventId) => {
+    // UI optimista
     setEvents(prev =>
       prev.map(e =>
         e.id === eventId
-          ? { ...e, asistentes: e.asistentes?.includes(user.name) ? e.asistentes : [...(e.asistentes || []), user.name] }
+          ? {
+              ...e,
+              asistentes: e.asistentes?.includes(effectiveUser?.name ?? user.name)
+                ? e.asistentes
+                : [...(e.asistentes || []), (effectiveUser?.name ?? user.name)],
+            }
           : e
       )
     );
+    // Persistencia si hay usuario y evento de BD
+    try {
+      const uid = auth?.user?.id;
+      const dbId = dbIdFrom(eventId);
+      if (!uid || dbId == null) return;
+      await apiAttend(uid, dbId);
+    } catch (e) {
+      console.warn('joinEvent (persistencia) error:', e.message);
+      // deshacer optimismo si falla
+      setEvents(prev =>
+        prev.map(ev =>
+          ev.id === eventId
+            ? { ...ev, asistentes: (ev.asistentes || []).filter(n => n !== (effectiveUser?.name ?? user.name)) }
+            : ev
+        )
+      );
+    }
   };
 
-  const leaveEvent = (eventId) => {
+  const leaveEvent = async (eventId) => {
+    const myName = (effectiveUser?.name ?? user.name);
+    // UI optimista
+    const before = events;
     setEvents(prev =>
       prev.map(e =>
         e.id === eventId
-          ? { ...e, asistentes: (e.asistentes || []).filter(n => n !== user.name) }
+          ? { ...e, asistentes: (e.asistentes || []).filter(n => n !== myName) }
           : e
       )
     );
+    // Persistencia si hay usuario y evento de BD
+    try {
+      const uid = auth?.user?.id;
+      const dbId = dbIdFrom(eventId);
+      if (!uid || dbId == null) return;
+      await apiUnattend(uid, dbId);
+    } catch (e) {
+      console.warn('leaveEvent (persistencia) error:', e.message);
+      // revert si falla
+      setEvents(before);
+    }
   };
 
   const myEvents = useMemo(() => events.filter(isMine), [events, user]);
