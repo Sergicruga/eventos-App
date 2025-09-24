@@ -40,15 +40,33 @@ pool.connect()
 // health
 app.get("/", (_req, res) => res.json({ ok: true, msg: "API viva" }));
 
-app.get("/events", async (_req, res) => {
+// /events a prueba de tipos (PostgreSQL)
+app.get("/events", async (req, res) => {
   try {
+    const userId = req.query.userId ? Number(req.query.userId) : null;
+
+    // SIN userId: SELECT limpio
+    if (!userId) {
+      const { rows } = await pool.query(
+        `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+                e.latitude, e.longitude, e.created_by
+           FROM eventos e
+          ORDER BY e.event_at DESC`
+      );
+      return res.json(rows);
+    }
+
+    // CON userId: LEFT JOIN favoritos (cast explícito para evitar integer=text)
     const { rows } = await pool.query(
       `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
-+             e.latitude, e.longitude, e.created_by,
-+             u.name AS created_by_name
-+      FROM events e
-+      LEFT JOIN users u ON u.id = e.created_by
-+      ORDER BY e.event_at DESC`
+              e.latitude, e.longitude, e.created_by,
+              (f.user_id IS NOT NULL) AS is_favorite
+         FROM eventos e
+    LEFT JOIN event_favorites f
+           ON f.event_id = e.id
+          AND f.user_id = $1::bigint   -- 👈 cast para evitar integer=text
+        ORDER BY e.event_at DESC`,
+      [userId]                          // 👈 en JS ya lo convertimos con Number()
     );
     res.json(rows);
   } catch (e) {
@@ -56,6 +74,7 @@ app.get("/events", async (_req, res) => {
     res.status(500).json({ error: "Error listando eventos" });
   }
 });
+
 
 app.post("/events", async (req, res) => {
   try {
