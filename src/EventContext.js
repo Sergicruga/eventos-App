@@ -3,10 +3,10 @@ import React, { useContext, createContext, useState, useEffect, useMemo } from '
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Alert, Platform  } from 'react-native';
-import { AuthContext } from "../context/AuthContext"; 
-import { API_URL } from '../api/config';
-import { getFavoriteIds, addFavorite, removeFavorite } from '../api/favorites';
-import { attend as apiAttend, unattend as apiUnattend } from '../api/attendees';
+import { AuthContext } from "./context/AuthContext"; 
+import { API_URL } from './api/config';
+import { getFavoriteIds, addFavorite, removeFavorite } from './api/favorites';
+import { attend as apiAttend, unattend as apiUnattend } from './api/attendees';
 export const EventContext = createContext();
 const isNumericId = (id) => /^\d+$/.test(String(id));      // ej: "15" → true, "tm-123" → false
 const dbIdFrom = (id) => (isNumericId(id) ? Number(id) : null);
@@ -40,44 +40,58 @@ export function EventProvider({ children }) {
         ]);
         if (favIds) setFavorites(JSON.parse(favIds));
         if (favMap) setFavoriteItems(JSON.parse(favMap));
-      } catch {}
+    } catch {}
 
+    try {
+      // ⬇️ Pasamos el userId si hay usuario logueado
+      const uid = auth?.user?.id;
+      const url = `${API_URL}/events${uid ? `?userId=${uid}` : ''}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+
+      const mapped = (data || []).map(ev => ({
+        id: String(ev.id),
+        title: ev.title,
+        description: ev.description ?? '',
+        date: ev.event_at?.slice(0, 10) ?? '',
+        location: ev.location ?? '',
+        type: ev.type || 'local',
+        image: ev.image ?? null,
+        latitude: ev.latitude != null ? Number(ev.latitude) : null,
+        longitude: ev.longitude != null ? Number(ev.longitude) : null,
+        createdBy: ev.created_by || 'Desconocido',
+
+        // ⬇️ NUEVO: campos que vienen del backend cuando mandas ?userId=
+        isAttending: Boolean(ev.is_attending),               // true/false
+        attendeesCount: Number(ev.attendees_count ?? 0),     // entero
+
+        // Si quieres, también puedes aprovechar is_favorite aquí (opcional)
+        // isFavorite: Boolean(ev.is_favorite),
+
+        // Mantén tu lista local si la usas en la UI
+        asistentes: [],
+      }));
+
+      setEvents(mapped);
+      AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(mapped)).catch(() => {});
+    } catch (e) {
       try {
-        const res = await fetch(`${API_URL}/events`);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        const mapped = (data || []).map(ev => ({
-          id: String(ev.id),
-          title: ev.title,
-          description: ev.description ?? '',
-          date: ev.event_at?.slice(0, 10) ?? '',
-          location: ev.location ?? '',
-          type: ev.type || 'local',
-          image: ev.image ?? null,
-          latitude: ev.latitude != null ? Number(ev.latitude) : null,
-          longitude: ev.longitude != null ? Number(ev.longitude) : null,
-          createdBy: ev.created_by || 'Desconocido',
-          asistentes: [],
-        }));
-        setEvents(mapped);
-        AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(mapped)).catch(() => {});
-      } catch {
-        try {
-          const savedEvents = await AsyncStorage.getItem(EVENTS_KEY);
-          if (savedEvents) {
-            const arr = JSON.parse(savedEvents);
-            arr.forEach(ev => {
-              if (ev.latitude != null) ev.latitude = Number(ev.latitude);
-              if (ev.longitude != null) ev.longitude = Number(ev.longitude);
-              ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
-              ev.type = ev.type || 'local';
-            });
-            setEvents(arr);
-          }
-        } catch {}
-      }
-    })();
-  }, []);
+        const savedEvents = await AsyncStorage.getItem(EVENTS_KEY);
+        if (savedEvents) {
+          const arr = JSON.parse(savedEvents);
+          arr.forEach(ev => {
+            if (ev.latitude != null) ev.latitude = Number(ev.latitude);
+            if (ev.longitude != null) ev.longitude = Number(ev.longitude);
+            ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
+            ev.type = ev.type || 'local';
+          });
+          setEvents(arr);
+        }
+      } catch {}
+    }
+  })();
+}, []);
 
   // Ubicación inicial (coords + ciudad)
   useEffect(() => {
@@ -270,12 +284,12 @@ export function EventProvider({ children }) {
 
   // Favoritos
   const isNumericId = (id) => /^\d+$/.test(String(id));
-const dbIdFrom = (id) => (isNumericId(id) ? Number(id) : null);
+  const dbIdFrom = (id) => (isNumericId(id) ? Number(id) : null);
 
-const toggleFavorite = async (eventId, eventObj) => {
+  const toggleFavorite = async (eventId, eventObj) => {
   const alreadyFav = favorites.includes(eventId);
 
-  // UI optimista (como ya tenías)
+  // UI optimista
   setFavorites(prev => (alreadyFav ? prev.filter(id => id !== eventId) : [eventId, ...prev]));
   if (!alreadyFav && eventObj) {
     setFavoriteItems(prevMap => ({
@@ -301,90 +315,109 @@ const toggleFavorite = async (eventId, eventObj) => {
     });
   }
 
-  // Persistencia en BD solo si hay usuario y el id es numérico (evento de tu BD)
   try {
     const uid = auth?.user?.id;
-    const dbId = dbIdFrom(eventId);
+    const dbId = /^\d+$/.test(String(eventId)) ? Number(eventId) : null;
 
-    console.log('[toggleFavorite] uid=', uid, 'eventId=', eventId, 'dbId=', dbId);
+    console.log('[toggleFavorite] uid=', uid, 'eventId=', eventId, 'dbId=', dbId, 'API_URL=', API_URL);
 
-    if (!uid || dbId == null) {
-      // Ticketmaster u otro externo → se queda solo local
-      return;
-    }
+    if (!uid) { console.warn('[fav] no user logged → solo local'); return; }
+    if (dbId == null) { console.warn('[fav] evento externo (no BD) → solo local'); return; }
 
     if (alreadyFav) {
-      console.log('[toggleFavorite] DELETE /favorites', { userId: uid, eventId: dbId });
-      await removeFavorite(uid, dbId);
+      const r = await removeFavorite(uid, dbId);
+      console.log('[fav] removeFavorite OK', r);
     } else {
-      console.log('[toggleFavorite] POST /favorites', { userId: uid, eventId: dbId });
-      await addFavorite(uid, dbId);
+      const r = await addFavorite(uid, dbId);
+      console.log('[fav] addFavorite OK', r);
     }
   } catch (e) {
     console.warn('toggleFavorite (persistencia) error:', e.message);
-    // revert del optimista
+    // revert si falla
     setFavorites(prev => (alreadyFav ? [eventId, ...prev] : prev.filter(id => id !== eventId)));
   }
 };
 
 
-  // Asistir / salir (local)
-  const joinEvent = async (eventId) => {
-    // UI optimista
-    setEvents(prev =>
-      prev.map(e =>
-        e.id === eventId
-          ? {
-              ...e,
-              asistentes: e.asistentes?.includes(effectiveUser?.name ?? user.name)
-                ? e.asistentes
-                : [...(e.asistentes || []), (effectiveUser?.name ?? user.name)],
-            }
-          : e
-      )
-    );
-    // Persistencia si hay usuario y evento de BD
-    try {
-      const uid = auth?.user?.id;
-      const dbId = dbIdFrom(eventId);
-      if (!uid || dbId == null) return;
-      await apiAttend(uid, dbId);
-    } catch (e) {
-      console.warn('joinEvent (persistencia) error:', e.message);
-      // deshacer optimismo si falla
-      setEvents(prev =>
-        prev.map(ev =>
-          ev.id === eventId
-            ? { ...ev, asistentes: (ev.asistentes || []).filter(n => n !== (effectiveUser?.name ?? user.name)) }
-            : ev
-        )
-      );
-    }
-  };
 
-  const leaveEvent = async (eventId) => {
-    const myName = (effectiveUser?.name ?? user.name);
-    // UI optimista
-    const before = events;
-    setEvents(prev =>
-      prev.map(e =>
-        e.id === eventId
-          ? { ...e, asistentes: (e.asistentes || []).filter(n => n !== myName) }
-          : e
-      )
-    );
-    // Persistencia si hay usuario y evento de BD
-    try {
-      const uid = auth?.user?.id;
-      const dbId = dbIdFrom(eventId);
-      if (!uid || dbId == null) return;
-      await apiUnattend(uid, dbId);
-    } catch (e) {
-      console.warn('leaveEvent (persistencia) error:', e.message);
-      // revert si falla
-      setEvents(before);
-    }
-  };
+  // Asistir / salir (local)
+  
+  const joinEvent = async (eventId) => {
+  const uid = auth?.user?.id;
+  const dbId = isNumericId(eventId) ? Number(eventId) : null;
+
+  // UI optimista: marca asistiendo y suma contador
+  setEvents(prev => prev.map(e =>
+    e.id === eventId
+      ? {
+          ...e,
+          isAttending: true,
+          attendeesCount: (e.attendeesCount ?? 0) + 1,
+          // Mantén tu lista de nombres si la usas en la UI:
+          asistentes: e.asistentes?.includes(effectiveUser?.name ?? user.name)
+            ? e.asistentes
+            : [...(e.asistentes || []), (effectiveUser?.name ?? user.name)],
+        }
+      : e
+  ));
+
+  // Persistencia si hay user y es evento de BD
+  try {
+    if (!uid || dbId == null) return;
+    await apiAttend(uid, dbId);
+  } catch (err) {
+    console.warn('joinEvent persist error:', err?.message);
+    // revert si falla
+    setEvents(prev => prev.map(e =>
+      e.id === eventId
+        ? {
+            ...e,
+            isAttending: false,
+            attendeesCount: Math.max(0, (e.attendeesCount ?? 1) - 1),
+            asistentes: (e.asistentes || []).filter(n => n !== (effectiveUser?.name ?? user.name)),
+          }
+        : e
+    ));
+  }
+};
+
+const leaveEvent = async (eventId) => {
+  const uid = auth?.user?.id;
+  const dbId = isNumericId(eventId) ? Number(eventId) : null;
+
+  // UI optimista: desmarca y resta contador
+  setEvents(prev => prev.map(e =>
+    e.id === eventId
+      ? {
+          ...e,
+          isAttending: false,
+          attendeesCount: Math.max(0, (e.attendeesCount ?? 1) - 1),
+          asistentes: (e.asistentes || []).filter(n => n !== (effectiveUser?.name ?? user.name)),
+        }
+      : e
+  ));
+
+  try {
+    if (!uid || dbId == null) return;
+    await apiUnattend(uid, dbId);
+  } catch (err) {
+    console.warn('leaveEvent persist error:', err?.message);
+    // revert si falla
+    setEvents(prev => prev.map(e =>
+      e.id === eventId
+        ? {
+            ...e,
+            isAttending: true,
+            attendeesCount: (e.attendeesCount ?? 0) + 1,
+            asistentes: e.asistentes?.includes(effectiveUser?.name ?? user.name)
+              ? e.asistentes
+              : [...(e.asistentes || []), (effectiveUser?.name ?? user.name)],
+          }
+        : e
+    ));
+  }
+};
+
 
   const myEvents = useMemo(() => events.filter(isMine), [events, user]);
   const communityEvents = useMemo(() => events.filter(e => !isMine(e)), [events, user]);

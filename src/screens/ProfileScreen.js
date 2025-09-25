@@ -3,7 +3,7 @@ import React, { useContext, useState } from "react";
 import { View, Text, TextInput, Button, Image, TouchableOpacity, ActivityIndicator, Alert, Platform } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { EventContext } from "../screens/EventContext";
+import { EventContext } from "../EventContext";
 import { AuthContext } from "../context/AuthContext";
 import { API_URL } from '../api/config';
 

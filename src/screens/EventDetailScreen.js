@@ -1,6 +1,6 @@
 import React, { useContext, useMemo, useState, useEffect } from 'react';
 import { View, Text, Image, StyleSheet, Button, Alert, ScrollView, TouchableOpacity, Linking, TextInput, FlatList, ActivityIndicator } from 'react-native';
-import { EventContext } from './EventContext';
+import { EventContext } from '../EventContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import { API_URL } from '../api/config';

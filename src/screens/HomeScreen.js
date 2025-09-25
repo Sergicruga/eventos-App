@@ -11,7 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { EventContext } from '../screens/EventContext';
+import { EventContext } from '../EventContext';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';

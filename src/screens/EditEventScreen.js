@@ -1,6 +1,6 @@
 import React, { useContext, useMemo, useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, Image, TouchableOpacity } from 'react-native';
-import { EventContext } from '../screens/EventContext';
+import { EventContext } from '../EventContext';
 import * as ImagePicker from 'expo-image-picker';
 import { safePickImage } from '../utils/safePickImage';
 

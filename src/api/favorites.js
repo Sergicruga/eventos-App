@@ -1,38 +1,27 @@
-import { Platform } from "react-native";
-const API_URL = Platform.select({
-  android: "http://10.0.2.2:4000",
-  ios: "http://localhost:4000",
-  default: "http://localhost:4000",
-});
+import { API_URL } from './config';
 
-export const getFavoriteIds = async (userId) => {
+export async function getFavoriteIds(userId) {
   const res = await fetch(`${API_URL}/users/${userId}/favorites`);
-  if (!res.ok) throw new Error("Error obteniendo favoritos");
-  return res.json(); // [event_id,...] (IDs numéricos de BD)
-};
+  if (!res.ok) throw new Error('Error obteniendo favoritos');
+  return res.json();
+}
 
-export const getFavoriteEvents = async (userId) => {
-  const res = await fetch(`${API_URL}/users/${userId}/favorites/events`);
-  if (!res.ok) throw new Error("Error obteniendo eventos favoritos");
-  return res.json(); // eventos completos
-};
-
-export const addFavorite = async (userId, eventId) => {
+export async function addFavorite(userId, eventId) {
   const res = await fetch(`${API_URL}/favorites`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, eventId }),
   });
-  if (!res.ok) throw new Error("Error añadiendo favorito");
+  if (!res.ok) throw new Error('Error añadiendo favorito');
   return res.json();
-};
+}
 
-export const removeFavorite = async (userId, eventId) => {
+export async function removeFavorite(userId, eventId) {
   const res = await fetch(`${API_URL}/favorites`, {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, eventId }),
   });
-  if (!res.ok) throw new Error("Error quitando favorito");
+  if (!res.ok) throw new Error('Error quitando favorito');
   return res.json();
-};
+}

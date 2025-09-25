@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, StyleSheet, Alert, Image, TouchableOpacity,
   Platform, Modal, ScrollView, KeyboardAvoidingView, ActivityIndicator
 } from 'react-native';
-import { EventContext } from '../screens/EventContext';
+import { EventContext } from '../EventContext';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { Calendar } from 'react-native-calendars';

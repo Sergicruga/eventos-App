@@ -1,7 +1,7 @@
 // src/screens/FavoritesScreen.js
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
-import { EventContext } from './EventContext';              // <-- ruta corregida
+import { EventContext } from '../EventContext';              // <-- ruta corregida
 import { AuthContext } from '../context/AuthContext';
 import { getFavoriteEvents } from '../api/favorites'; 
 import { API_URL } from '../api/config';       // usa el endpoint /users/:id/favorites/events
