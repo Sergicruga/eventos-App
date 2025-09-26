@@ -1,5 +1,5 @@
 import React, { useContext, useMemo, useState, useEffect } from 'react';
-import { View, Text, Image, StyleSheet, Button, Alert, ScrollView, TouchableOpacity, Linking, TextInput, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, Image, StyleSheet, Button, Alert, ScrollView, TouchableOpacity, Linking, TextInput, ActivityIndicator } from 'react-native';
 import { EventContext } from '../EventContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -9,66 +9,60 @@ import { AuthContext } from '../context/AuthContext';
 export default function EventDetailScreen({ route, navigation }) {
   const { event } = route.params;
   const { events, favorites, toggleFavorite, joinEvent, leaveEvent, deleteEvent } = useContext(EventContext);
-  const { user } = useContext(AuthContext); // <- user.id y user.name reales
+  const { user } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
 
   const current = useMemo(
     () => events.find(e => e.id === event.id) ?? event,
     [events, event.id, event]
   );
-  const asistentes = current.asistentes ?? [];
   const isFavorite = favorites.includes(current.id);
-  const isJoined = !!current.isAttending;
 
-  const image =
-    current.images?.[0]?.url ??
-    current.image ??
-    current.imageUrl ??
-    current.imageUri ??
-    null;
+  // Attendees state
+  const [attendees, setAttendees] = useState([]);
+  const [isJoined, setIsJoined] = useState(false);
 
-
-  const localEvent = events.find(e => e.id === event.id);
-  const showMap = localEvent && localEvent.latitude != null && localEvent.longitude != null;
-
-
-  const handlePress = () => {
-    if (event.type === 'api') {
-      let openUrl = event.url;
+  // Fetch attendees and set isJoined
+  useEffect(() => {
+    const fetchAttendees = async () => {
       try {
-        const urlObj = new URL(event.url);
-        if (urlObj.hostname.includes('tm7508.net') && urlObj.searchParams.has('u')) {
-          openUrl = decodeURIComponent(urlObj.searchParams.get('u'));
+        const res = await fetch(`${API_URL}/events/${event.id}/attendees`);
+        if (res.ok) {
+          const data = await res.json();
+          setAttendees(data);
+          setIsJoined(data.some(a => a.id === user.id));
+        } else {
+          setAttendees([]);
+          setIsJoined(false);
         }
-      } catch {}
-      if (openUrl && openUrl.startsWith('http')) {
-        Linking.openURL(openUrl).catch(() => Alert.alert('No se puede abrir el enlace', 'Ha ocurrido un error.'));
-      } else {
-        Alert.alert('Enlace inválido', 'Este evento no tiene un enlace válido.');
+      } catch {
+        setAttendees([]);
+        setIsJoined(false);
       }
-    } else {
+    };
+    fetchAttendees();
+  }, [event.id, user.id]);
+
+  // Handle join/unjoin
+  const handleJoinOrLeave = async () => {
+    try {
       if (!isJoined) {
-        joinEvent(event.id);
+        await joinEvent(event.id);
         Alert.alert('¡Genial!', 'Te has apuntado a este evento.');
       } else {
-        leaveEvent(event.id);
+        await leaveEvent(event.id);
         Alert.alert('Cancelado', 'Ya no vas a este evento.');
       }
+      // Refresh attendees and isJoined
+      const res = await fetch(`${API_URL}/events/${event.id}/attendees`);
+      if (res.ok) {
+        const data = await res.json();
+        setAttendees(data);
+        setIsJoined(data.some(a => a.id === user.id));
+      }
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo actualizar tu asistencia.');
     }
-  };
-  const handleDelete = () => {
-    Alert.alert('Eliminar evento', '¿Seguro que quieres eliminarlo?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Eliminar',
-        style: 'destructive',
-        onPress: () => {
-          deleteEvent(current.id);   // 👈 aquí se llama al contexto
-          // Si estabas en el detalle, cierra
-          if (navigation?.goBack) navigation.goBack();
-        },
-      },
-    ]);
   };
 
   // Comentarios
@@ -118,12 +112,12 @@ export default function EventDetailScreen({ route, navigation }) {
         <Text style={{ fontSize: 32 }}>{isFavorite ? '⭐' : '☆'}</Text>
       </TouchableOpacity>
 
-     {image ? <Image source={{ uri: image }} style={styles.image} /> : null}
+      <Image source={{ uri: current.image }} style={styles.image} />
       <Text style={styles.title}>{current.title}</Text>
       <Text style={styles.date}>{current.date} | {current.location}</Text>
       <Text style={styles.description}>{current.description || 'Sin descripción'}</Text>
 
-      {showMap && (
+      {current.latitude != null && current.longitude != null && (
         <View style={{ height: 220, borderRadius: 12, overflow: 'hidden', marginVertical: 12 }}>
           <MapView
             style={{ flex: 1 }}
@@ -144,12 +138,12 @@ export default function EventDetailScreen({ route, navigation }) {
       )}
       <View style={{ marginTop: 12 }}>
         <Text style={{ fontWeight: 'bold' }}>
-          Asistentes ({asistentes.length})
+          Asistentes ({attendees.length})
         </Text>
-        {asistentes.length > 0 ? (
+        {attendees.length > 0 ? (
           <View style={{ marginTop: 6 }}>
-            {asistentes.map((nombre, idx) => (
-              <Text key={`${current.id}-as-${idx}`}>• {nombre}</Text>
+            {attendees.map((user, idx) => (
+              <Text key={user.id}>• {user.name}</Text>
             ))}
           </View>
         ) : (
@@ -161,7 +155,11 @@ export default function EventDetailScreen({ route, navigation }) {
         {current.type === 'api' ? (
           <Button title="Comprar entradas" onPress={handlePress} color="#1976d2" />
         ) : (
-          <Button title={isJoined ? 'Ya no voy' : '¡Ya voy!'} onPress={handlePress} color={isJoined ? '#d32f2f' : 'green'} />
+          <Button
+            title={isJoined ? 'Ya no voy' : '¡Ya voy!'}
+            onPress={handleJoinOrLeave}
+            color={isJoined ? '#d32f2f' : 'green'}
+          />
         )}
         {event.createdBy === user.name && (
           <View style={{ marginTop: 12 }}>

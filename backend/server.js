@@ -425,18 +425,22 @@ app.delete('/attendees', async (req, res) => {
   res.json({ success: true });
 });
 
-// Listar asistentes (nombres y foto)
+// Obtener asistentes de un evento
 app.get('/events/:eventId/attendees', async (req, res) => {
   const { eventId } = req.params;
-  const result = await pool.query(
-    `SELECT u.id, u.name, u.photo
-     FROM event_attendees a
-     JOIN users u ON u.id = a.user_id
-     WHERE a.event_id = $1
-     ORDER BY u.name ASC`,
-    [eventId]
-  );
-  res.json(result.rows);
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.id, u.name
+       FROM event_attendees a
+       JOIN users u ON u.id = a.user_id
+       WHERE a.event_id = $1`,
+      [eventId]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error("Error fetching attendees:", e);
+    res.status(500).json({ error: "Error fetching attendees" });
+  }
 });
 
 // (Opcional) comprobar si un usuario asiste
