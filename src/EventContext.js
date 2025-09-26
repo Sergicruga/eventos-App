@@ -217,8 +217,8 @@ export function EventProvider({ children }) {
         image: saved.image ?? (event.image ?? null),
         latitude: saved.latitude != null ? Number(saved.latitude) : (event.latitude ?? null),
         longitude: saved.longitude != null ? Number(saved.longitude) : (event.longitude ?? null),
-        createdById: data?.created_by ?? null, 
-        createdBy: data?.created_by_name ?? effectiveUser?.name ?? user.name, 
+        createdById: saved?.created_by ?? null,
+        createdBy: saved?.created_by_name ?? effectiveUser?.name ?? user.name, 
         asistentes: [],
       };
 
