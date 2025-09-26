@@ -18,7 +18,7 @@ export default function EventDetailScreen({ route, navigation }) {
   );
   const asistentes = current.asistentes ?? [];
   const isFavorite = favorites.includes(current.id);
-  const isJoined = !!(current.asistentes && current.asistentes.includes(user.name));
+  const isJoined = !!current.isAttending;
 
   const image =
     current.images?.[0]?.url ??
