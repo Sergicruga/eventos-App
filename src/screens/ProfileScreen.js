@@ -1,131 +1,151 @@
 // src/screens/ProfileScreen.js
-import React, { useContext, useState } from "react";
-import { View, Text, TextInput, Button, Image, TouchableOpacity, ActivityIndicator, Alert, Platform } from "react-native";
-import * as ImagePicker from "expo-image-picker";
+import React, { useContext, useEffect, useState } from "react";
+import { View, Text, Image, TouchableOpacity, ActivityIndicator, FlatList, Alert } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { EventContext } from "../EventContext";
+import * as ImagePicker from "expo-image-picker";
 import { AuthContext } from "../context/AuthContext";
-import { API_URL } from '../api/config';
+import { EventContext } from "../EventContext";
+import { API_URL } from "../api/config";
+import { getUser, getUserCreatedEvents, uploadUserPhoto } from "../api/users";
+import { useNavigation } from "@react-navigation/native";
 
 export default function ProfileScreen() {
-  const { user, updateUser } = useContext(EventContext);
+  const navigation = useNavigation();
   const { logout } = useContext(AuthContext);
+  const { user: userFromEventCtx, updateUser } = useContext(EventContext); // mantiene compatibilidad
+  const auth = useContext(AuthContext);
+  const uid = auth?.user?.id;
 
-  const [name, setName] = useState(user?.name || "");
-  const [photo, setPhoto] = useState(user?.photo || null);
-  const [saving, setSaving] = useState(false);
+  const [me, setMe] = useState(null);
+  const [myEvents, setMyEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
-  // Cambiar nombre
-  const saveName = async () => {
-    if (!user?.id) return Alert.alert("Usuario no disponible");
-    setSaving(true);
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!uid) return;
+        const [u, evs] = await Promise.all([
+          getUser(uid),
+          getUserCreatedEvents(uid),
+        ]);
+        setMe(u);
+        setMyEvents(
+          (evs || []).map(e => ({
+            id: String(e.id),
+            title: e.title,
+            date: e.event_at?.slice(0,10) ?? "",
+            location: e.location ?? "",
+            image: e.image ?? null,
+            description: e.description ?? "",
+            latitude: e.latitude ?? null,
+            longitude: e.longitude ?? null,
+            type: e.type ?? "local",
+          }))
+        );
+        // opcional: sincroniza con EventContext para que otros sitios vean el nombre/foto nuevos
+        updateUser?.({ id: u.id, name: u.name, email: u.email, photo: u.photo });
+      } catch (e) {
+        Alert.alert("Error", e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [uid]);
+
+  const onChangePhoto = async () => {
     try {
-      const res = await fetch(`${API_URL}/users/${user.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true, aspect: [1,1], quality: 0.8,
       });
-      if (!res.ok) throw new Error();
-      updateUser({ ...user, name });
-      Alert.alert("Nombre actualizado");
-    } catch {
-      Alert.alert("Error actualizando nombre");
+      if (res.canceled || !res.assets?.[0]?.uri) return;
+      setPhotoUploading(true);
+      const data = await uploadUserPhoto(uid, res.assets[0].uri); // { photo: "/uploads/..." }
+      const absolute = data.photo?.startsWith("http") ? data.photo : `${API_URL}${data.photo}`;
+      setMe(prev => ({ ...prev, photo: data.photo }));
+      updateUser?.({ ...(userFromEventCtx || {}), id: uid, photo: data.photo });
+    } catch (e) {
+      Alert.alert("Error", "No se pudo subir la foto");
     } finally {
-      setSaving(false);
+      setPhotoUploading(false);
     }
   };
 
-  // Seleccionar foto
-  const pickPhoto = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets?.[0]?.uri) {
-      uploadPhoto(result.assets[0].uri);
-    }
-  };
+  if (!uid) {
+    return (
+      <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:24 }}>
+        <Text>Inicia sesión para ver tu perfil.</Text>
+      </View>
+    );
+  }
 
-  // Subir foto
-  const uploadPhoto = async (uri) => {
-    if (!user?.id) return Alert.alert("Usuario no disponible");
-    setSaving(true);
-    try {
-      const formData = new FormData();
-      formData.append("photo", {
-        uri,
-        name: "profile.jpg",
-        type: "image/jpeg",
-      });
+  if (loading) {
+    return (
+      <View style={{ flex:1, alignItems:'center', justifyContent:'center' }}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
 
-      // Importante: NO fijar "Content-Type" manualmente (RN añade boundary)
-      const res = await fetch(`${API_URL}/users/${user.id}/photo`, {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-
-      // Si tu backend devuelve { photo: "/uploads/..." }:
-      const absolutePhoto = data.photo?.startsWith("http")
-        ? data.photo
-        : `${API_URL}${data.photo}`;
-
-      setPhoto(absolutePhoto);
-      updateUser({ ...user, photo: data.photo });
-      Alert.alert("Foto actualizada");
-    } catch {
-      Alert.alert("Error subiendo foto");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const avatarUri = me?.photo ? (me.photo.startsWith("http") ? me.photo : `${API_URL}${me.photo}`) : null;
 
   return (
-    <View style={{ flex: 1, alignItems: "center", padding: 24 }}>
-      <TouchableOpacity onPress={pickPhoto} style={{ alignItems: "center" }}>
-        <Image
-          source={
-            photo
-              ? { uri: photo.startsWith("http") ? photo : `${API_URL}${photo}` }
-              : require("../../assets/icon.png")
-          }
-          style={{ width: 120, height: 120, borderRadius: 60, marginBottom: 12 }}
-        />
-        <Text style={{ color: "#1976d2", marginBottom: 16 }}>Cambiar foto</Text>
-      </TouchableOpacity>
+    <View style={{ flex:1 }}>
+      {/* Header perfil */}
+      <View style={{ padding:24, alignItems:'center', backgroundColor:'#f5f7fb' }}>
+        <TouchableOpacity onPress={onChangePhoto} disabled={photoUploading}>
+          <Image
+            source={ avatarUri ? { uri: avatarUri } : require("../../assets/icon.png") }
+            style={{ width: 110, height: 110, borderRadius: 55, marginBottom: 8 }}
+          />
+          {photoUploading ? <ActivityIndicator style={{ position:'absolute', left:45, top:45 }} /> : null}
+        </TouchableOpacity>
 
-      <Text style={{ alignSelf: "flex-start", marginLeft: "10%", marginBottom: 6 }}>Nombre:</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        style={{ borderWidth: 1, borderRadius: 8, padding: 10, width: "80%", marginBottom: 12, borderColor: "#E5E7EB" }}
+        <Text style={{ fontSize:18, fontWeight:'700' }}>{me?.name || "-"}</Text>
+        <Text style={{ color:'#6b7280', marginTop:2 }}>{me?.email || "-"}</Text>
+
+        <TouchableOpacity
+          onPress={() => navigation.navigate("EditProfile")}
+          style={{ marginTop:12, backgroundColor:'#1f2937', paddingVertical:10, paddingHorizontal:16, borderRadius:10 }}
+        >
+          <Text style={{ color:'#fff', fontWeight:'600' }}>Editar perfil</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Mis eventos */}
+      <Text style={{ paddingHorizontal:16, paddingTop:12, fontSize:16, fontWeight:'700' }}>Mis eventos</Text>
+      <FlatList
+        data={myEvents}
+        keyExtractor={i => i.id}
+        contentContainerStyle={{ padding:16, paddingTop:8 }}
+        ListEmptyComponent={<Text>No has creado eventos.</Text>}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('EventDetail', { event: item })}
+            activeOpacity={0.85}
+            style={{ flexDirection:'row', padding:12, borderWidth:1, borderColor:'#eee', borderRadius:12, marginBottom:12 }}
+          >
+            <Image
+              source={ item.image ? { uri: item.image } : require("../../assets/iconoApp.png") }
+              style={{ width:64, height:64, borderRadius:8, marginRight:12 }}
+            />
+            <View style={{ flex:1 }}>
+              <Text style={{ fontWeight:'600' }}>{item.title}</Text>
+              <Text style={{ color:'#555' }}>{item.date} · {item.location}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
       />
-      <Button title="Guardar nombre" onPress={saveName} disabled={saving} />
 
-      {saving && <ActivityIndicator style={{ marginTop: 16 }} />}
-
-      {/* Botón de Cerrar sesión (estilo tipo FAB pero dentro del perfil) */}
+      {/* Logout flotante */}
       <TouchableOpacity
         onPress={logout}
         activeOpacity={0.85}
         style={{
-          position: "absolute",
-          right: 24,
-          bottom: 24,
-          backgroundColor: "#4B5563",
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          justifyContent: "center",
-          alignItems: "center",
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.25,
-          shadowRadius: 3.84,
-          elevation: 5,
+          position: "absolute", right: 24, bottom: 24,
+          backgroundColor: "#4B5563", width: 56, height: 56, borderRadius: 28,
+          justifyContent: "center", alignItems: "center", elevation:5
         }}
       >
         <Ionicons name="log-out-outline" size={26} color="#fff" />

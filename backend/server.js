@@ -105,7 +105,7 @@ app.post("/events", async (req, res) => {
     } else {
       row.created_by_name = null;
     }
-    res.status(201).json(rows);
+    res.status(201).json(row);
   } catch (e) {
     console.error("PG ERROR:", e.message, e.detail, e.hint);
     res.status(500).json({ error: "Error creando evento", detail: e.message});
@@ -331,9 +331,7 @@ app.delete('/events/:eventId/favorite', async (req, res) => {
   res.json({ success: true });
 });
 
-app.listen(port, "0.0.0.0", () => {
-  console.log(`✅ API escuchando en http://localhost:${port}`);
-});
+
 // === FAVORITOS ===
 
 // Obtener IDs de favoritos de un usuario
@@ -451,6 +449,73 @@ app.get('/events/:eventId/attendees/:userId', async (req, res) => {
     [eventId, userId]
   );
   res.json({ attending: r.rowCount > 0 });
+});
+// Obtener datos de un usuario
+app.get("/users/:userId", async (req, res) => {
+  const { userId } = req.params;
+  const { rows } = await pool.query(
+    `SELECT id, name, email, photo FROM users WHERE id = $1`,
+    [userId]
+  );
+  if (rows.length === 0) return res.status(404).json({ error: "Usuario no encontrado" });
+  res.json(rows[0]);
+});
+
+// Eventos creados por el usuario
+app.get("/users/:userId/events-created", async (req, res) => {
+  const { userId } = req.params;
+  const { rows } = await pool.query(
+    `SELECT id, title, description, event_at, location, type, image, latitude, longitude
+       FROM events
+      WHERE created_by = $1
+      ORDER BY event_at DESC`,
+    [userId]
+  );
+  res.json(rows);
+});
+
+// Actualizar nombre y/o email
+app.put("/users/:userId/profile", async (req, res) => {
+  const { userId } = req.params;
+  const { name, email } = req.body;
+  if (!name && !email) return res.status(400).json({ error: "Nada que actualizar" });
+
+  // si viene email, opcional: comprobar que no esté ya usado
+  if (email) {
+    const exists = await pool.query(`SELECT 1 FROM users WHERE email=$1 AND id <> $2`, [email, userId]);
+    if (exists.rowCount > 0) return res.status(409).json({ error: "Email en uso" });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE users
+        SET name = COALESCE($1, name),
+            email = COALESCE($2, email)
+      WHERE id = $3
+    RETURNING id, name, email, photo`,
+    [name ?? null, email ?? null, userId]
+  );
+  res.json(rows[0]);
+});
+
+// Cambiar contraseña
+app.put("/users/:userId/password", async (req, res) => {
+  const { userId } = req.params;
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: "Parámetros requeridos" });
+  }
+  const r = await pool.query(`SELECT password FROM users WHERE id=$1`, [userId]);
+  if (r.rowCount === 0) return res.status(404).json({ error: "Usuario no encontrado" });
+
+  const ok = await bcrypt.compare(currentPassword, r.rows[0].password);
+  if (!ok) return res.status(401).json({ error: "Contraseña actual incorrecta" });
+
+  const hash = await bcrypt.hash(newPassword, 10);
+  await pool.query(`UPDATE users SET password=$1 WHERE id=$2`, [hash, userId]);
+  res.json({ success: true });
+});
+app.listen(port, "0.0.0.0", () => {
+  console.log(`✅ API escuchando en http://localhost:${port}`);
 });
 
 
