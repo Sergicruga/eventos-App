@@ -77,8 +77,7 @@ yarn-error.*
 *.tsbuildinfo
 
 # @end expo-cliandroid/
-
 ios/
 
-
+# Local API config
 src/api/config.js
