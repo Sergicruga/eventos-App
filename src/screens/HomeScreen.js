@@ -16,8 +16,23 @@ import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
+import { API_URL } from '../api/config';
+
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
+const DEFAULT_EVENT_IMAGE = "https://via.placeholder.com/800x450.png?text=Evento";
+const toAbsoluteImage = (img) => {
+  if (!img || String(img).trim() === "") return DEFAULT_EVENT_IMAGE;
+  // si ya es absoluta (http/https), tal cual
+  if (/^https?:\/\//i.test(img)) return img;
+  // si viniera relativa desde tu API (p.ej. "/uploads/.."), prépéndele API_URL
+  try {
+    const { API_URL } = require('../api/config');
+    return `${API_URL}${img}`;
+  } catch {
+    return DEFAULT_EVENT_IMAGE;
+  }
+};
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   if (lat1 == null || lat2 == null) return null;
@@ -129,6 +144,12 @@ export default function HomeScreen() {
             style={styles.cardImage}
             resizeMode="cover"
           />
+          <Image
+            source={{ uri: toAbsoluteImage(item.image) }}
+            style={styles.cardImage}
+            resizeMode="cover"
+            defaultSource={require('../../assets/iconoApp.png')} // Android: placeholder local mientras carga
+         />
           <LinearGradient
             colors={['transparent', 'rgba(35,69,103,0.45)', 'rgba(35,69,103,0.7)']}
             style={styles.gradientOverlay}

@@ -10,7 +10,7 @@ import { attend as apiAttend, unattend as apiUnattend } from './api/attendees';
 export const EventContext = createContext();
 const isNumericId = (id) => /^\d+$/.test(String(id));      // ej: "15" → true, "tm-123" → false
 const dbIdFrom = (id) => (isNumericId(id) ? Number(id) : null);
-
+const DEFAULT_EVENT_IMAGE = "https://via.placeholder.com/800x450.png?text=Evento";
 const EVENTS_KEY = 'eventos_guardados';
 const FAVORITES_KEY = 'favoritos_eventos_ids';
 const FAVORITES_MAP_KEY = 'favoritos_eventos_map';
@@ -57,7 +57,7 @@ export function EventProvider({ children }) {
         date: ev.event_at?.slice(0, 10) ?? '',
         location: ev.location ?? '',
         type: ev.type || 'local',
-        image: ev.image ?? null,
+        image: ev.image && String(ev.image).trim() !== "" ? ev.image : DEFAULT_EVENT_IMAGE,
         latitude: ev.latitude != null ? Number(ev.latitude) : null,
         longitude: ev.longitude != null ? Number(ev.longitude) : null,
         createdBy: ev.created_by || 'Desconocido',
@@ -180,7 +180,9 @@ export function EventProvider({ children }) {
         event_at: event.date, // YYYY-MM-DD
         location: event.location ?? '',
         type: event.type || 'local',
-        image: event.image ?? null,
+        image: event.image && event.image.trim() !== "" 
+         ? event.image 
+         : DEFAULT_EVENT_IMAGE, 
         latitude: event.latitude ?? null,
         longitude: event.longitude ?? null,
         created_by: effectiveUser?.id ?? null,
@@ -214,7 +216,9 @@ export function EventProvider({ children }) {
         date: saved.event_at?.slice(0, 10) ?? event.date,
         location: saved.location ?? '',
         type: saved.type || 'local',
-        image: saved.image ?? (event.image ?? null),
+        image: (saved.image && String(saved.image).trim() !== "" ? saved.image : null)
+        || (event.image && String(event.image).trim() !== "" ? event.image : null)
+        || DEFAULT_EVENT_IMAGE,
         latitude: saved.latitude != null ? Number(saved.latitude) : (event.latitude ?? null),
         longitude: saved.longitude != null ? Number(saved.longitude) : (event.longitude ?? null),
         createdById: saved?.created_by ?? null,
@@ -232,7 +236,7 @@ export function EventProvider({ children }) {
           ...event,
           id: Date.now().toString(),
           type: event.type || 'local',
-          image: event.image ?? event.imageUrl ?? event.imageUri ?? null,
+          image: (event.image || event.imageUrl || event.imageUri || DEFAULT_EVENT_IMAGE),
           createdBy: user.name,
           asistentes: [],
         },
