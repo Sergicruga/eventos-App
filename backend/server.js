@@ -126,6 +126,17 @@ app.get('/users/search', async (req, res) => {
   res.json(rows);
 });
 
+// Search users by name or email (second endpoint)
+app.get('/users/search', async (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.json([]);
+  const result = await pool.query(
+    'SELECT id, name, email, photo FROM users WHERE name ILIKE $1 OR email ILIKE $1 LIMIT 20',
+    [`%${q}%`]
+  );
+  res.json(result.rows);
+});
+
 // Obtener amigos
 app.get('/users/:userId/friends', async (req, res) => {
   const { userId } = req.params;
@@ -155,11 +166,16 @@ app.post('/users/:userId/friends', async (req, res) => {
 // Eliminar amigo
 app.delete('/users/:userId/friends/:friendId', async (req, res) => {
   const { userId, friendId } = req.params;
-  await pool.query(
-    `DELETE FROM friends WHERE user_id = $1 AND friend_id = $2`,
-    [userId, friendId]
-  );
-  res.json({ success: true });
+  try {
+    await pool.query(
+      `DELETE FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)`,
+      [userId, friendId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error deleting friendship:", err);
+    res.status(500).json({ error: "Failed to delete friendship" });
+  }
 });
 
 // Obtener eventos de un amigo
@@ -173,17 +189,6 @@ app.get('/users/:friendId/events', async (req, res) => {
     [friendId]
   );
   res.json(rows);
-});
-
-// Search users by name or email
-app.get('/users/search', async (req, res) => {
-  const { q } = req.query;
-  if (!q) return res.json([]);
-  const result = await pool.query(
-    'SELECT id, name, email FROM users WHERE name ILIKE $1 OR email ILIKE $1 LIMIT 20',
-    [`%${q}%`]
-  );
-  res.json(result.rows);
 });
 
 // Add friend
@@ -260,12 +265,18 @@ app.use("/uploads", express.static(uploadDir));
 // Eliminar amigo (bidireccional)
 app.delete('/friends', async (req, res) => {
   const { userId, friendId } = req.body;
-  if (!userId || !friendId) return res.status(400).json({ error: 'Datos inválidos' });
-  await pool.query(
-    'DELETE FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
-    [userId, friendId]
-  );
-  res.json({ success: true });
+  if (!userId || !friendId) {
+    return res.status(400).json({ error: "userId and friendId required" });
+  }
+  try {
+    await pool.query(
+      'DELETE FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)',
+      [userId, friendId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete friendship" });
+  }
 });
 
 // Obtener comentarios de un evento

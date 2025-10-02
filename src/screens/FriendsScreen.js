@@ -12,14 +12,22 @@ import {
   Button,
   Keyboard
 } from "react-native";
-import { API_URL } from "../api/config";
+import { API_URL } from '../api/config';
 import { AuthContext } from "../context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native"; // <-- Only this is needed
 
 const AVATAR_PLACEHOLDER = "https://placehold.co/80x80?text=User";
 
+
+
+// Helper to get full avatar URL
+const getAvatarUrl = (photo) =>
+  photo ? API_URL + photo : AVATAR_PLACEHOLDER;
+
 export default function FriendsScreen() {
   const { user } = useContext(AuthContext);
+  const navigation = useNavigation(); // <-- move here!
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [friends, setFriends] = useState([]);
@@ -147,7 +155,7 @@ export default function FriendsScreen() {
       activeOpacity={0.8}
     >
       <Image
-        source={{ uri: item.profile_image || AVATAR_PLACEHOLDER }}
+        source={{ uri: getAvatarUrl(item.photo) }}
         style={styles.avatar}
       />
       <View style={{ flex: 1 }}>
@@ -167,7 +175,7 @@ export default function FriendsScreen() {
   const renderSearchResult = ({ item }) => (
     <View style={styles.friendCard}>
       <Image
-        source={{ uri: item.profile_image || AVATAR_PLACEHOLDER }}
+        source={{ uri: getAvatarUrl(item.photo) }}
         style={styles.avatar}
       />
       <View style={{ flex: 1 }}>
@@ -187,7 +195,7 @@ export default function FriendsScreen() {
   const renderFriendRequest = ({ item }) => (
     <View style={styles.friendCard}>
       <Image
-        source={{ uri: item.profile_image || AVATAR_PLACEHOLDER }}
+        source={{ uri: getAvatarUrl(item.photo) }}
         style={styles.avatar}
       />
       <View style={{ flex: 1 }}>
@@ -256,8 +264,8 @@ export default function FriendsScreen() {
       <Text style={styles.subHeader}>Tus amigos</Text>
       <FlatList
         data={friends}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderFriend}
+        keyExtractor={item => item.id.toString()}
+        renderItem={renderFriend} // <-- use renderFriend, not FriendItem
         ListEmptyComponent={
           !loading && (
             <Text style={{ textAlign: "center", color: "#888", marginTop: 20 }}>
@@ -277,56 +285,68 @@ export default function FriendsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Image
-                source={{
-                  uri:
-                    selectedFriend?.profile_image || AVATAR_PLACEHOLDER,
-                }}
-                style={styles.avatarLarge}
-              />
-              <View style={{ marginLeft: 12 }}>
-                <Text style={styles.friendName}>{selectedFriend?.name}</Text>
-                <Text style={styles.friendEmail}>{selectedFriend?.email}</Text>
-              </View>
-            </View>
-            <Text style={styles.modalHeader}>Eventos de {selectedFriend?.name}</Text>
-            {eventsLoading ? (
-              <ActivityIndicator style={{ marginVertical: 20 }} />
-            ) : friendEvents.length > 0 ? (
-              <FlatList
-                data={friendEvents}
-                keyExtractor={(item) => String(item.id)}
-                renderItem={({ item }) => (
-                  <View style={styles.eventCard}>
-                    <Image
-                      source={{
-                        uri:
-                          item.image && item.image.trim() !== ""
-                            ? item.image
-                            : "https://placehold.co/600x300?text=Evento",
-                      }}
-                      style={styles.eventImage}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.eventTitle}>{item.title}</Text>
-                      <Text style={styles.eventDate}>{item.event_at}</Text>
-                      <Text style={styles.eventLocation}>{item.location}</Text>
-                    </View>
+            {selectedFriend ? (
+              <>
+                {/* Profile Card */}
+                <View style={styles.profileCard}>
+                  <Image
+                    source={{ uri: getAvatarUrl(selectedFriend.photo) }}
+                    style={styles.avatarLarge}
+                  />
+                  <View style={{ marginLeft: 16 }}>
+                    <Text style={styles.profileName}>{selectedFriend.name}</Text>
+                    <Text style={styles.profileEmail}>{selectedFriend.email}</Text>
                   </View>
-                )}
-                ListEmptyComponent={
+                </View>
+                <View style={styles.divider} />
+                <Text style={styles.modalHeader}>Eventos de {selectedFriend.name}</Text>
+                {eventsLoading ? (
+                  <ActivityIndicator style={{ marginVertical: 20 }} />
+                ) : friendEvents.length > 0 ? (
+                  <FlatList
+                    data={friendEvents}
+                    keyExtractor={(item) => String(item.id)}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.eventCard}
+                        activeOpacity={0.85}
+                        onPress={() => {
+                          setModalVisible(false);
+                          navigation.navigate("EventDetail", { event: item });
+                        }}
+                      >
+                        <Image
+                          source={{
+                            uri:
+                              item.image && item.image.trim() !== ""
+                                ? item.image
+                                : "https://placehold.co/600x300?text=Evento",
+                          }}
+                          style={styles.eventImage}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.eventTitle}>{item.title}</Text>
+                          <Text style={styles.eventDate}>{item.event_at}</Text>
+                          <Text style={styles.eventLocation}>{item.location}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                    ListEmptyComponent={
+                      <Text style={{ color: "#888", textAlign: "center" }}>
+                        No hay eventos.
+                      </Text>
+                    }
+                  />
+                ) : (
                   <Text style={{ color: "#888", textAlign: "center" }}>
                     No hay eventos.
                   </Text>
-                }
-              />
+                )}
+                <Button title="Cerrar" onPress={() => setModalVisible(false)} />
+              </>
             ) : (
-              <Text style={{ color: "#888", textAlign: "center" }}>
-                No hay eventos.
-              </Text>
+              <ActivityIndicator style={{ marginVertical: 40 }} />
             )}
-            <Button title="Cerrar" onPress={() => setModalVisible(false)} />
           </View>
         </View>
       </Modal>
@@ -366,7 +386,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    marginHorizontal: 16,
+    marginLeft: 20, // align with header
+    marginRight: 16,
     marginVertical: 6,
     padding: 12,
     borderRadius: 12,
@@ -434,6 +455,28 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     color: "#1976d2",
     textAlign: "center",
+  },
+  profileCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  profileName: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#1976d2",
+  },
+  profileEmail: {
+    fontSize: 15,
+    color: "#555",
+    marginTop: 2,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#e0e0e0",
+    marginVertical: 10,
+    marginHorizontal: -18,
   },
   eventCard: {
     flexDirection: "row",
