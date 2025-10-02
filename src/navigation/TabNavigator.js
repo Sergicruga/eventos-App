@@ -20,6 +20,7 @@ export default function TabNavigator() {
           if (route.name === 'Home') iconName = 'home-outline';
           else if (route.name === 'Favorites') iconName = 'star-outline';
           else if (route.name === 'Profile') iconName = 'person-outline';
+          else if (route.name === 'Amigos') iconName = 'people-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#1976d2',

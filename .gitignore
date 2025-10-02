@@ -81,3 +81,4 @@ ios/
 
 # Local API config
 src/api/config.js
+backend/uploads
