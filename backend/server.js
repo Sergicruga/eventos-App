@@ -112,6 +112,68 @@ app.post("/events", async (req, res) => {
   }
 });
 
+// Buscar usuarios (por nombre o email, excluyendo a uno mismo)
+app.get('/users/search', async (req, res) => {
+  const { q, userId } = req.query;
+  const { rows } = await pool.query(
+    `SELECT id, name, email, photo
+     FROM users
+     WHERE (LOWER(name) LIKE LOWER($1) OR LOWER(email) LIKE LOWER($1))
+       AND id != $2
+     LIMIT 20`,
+    [`%${q || ''}%`, userId]
+  );
+  res.json(rows);
+});
+
+// Obtener amigos
+app.get('/users/:userId/friends', async (req, res) => {
+  const { userId } = req.params;
+  const { rows } = await pool.query(
+    `SELECT u.id, u.name, u.email, u.photo
+     FROM friends f
+     JOIN users u ON u.id = f.friend_id
+     WHERE f.user_id = $1`,
+    [userId]
+  );
+  res.json(rows);
+});
+
+// Añadir amigo
+app.post('/users/:userId/friends', async (req, res) => {
+  const { userId } = req.params;
+  const { friendId } = req.body;
+  await pool.query(
+    `INSERT INTO friends (user_id, friend_id)
+     VALUES ($1, $2)
+     ON CONFLICT DO NOTHING`,
+    [userId, friendId]
+  );
+  res.json({ success: true });
+});
+
+// Eliminar amigo
+app.delete('/users/:userId/friends/:friendId', async (req, res) => {
+  const { userId, friendId } = req.params;
+  await pool.query(
+    `DELETE FROM friends WHERE user_id = $1 AND friend_id = $2`,
+    [userId, friendId]
+  );
+  res.json({ success: true });
+});
+
+// Obtener eventos de un amigo
+app.get('/users/:friendId/events', async (req, res) => {
+  const { friendId } = req.params;
+  const { rows } = await pool.query(
+    `SELECT id, title, description, event_at, location, type, image
+     FROM events
+     WHERE created_by = $1
+     ORDER BY event_at DESC`,
+    [friendId]
+  );
+  res.json(rows);
+});
 
 // Search users by name or email
 app.get('/users/search', async (req, res) => {
@@ -514,6 +576,70 @@ app.put("/users/:userId/password", async (req, res) => {
   await pool.query(`UPDATE users SET password=$1 WHERE id=$2`, [hash, userId]);
   res.json({ success: true });
 });
+
+// === FRIEND REQUESTS SYSTEM ===
+
+// Enviar solicitud de amistad
+app.post('/friend-requests', async (req, res) => {
+  const { senderId, receiverId } = req.body;
+  console.log('POST /friend-requests', { senderId, receiverId });
+  if (!senderId || !receiverId || senderId === receiverId) {
+    return res.status(400).json({ error: 'Datos inválidos' });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO friend_requests (sender_id, receiver_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [senderId, receiverId]
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Error inserting friend request:', e);
+    res.status(500).json({ error: 'Error inserting friend request' });
+  }
+});
+
+// Obtener solicitudes recibidas
+app.get('/users/:userId/friend-requests', async (req, res) => {
+  const { userId } = req.params;
+  const { rows } = await pool.query(
+    `SELECT fr.id, fr.sender_id, u.name, u.email, u.photo, fr.created_at
+     FROM friend_requests fr
+     JOIN users u ON u.id = fr.sender_id
+     WHERE fr.receiver_id = $1
+     ORDER BY fr.created_at DESC`,
+    [userId]
+  );
+  res.json(rows);
+});
+
+// Aceptar solicitud de amistad
+app.post('/friend-requests/:requestId/accept', async (req, res) => {
+  const { requestId } = req.params;
+  // Get sender and receiver
+  const { rows } = await pool.query(
+    `DELETE FROM friend_requests WHERE id = $1 RETURNING sender_id, receiver_id`,
+    [requestId]
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'Solicitud no encontrada' });
+  const { sender_id, receiver_id } = rows[0];
+  // Add both as friends (bidirectional)
+  await pool.query(
+    `INSERT INTO friends (user_id, friend_id) VALUES ($1, $2), ($2, $1)
+     ON CONFLICT DO NOTHING`,
+    [sender_id, receiver_id]
+  );
+  res.json({ success: true });
+});
+
+// Rechazar solicitud de amistad
+app.delete('/friend-requests/:requestId', async (req, res) => {
+  const { requestId } = req.params;
+  await pool.query(`DELETE FROM friend_requests WHERE id = $1`, [requestId]);
+  res.json({ success: true });
+});
+
 app.listen(port, "0.0.0.0", () => {
   console.log(`✅ API escuchando en http://localhost:${port}`);
 });
