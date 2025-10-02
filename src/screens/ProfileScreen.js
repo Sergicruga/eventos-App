@@ -1,61 +1,110 @@
 // src/screens/ProfileScreen.js
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState, useCallback } from "react";
 import { View, Text, Image, TouchableOpacity, ActivityIndicator, FlatList, Alert } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
 import { API_URL } from "../api/config";
 import { getUser, getUserCreatedEvents, uploadUserPhoto } from "../api/users";
-import { useNavigation } from "@react-navigation/native";
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
 
-  // Auth + Event contexts
+  // Contextos
   const { logout, user: authUser, token, login } = useContext(AuthContext);
-  const { user: userFromEventCtx, updateUser } = useContext(EventContext);
+  const { user: evCtxUser, updateUser } = useContext(EventContext);
   const uid = authUser?.id;
 
-  // State
+  // Estado local
   const [me, setMe] = useState(null);
   const [myEvents, setMyEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [photoUploading, setPhotoUploading] = useState(false);
-  const [photoBust, setPhotoBust] = useState(0); // <- cache-busting
+  const [photoBust, setPhotoBust] = useState(0); // cache-busting
 
-  useEffect(() => {
-    (async () => {
-      try {
-        if (!uid) return;
-        const [u, evs] = await Promise.all([getUser(uid), getUserCreatedEvents(uid)]);
-        setMe(u);
-        setMyEvents(
-          (evs || []).map(e => ({
-            id: String(e.id),
-            title: e.title,
-            date: e.event_at?.slice(0, 10) ?? "",
-            location: e.location ?? "",
-            image: e.image ?? null,
-            description: e.description ?? "",
-            latitude: e.latitude ?? null,
-            longitude: e.longitude ?? null,
-            type: e.type ?? "local",
-          }))
-        );
-        // sincroniza con EventContext para que otros sitios vean nombre/foto
-        updateUser?.({ id: u.id, name: u.name, email: u.email, photo: u.photo });
-      } catch (e) {
-        Alert.alert("Error", e.message);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [uid]);
-
-  // Helper para construir URL absoluta de la foto
+  // Helpers
   const absolutePhoto = (photoPath) =>
     photoPath?.startsWith("http") ? photoPath : `${API_URL}${photoPath}`;
+
+  const hydrate = useCallback(async () => {
+    if (!uid) return;
+    try {
+      setLoading(true);
+      const [u, evs] = await Promise.all([getUser(uid), getUserCreatedEvents(uid)]);
+
+      // Estado local de pantalla
+      setMe(prev => prev && prev.id === u.id ? { ...prev, ...u } : u);
+      setMyEvents(
+        (evs || []).map(e => ({
+          id: String(e.id),
+          title: e.title,
+          date: e.event_at?.slice(0, 10) ?? "",
+          location: e.location ?? "",
+          image: e.image ?? null,
+          description: e.description ?? "",
+          latitude: e.latitude ?? null,
+          longitude: e.longitude ?? null,
+          type: e.type ?? "local",
+        }))
+      );
+
+      // Solo propagar a contextos si hay cambios (evita renders en bucle)
+      if (updateUser) {
+        const needEvCtx =
+          evCtxUser?.id !== u.id ||
+          evCtxUser?.name !== u.name ||
+          evCtxUser?.email !== u.email ||
+          evCtxUser?.photo !== u.photo;
+        if (needEvCtx) updateUser({ id: u.id, name: u.name, email: u.email, photo: u.photo });
+      }
+
+      const needAuth =
+        authUser?.id !== u.id ||
+        authUser?.name !== u.name ||
+        authUser?.email !== u.email ||
+        authUser?.photo !== u.photo;
+      if (needAuth) await login({ user: { ...(authUser || {}), id: u.id, name: u.name, email: u.email, photo: u.photo }, token });
+    } catch (e) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [uid, token]); // 👈 deps mínimas y estables
+
+  // Carga inicial
+  useEffect(() => { hydrate(); }, [hydrate]);
+
+  // Recarga al volver a enfocar la pestaña de Perfil
+  useFocusEffect(
+    useCallback(() => {
+      hydrate();
+    }, [uid]) // 👈 solo re-hidrata cuando el usuario cambia o al enfocar
+  );
+
+  // Si cambia el usuario global por cualquier motivo, refleja en pantalla (sin obligar a refetch)
+  useEffect(() => {
+    if (!uid) return;
+    if (evCtxUser?.id === uid) {
+      setMe(prev => {
+        const next = {
+          id: uid,
+          name: evCtxUser.name ?? prev?.name,
+          email: evCtxUser.email ?? prev?.email,
+          photo: evCtxUser.photo ?? prev?.photo,
+        };
+        const equal =
+          prev &&
+          prev.id === next.id &&
+          prev.name === next.name &&
+          prev.email === next.email &&
+          prev.photo === next.photo;
+        return equal ? prev : { ...(prev || {}), ...next };
+      });
+    }
+  }, [evCtxUser?.name, evCtxUser?.email, evCtxUser?.photo, uid]);
 
   const onChangePhoto = async () => {
     try {
@@ -69,20 +118,17 @@ export default function ProfileScreen() {
 
       setPhotoUploading(true);
 
-      // Subida
+      // Subir
       const data = await uploadUserPhoto(uid, res.assets[0].uri); // { photo: "/uploads/profile_<id>.jpg" }
 
-      // Actualiza estados locales y contextos
+      // Actualiza local
       setMe(prev => ({ ...(prev || {}), photo: data.photo }));
-      updateUser?.({ ...(userFromEventCtx || {}), id: uid, photo: data.photo });
+      // Propaga a EventContext
+      updateUser?.({ ...(evCtxUser || {}), id: uid, photo: data.photo });
+      // Propaga a AuthContext para re-render global + persistir
+      await login({ user: { ...(authUser || {}), photo: data.photo }, token });
 
-      // Actualiza AuthContext también (dispara re-render global y persiste en AsyncStorage)
-      await login({
-        user: { ...(authUser || {}), photo: data.photo },
-        token,
-      });
-
-      // Cache-busting para que el <Image/> recargue sin cerrar app
+      // Cache-busting para forzar recarga de Image
       setPhotoBust(Date.now());
 
       Alert.alert("Foto actualizada");
@@ -109,8 +155,10 @@ export default function ProfileScreen() {
     );
   }
 
-  // Construye la URI con cache-busting
-  const basePhoto = me?.photo ? absolutePhoto(me.photo) : null;
+  // Construcción de datos para mostrar (si algo falta en `me`, cae al AuthContext)
+  const displayName = me?.name ?? authUser?.name ?? "-";
+  const displayEmail = me?.email ?? authUser?.email ?? "-";
+  const basePhoto = me?.photo ? absolutePhoto(me.photo) : (authUser?.photo ? absolutePhoto(authUser.photo) : null);
   const avatarUri = basePhoto ? `${basePhoto}?t=${photoBust}` : null;
 
   return (
@@ -125,8 +173,8 @@ export default function ProfileScreen() {
           {photoUploading ? <ActivityIndicator style={{ position: "absolute", left: 45, top: 45 }} /> : null}
         </TouchableOpacity>
 
-        <Text style={{ fontSize: 18, fontWeight: "700" }}>{me?.name || "-"}</Text>
-        <Text style={{ color: "#6b7280", marginTop: 2 }}>{me?.email || "-"}</Text>
+        <Text style={{ fontSize: 18, fontWeight: "700" }}>{displayName}</Text>
+        <Text style={{ color: "#6b7280", marginTop: 2 }}>{displayEmail}</Text>
 
         <TouchableOpacity
           onPress={() => navigation.navigate("EditProfile")}
