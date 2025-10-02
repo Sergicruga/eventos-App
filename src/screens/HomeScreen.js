@@ -1,8 +1,8 @@
+// src/screens/HomeScreen.js
 import React, { useContext, useEffect, useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
   Image,
@@ -18,21 +18,54 @@ import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
 import { API_URL } from '../api/config';
 
-
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
-const DEFAULT_EVENT_IMAGE = "https://via.placeholder.com/800x450.png?text=Evento";
+
+// === Imagen por defecto y helpers ===
+const DEFAULT_EVENT_IMAGE = 'https://via.placeholder.com/800x450.png?text=Evento'; // PNG
+const BACKUP_EVENT_IMAGE  = 'https://picsum.photos/800/450';
+
 const toAbsoluteImage = (img) => {
-  if (!img || String(img).trim() === "") return DEFAULT_EVENT_IMAGE;
-  // si ya es absoluta (http/https), tal cual
-  if (/^https?:\/\//i.test(img)) return img;
-  // si viniera relativa desde tu API (p.ej. "/uploads/.."), prépéndele API_URL
-  try {
-    const { API_URL } = require('../api/config');
-    return `${API_URL}${img}`;
-  } catch {
-    return DEFAULT_EVENT_IMAGE;
-  }
+  if (!img || String(img).trim() === '') return DEFAULT_EVENT_IMAGE;
+  if (/^https?:\/\//i.test(img)) return img;  // ya es absoluta
+  return `${API_URL}${img}`;                   // p.ej. "/uploads/..."
 };
+
+function EventCardImage({ image, style }) {
+  const [uri, setUri] = React.useState(toAbsoluteImage(image));
+  const [stage, setStage] = React.useState(0); // 0: principal, 1: backup, 2: asset
+
+  React.useEffect(() => {
+    setUri(toAbsoluteImage(image));
+    setStage(0);
+  }, [image]);
+
+  if (stage === 2) {
+    return (
+      <Image
+        source={require('../../assets/iconoApp.png')}
+        style={style}
+        resizeMode="cover"
+      />
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={style}
+      resizeMode="cover"
+      defaultSource={require('../../assets/iconoApp.png')} // Android: placeholder al cargar
+      onError={() => {
+        if (stage === 0) {
+          setUri(BACKUP_EVENT_IMAGE); // segundo intento
+          setStage(1);
+        } else {
+          setStage(2); // último intento: asset local
+        }
+      }}
+    />
+  );
+}
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   if (lat1 == null || lat2 == null) return null;
@@ -139,17 +172,9 @@ export default function HomeScreen() {
         onPress={() => navigation.navigate('EventDetail', { event: item })}
       >
         <View style={styles.imageWrapper}>
-          <Image
-            source={item.image ? { uri: item.image } : require('../../assets/iconoApp.png')}
-            style={styles.cardImage}
-            resizeMode="cover"
-          />
-          <Image
-            source={{ uri: toAbsoluteImage(item.image) }}
-            style={styles.cardImage}
-            resizeMode="cover"
-            defaultSource={require('../../assets/iconoApp.png')} // Android: placeholder local mientras carga
-         />
+          {/* Imagen con fallback en cadena */}
+          <EventCardImage image={item.image} style={styles.cardImage} />
+
           <LinearGradient
             colors={['transparent', 'rgba(35,69,103,0.45)', 'rgba(35,69,103,0.7)']}
             style={styles.gradientOverlay}
@@ -207,8 +232,8 @@ export default function HomeScreen() {
         keyExtractor={item => item.id}
         renderItem={renderEventCard}
         numColumns={2}
-        contentContainerStyle={[styles.listContent, { alignItems: 'center' }]} // Add alignItems: 'center'
-        columnWrapperStyle={{ justifyContent: 'center' }} // Center cards in each row
+        contentContainerStyle={[styles.listContent, { alignItems: 'center' }]}
+        columnWrapperStyle={{ justifyContent: 'center' }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.centered}>
