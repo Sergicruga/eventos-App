@@ -149,8 +149,15 @@ export default function ProfileScreen() {
 
   const onChangePhoto = async () => {
     try {
+      // Request permission first
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permiso requerido", "Se necesita permiso para acceder a tus fotos.");
+        return;
+      }
+
       const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: [ImagePicker.MediaType.Images],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images, // <-- fix here
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
