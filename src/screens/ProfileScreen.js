@@ -4,18 +4,59 @@ import { View, Text, Image, TouchableOpacity, ActivityIndicator, FlatList, Alert
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
-
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
 import { API_URL } from "../api/config";
 import { getUser, getUserCreatedEvents, uploadUserPhoto } from "../api/users";
+
+/* -----------------------------------------------------------------------------
+  Miniatura de evento con la cadena de fallbacks:
+  override local (file://) > imagen servidor > backup web > asset local
+----------------------------------------------------------------------------- */
+function EventThumbImage({ eventId, serverImage, style }) {
+  const { getEffectiveEventImage, getEventImageSource, overridesReady } = useContext(EventContext);
+  const [stage, setStage] = React.useState(0); // 0: efectiva, 1: backup web, 2: asset local
+
+  // Resuelve la imagen efectiva en cada render (incluye override local si existe)
+  const effective = getEffectiveEventImage?.(eventId, serverImage) ?? serverImage ?? null;
+
+  React.useEffect(() => {
+    // cuando cambie el id, la imagen del servidor o por fin
+    // estén cargados los overrides => reintenta con la imagen efectiva
+    setStage(0);
+  }, [eventId, serverImage, overridesReady]);
+
+  if (stage === 2) {
+    return (
+      <Image
+        source={require("../../assets/iconoApp.png")}
+        style={style}
+        resizeMode="cover"
+      />
+    );
+  }
+
+  const src =
+    stage === 1
+      ? { uri: "https://picsum.photos/400/300" } // backup web
+      : getEventImageSource?.(effective) ?? { uri: "https://picsum.photos/400/300" };
+
+  return (
+    <Image
+      source={src}
+      style={style}
+      resizeMode="cover"
+      onError={() => setStage(prev => (prev < 2 ? prev + 1 : 2))}
+    />
+  );
+}
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
 
   // Contextos
   const { logout, user: authUser, token, login } = useContext(AuthContext);
-  const { user: evCtxUser, updateUser } = useContext(EventContext);
+  const { user: evCtxUser, updateUser, getEffectiveEventImage, getEventImageSource, overridesReady } = useContext(EventContext);
   const uid = authUser?.id;
 
   // Estado local
@@ -43,7 +84,7 @@ export default function ProfileScreen() {
           title: e.title,
           date: e.event_at?.slice(0, 10) ?? "",
           location: e.location ?? "",
-          image: e.image ?? null,
+          image: getEffectiveEventImage?.(e.id, e.image) ?? e.image ?? null, // la resolvemos en el componente con getEffectiveEventImage
           description: e.description ?? "",
           latitude: e.latitude ?? null,
           longitude: e.longitude ?? null,
@@ -51,7 +92,7 @@ export default function ProfileScreen() {
         }))
       );
 
-      // Solo propagar a contextos si hay cambios (evita renders en bucle)
+      // Sincroniza contextos si cambia algo
       if (updateUser) {
         const needEvCtx =
           evCtxUser?.id !== u.id ||
@@ -72,7 +113,7 @@ export default function ProfileScreen() {
     } finally {
       setLoading(false);
     }
-  }, [uid, token]); // 👈 deps mínimas y estables
+  }, [uid, token]);
 
   // Carga inicial
   useEffect(() => { hydrate(); }, [hydrate]);
@@ -81,10 +122,10 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       hydrate();
-    }, [uid]) // 👈 solo re-hidrata cuando el usuario cambia o al enfocar
+    }, [uid])
   );
 
-  // Si cambia el usuario global por cualquier motivo, refleja en pantalla (sin obligar a refetch)
+  // Refleja cambios del EventContext en pantalla
   useEffect(() => {
     if (!uid) return;
     if (evCtxUser?.id === uid) {
@@ -109,7 +150,7 @@ export default function ProfileScreen() {
   const onChangePhoto = async () => {
     try {
       const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: [ImagePicker.MediaType.Images],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -118,19 +159,14 @@ export default function ProfileScreen() {
 
       setPhotoUploading(true);
 
-      // Subir
       const data = await uploadUserPhoto(uid, res.assets[0].uri); // { photo: "/uploads/profile_<id>.jpg" }
 
-      // Actualiza local
+      // Actualiza local y contextos
       setMe(prev => ({ ...(prev || {}), photo: data.photo }));
-      // Propaga a EventContext
       updateUser?.({ ...(evCtxUser || {}), id: uid, photo: data.photo });
-      // Propaga a AuthContext para re-render global + persistir
       await login({ user: { ...(authUser || {}), photo: data.photo }, token });
 
-      // Cache-busting para forzar recarga de Image
-      setPhotoBust(Date.now());
-
+      setPhotoBust(Date.now()); // cache-busting
       Alert.alert("Foto actualizada");
     } catch (e) {
       Alert.alert("Error", "No se pudo subir la foto");
@@ -155,7 +191,7 @@ export default function ProfileScreen() {
     );
   }
 
-  // Construcción de datos para mostrar (si algo falta en `me`, cae al AuthContext)
+  // Datos a mostrar
   const displayName = me?.name ?? authUser?.name ?? "-";
   const displayEmail = me?.email ?? authUser?.email ?? "-";
   const basePhoto = me?.photo ? absolutePhoto(me.photo) : (authUser?.photo ? absolutePhoto(authUser.photo) : null);
@@ -198,8 +234,9 @@ export default function ProfileScreen() {
             activeOpacity={0.85}
             style={{ flexDirection: "row", padding: 12, borderWidth: 1, borderColor: "#eee", borderRadius: 12, marginBottom: 12 }}
           >
-            <Image
-              source={item.image ? { uri: item.image } : require("../../assets/iconoApp.png")}
+            <EventThumbImage
+              eventId={item.id}
+              serverImage={item.image}
               style={{ width: 64, height: 64, borderRadius: 8, marginRight: 12 }}
             />
             <View style={{ flex: 1 }}>
@@ -212,7 +249,7 @@ export default function ProfileScreen() {
         )}
       />
 
-      {/* Logout flotante */}
+      {/* Logout flotante */} 
       <TouchableOpacity
         onPress={logout}
         activeOpacity={0.85}

@@ -32,3 +32,22 @@ export async function createEvent(event) {
   }
   return res.json(); // retorna el evento insertado
 }
+export async function uploadEventPhoto(eventId, localUri) {
+  const form = new FormData();
+  form.append("photo", {
+    uri: localUri,
+    name: "event.jpg",
+    type: "image/jpeg",
+  });
+
+  const res = await fetch(`${API_URL}/events/${eventId}/photo`, {
+    method: "POST",
+    body: form, // ¡no pongas Content-Type! RN añade boundary
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} ${t}`);
+  }
+  return res.json(); // { ok:true, image:"/uploads/events/..", event:{...} }
+}

@@ -60,10 +60,13 @@ export default function CreateEventScreen({ navigation }) {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
+    // ✅ API nueva: usa el enum directamente (sin MediaTypeOptions)
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      quality: 0.7,
-    });
+      aspect: [4, 3], // o [1,1] si quieres cuadrado
+      quality: 0.8,
+      // NO pongas `selectionLimit` si no lo necesitas; en algunas versiones da guerra
+  });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
       setImageUri(result.assets[0].uri);
@@ -94,6 +97,7 @@ export default function CreateEventScreen({ navigation }) {
   const handleLongPress = async (e) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
     setCoords({ latitude, longitude });
+    console.log('Marcador colocado en:', latitude, longitude); // <-- Añade este log
     try {
       const res = await Location.reverseGeocodeAsync({ latitude, longitude });
       if (res?.length) {
@@ -152,15 +156,21 @@ export default function CreateEventScreen({ navigation }) {
       return;
     }
 
+    let baseCoords;
     try {
-      // Si no has elegido en el mapa, usa la ubicación actual
-      const baseCoords =
+      baseCoords =
         coords?.latitude != null && coords?.longitude != null
           ? coords
           : (await Location.getCurrentPositionAsync({})).coords;
+    } catch (e) {
+      console.warn('Error obteniendo ubicación:', e);
+      Alert.alert('Error', 'No se pudo obtener la ubicación.');
+      return;
+    }
 
-      let resolvedAddress = locationName?.trim();
-      if (!resolvedAddress) {
+    let resolvedAddress = locationName?.trim();
+    if (!resolvedAddress) {
+      try {
         const results = await Location.reverseGeocodeAsync({
           latitude: baseCoords.latitude,
           longitude: baseCoords.longitude,
@@ -169,27 +179,56 @@ export default function CreateEventScreen({ navigation }) {
           resolvedAddress = formatAddress(results[0]);
           setLocationName(resolvedAddress); // autocompleta el input
         }
+      } catch {
+        resolvedAddress = `${baseCoords.latitude.toFixed(5)}, ${baseCoords.longitude.toFixed(5)}`;
       }
-
-      addEvent({
-        title,
-        date: normalizeDate(date), // ✅ nombre correcto
-        location:
-          resolvedAddress ||
-          `${baseCoords.latitude.toFixed(5)}, ${baseCoords.longitude.toFixed(5)}`,
-        description,
-        type,
-        image: imageUri || 'https://placehold.co/600x300?text=Evento',
-        latitude: baseCoords.latitude,
-        longitude: baseCoords.longitude,
-      });
-
-      Alert.alert('Evento creado', '¡Tu evento se ha guardado!');
-      navigation.goBack();
-    } catch (e) {
-      console.warn(e);
-      Alert.alert('Error', 'No se pudo obtener la ubicación.');
     }
+
+    // --- Subir imagen al backend si existe ---
+    let imageUrl = null;
+    if (imageUri && imageUri.startsWith('file://')) {
+      try {
+        const formData = new FormData();
+        formData.append('image', {
+          uri: imageUri,
+          name: 'event.jpg',
+          type: 'image/jpeg',
+        });
+
+        // Cambia la IP por la de tu PC si usas dispositivo físico
+        const res = await fetch('http://10.106.81.133:4000/upload', {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        if (!res.ok) throw new Error('Error al subir imagen');
+        const data = await res.json();
+        imageUrl = data.url;
+      } catch (e) {
+        console.warn('Error subiendo imagen:', e);
+        Alert.alert('Error', 'No se pudo subir la imagen del evento.');
+        return;
+      }
+    }
+
+    // Guardar evento
+    addEvent({
+      title,
+      date: normalizeDate(date),
+      location:
+        resolvedAddress ||
+        `${baseCoords.latitude.toFixed(5)}, ${baseCoords.longitude.toFixed(5)}`,
+      description,
+      type,
+      image: imageUrl || 'https://placehold.co/600x300?text=Evento',
+      latitude: baseCoords.latitude,
+      longitude: baseCoords.longitude,
+    });
+
+    Alert.alert('Evento creado', '¡Tu evento se ha guardado!');
+    navigation.goBack();
   };
 
   if (loadingPerm) {

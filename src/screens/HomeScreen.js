@@ -1,14 +1,6 @@
-// src/screens/HomeScreen.js
 import React, { useContext, useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  TextInput,
-  ActivityIndicator,
-  Dimensions,
+  View, Text, FlatList, TouchableOpacity, Image, TextInput, ActivityIndicator, Dimensions,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventContext } from '../EventContext';
@@ -16,56 +8,8 @@ import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
-import { API_URL } from '../api/config';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
-
-// === Imagen por defecto y helpers ===
-const DEFAULT_EVENT_IMAGE = 'https://via.placeholder.com/800x450.png?text=Evento'; // PNG
-const BACKUP_EVENT_IMAGE  = 'https://picsum.photos/800/450';
-
-const toAbsoluteImage = (img) => {
-  if (!img || String(img).trim() === '') return DEFAULT_EVENT_IMAGE;
-  if (/^https?:\/\//i.test(img)) return img;  // ya es absoluta
-  return `${API_URL}${img}`;                   // p.ej. "/uploads/..."
-};
-
-function EventCardImage({ image, style }) {
-  const [uri, setUri] = React.useState(toAbsoluteImage(image));
-  const [stage, setStage] = React.useState(0); // 0: principal, 1: backup, 2: asset
-
-  React.useEffect(() => {
-    setUri(toAbsoluteImage(image));
-    setStage(0);
-  }, [image]);
-
-  if (stage === 2) {
-    return (
-      <Image
-        source={require('../../assets/iconoApp.png')}
-        style={style}
-        resizeMode="cover"
-      />
-    );
-  }
-
-  return (
-    <Image
-      source={{ uri }}
-      style={style}
-      resizeMode="cover"
-      defaultSource={require('../../assets/iconoApp.png')} // Android: placeholder al cargar
-      onError={() => {
-        if (stage === 0) {
-          setUri(BACKUP_EVENT_IMAGE); // segundo intento
-          setStage(1);
-        } else {
-          setStage(2); // último intento: asset local
-        }
-      }}
-    />
-  );
-}
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   if (lat1 == null || lat2 == null) return null;
@@ -91,8 +35,59 @@ async function fetchTicketmasterEvents(city = 'Barcelona') {
 const CARD_MARGIN = 10;
 const CARD_WIDTH = (Dimensions.get('window').width - CARD_MARGIN * 3) / 2;
 
+/** Card hija (puede usar hooks propios sin romper FlatList) */
+function EventCard({ item, isFavorite, onToggleFavorite, onPress, getEventImageSource, effectiveImage }) {
+  const [thumbFallback, setThumbFallback] = React.useState(false);
+
+  return (
+    <TouchableOpacity style={styles.card} activeOpacity={0.88} onPress={onPress}>
+      <View style={styles.imageWrapper}>
+        {thumbFallback ? (
+          <Image
+            source={require('../../assets/iconoApp.png')}
+            style={styles.cardImage}
+            resizeMode="cover"
+          />
+        ) : (
+          <Image
+            source={getEventImageSource(effectiveImage)}
+            style={styles.cardImage}
+            resizeMode="cover"
+            onError={() => setThumbFallback(true)}
+          />
+        )}
+
+        <LinearGradient
+          colors={['transparent', 'rgba(35,69,103,0.45)', 'rgba(35,69,103,0.7)']}
+          style={styles.gradientOverlay}
+        />
+
+        <TouchableOpacity style={styles.favoriteIcon} onPress={() => onToggleFavorite(item.id, item)}>
+          <Ionicons
+            name={isFavorite ? 'star' : 'star-outline'}
+            size={24}
+            color={isFavorite ? '#FFD700' : '#5a7bb6'}
+          />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.overlay}>
+        <Text style={styles.cardTitle} numberOfLines={2} ellipsizeMode="tail">
+          {item.title}
+        </Text>
+        <Text style={styles.cardDate} numberOfLines={1} ellipsizeMode="tail">
+          {item.date}
+        </Text>
+        <Text style={styles.cardLocation} numberOfLines={1} ellipsizeMode="tail">
+          <Ionicons name="location-outline" size={14} color="#5a7bb6" /> {item.location}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export default function HomeScreen() {
-  const { communityEvents, favorites, toggleFavorite } = useContext(EventContext);
+  const { communityEvents, favorites, toggleFavorite, getEventImageSource, getEffectiveEventImage } = useContext(EventContext);
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
@@ -164,46 +159,16 @@ export default function HomeScreen() {
     }
   }
 
-  function renderEventCard({ item }) {
-    return (
-      <TouchableOpacity
-        style={styles.card}
-        activeOpacity={0.88}
-        onPress={() => navigation.navigate('EventDetail', { event: item })}
-      >
-        <View style={styles.imageWrapper}>
-          {/* Imagen con fallback en cadena */}
-          <EventCardImage image={item.image} style={styles.cardImage} />
-
-          <LinearGradient
-            colors={['transparent', 'rgba(35,69,103,0.45)', 'rgba(35,69,103,0.7)']}
-            style={styles.gradientOverlay}
-          />
-          <TouchableOpacity
-            style={styles.favoriteIcon}
-            onPress={() => toggleFavorite(item.id, item)}
-          >
-            <Ionicons
-              name={favorites.includes(item.id) ? 'star' : 'star-outline'}
-              size={24}
-              color={favorites.includes(item.id) ? '#FFD700' : '#5a7bb6'}
-            />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.overlay}>
-          <Text style={styles.cardTitle} numberOfLines={2} ellipsizeMode="tail">
-            {item.title}
-          </Text>
-          <Text style={styles.cardDate} numberOfLines={1} ellipsizeMode="tail">
-            {item.date}
-          </Text>
-          <Text style={styles.cardLocation} numberOfLines={1} ellipsizeMode="tail">
-            <Ionicons name="location-outline" size={14} color="#5a7bb6" /> {item.location}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }
+  const renderItem = ({ item }) => (
+    <EventCard
+      item={item}
+      isFavorite={favorites.includes(item.id)}
+      onToggleFavorite={toggleFavorite}
+      onPress={() => navigation.navigate('EventDetail', { event: item })}
+      getEventImageSource={getEventImageSource}
+      effectiveImage={getEffectiveEventImage(item.id, item.image)}
+    />
+  );
 
   if (loadingLocation || loadingApiEvents) {
     return (
@@ -229,8 +194,8 @@ export default function HomeScreen() {
       </View>
       <FlatList
         data={deduped}
-        keyExtractor={item => item.id}
-        renderItem={renderEventCard}
+        keyExtractor={item => String(item.id)}
+        renderItem={renderItem}
         numColumns={2}
         contentContainerStyle={[styles.listContent, { alignItems: 'center' }]}
         columnWrapperStyle={{ justifyContent: 'center' }}

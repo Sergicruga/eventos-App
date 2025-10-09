@@ -8,6 +8,22 @@ import fs from "fs";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+const uploadsBaseDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsBaseDir)) fs.mkdirSync(uploadsBaseDir);
+
+const eventUploadsDir = path.join(uploadsBaseDir, "events");
+if (!fs.existsSync(eventUploadsDir)) fs.mkdirSync(eventUploadsDir);
+
+// Multer storage para eventos
+const eventStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, eventUploadsDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `event_${Date.now()}${ext}`);
+  },
+});
+const uploadEventImage = multer({ storage: eventStorage });
+
 
 dotenv.config();
 const { Pool } = pkg;
@@ -260,6 +276,19 @@ app.post("/users/:userId/photo", upload.single("photo"), async (req, res) => {
   await pool.query("UPDATE users SET photo = $1 WHERE id = $2", [photoUrl, userId]);
   res.json({ photo: photoUrl });
 });
+// GET /users/:userId/created-events
+app.get('/users/:userId/created-events', async (req, res) => {
+  const { userId } = req.params;
+  const { rows } = await pool.query(
+    `SELECT id, title, description, event_at, location, type, image, latitude, longitude
+       FROM events
+      WHERE created_by = $1
+      ORDER BY event_at DESC`,
+    [userId]
+  );
+  res.json(rows);
+});
+
 
 // Servir imágenes de perfil
 app.use("/uploads", express.static(uploadDir));
@@ -652,9 +681,73 @@ app.delete('/friend-requests/:requestId', async (req, res) => {
   await pool.query(`DELETE FROM friend_requests WHERE id = $1`, [requestId]);
   res.json({ success: true });
 });
+// === ELIMINAR EVENTO ===
+app.delete("/events/:eventId", async (req, res) => {
+  const eventId = Number(req.params.eventId);
+  if (!Number.isInteger(eventId)) {
+    return res.status(400).json({ error: "eventId inválido" });
+  }
+
+  try {
+    // Si tu base tiene FKs sin CASCADE, elimina dependencias primero:
+    await pool.query(`DELETE FROM event_comments WHERE event_id = $1`, [eventId]);
+    await pool.query(`DELETE FROM event_attendees WHERE event_id = $1`, [eventId]);
+    await pool.query(`DELETE FROM event_favorites WHERE event_id = $1`, [eventId]);
+
+    // Finalmente elimina el evento
+    const result = await pool.query(`DELETE FROM events WHERE id = $1 RETURNING id`, [eventId]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Evento no encontrado" });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ DELETE /events error:", err);
+    res.status(500).json({ error: "Error eliminando evento" });
+  }
+});
+/**
+ * POST /events/:eventId/photo
+ * body: multipart/form-data con campo "photo"
+ * -> actualiza e.image con ruta relativa "/uploads/events/..."
+ */
+app.post("/events/:eventId/photo", uploadEventImage.single("photo"), async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    if (!req.file) return res.status(400).json({ error: "Falta archivo 'photo'" });
+
+    const relPath = `/uploads/events/${req.file.filename}`;
+    await pool.query(`UPDATE events SET image = $1 WHERE id = $2`, [relPath, eventId]);
+
+    // opcional: devolver todo el evento actualizado
+    const { rows } = await pool.query(
+      `SELECT id, title, description, event_at, location, type, image, latitude, longitude, created_by
+       FROM events WHERE id = $1`,
+      [eventId]
+    );
+    res.json({ ok: true, image: relPath, event: rows[0] });
+  } catch (e) {
+    console.error("PHOTO UPLOAD ERROR:", e);
+    res.status(500).json({ error: "Error subiendo foto del evento" });
+  }
+});
+
+
+// Endpoint para subir imagen de evento
+app.post('/upload', uploadEventImage.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  // Ruta pública
+  const url = `${req.protocol}://${req.get('host')}/uploads/events/${req.file.filename}`;
+  res.json({ url });
+});
+
+// Servir archivos estáticos
+app.use('/uploads', express.static(uploadsBaseDir));
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`✅ API escuchando en http://localhost:${port}`);
 });
+
 
 
