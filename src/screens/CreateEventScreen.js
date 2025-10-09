@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Calendar } from 'react-native-calendars';
 import MapView, { Marker } from 'react-native-maps';
 import { Picker } from '@react-native-picker/picker';
+import { API_URL } from '../api/config';
 
 export default function CreateEventScreen({ navigation }) {
   const { addEvent } = useContext(EventContext);
@@ -196,7 +197,7 @@ export default function CreateEventScreen({ navigation }) {
         });
 
         // Cambia la IP por la de tu PC si usas dispositivo físico
-        const res = await fetch('http://10.106.81.133:4000/upload', {
+        const res = await fetch(`${API_URL}/upload`, {
           method: 'POST',
           body: formData,
           headers: {
