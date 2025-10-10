@@ -49,50 +49,85 @@ export default function EventDetailScreen({ route, navigation }) {
   // ----- Asistentes -----
   const [attendees, setAttendees] = useState([]);
   const [isJoined, setIsJoined] = useState(false);
+  const [joining, setJoining] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchAttendees = async () => {
+      if (!current?.id) return;
       try {
         const res = await fetch(`${API_URL}/events/${current.id}/attendees`);
         if (res.ok) {
           const data = await res.json();
-          setAttendees(data);
-          setIsJoined(data.some(a => String(a.id) === String(user.id)));
+          if (cancelled) return;
+          setAttendees(Array.isArray(data) ? data : []);
+          const uid = user?.id != null ? String(user.id) : null;
+          setIsJoined(uid ? data.some(a => String(a.id) === uid) : false);
         } else {
+          if (cancelled) return;
           setAttendees([]);
           setIsJoined(false);
         }
       } catch {
+        if (cancelled) return;
         setAttendees([]);
         setIsJoined(false);
       }
     };
     fetchAttendees();
-  }, [current.id, user.id]);
+    return () => { cancelled = true; };
+  }, [current.id, user?.id]);
 
   const handleJoinOrLeave = async () => {
-  // UI optimista: actualiza antes de esperar el backend
-  if (!isJoined) {
-    setIsJoined(true);
-    setAttendees(prev => [...prev, { id: user.id, name: user.name }]);
-    await joinEvent(current.id);
-    Alert.alert('¡Genial!', 'Te has apuntado a este evento.');
-  } else {
-    setIsJoined(false);
-    setAttendees(prev => prev.filter(a => String(a.id) !== String(user.id)));
-    await leaveEvent(current.id);
-    Alert.alert('Cancelado', 'Ya no vas a este evento.');
-  }
-  // Luego refresca desde el backend
-  try {
-    const res = await fetch(`${API_URL}/events/${current.id}/attendees`);
-    if (res.ok) {
-      const data = await res.json();
-      setAttendees(data);
-      setIsJoined(data.some(a => String(a.id) === String(user.id)));
+    if (!user?.id) {
+      Alert.alert('Inicia sesión', 'Necesitas iniciar sesión para apuntarte.');
+      return;
     }
-  } catch {}
-};
+    if (joining) return;
+    setJoining(true);
+
+    const uidStr = String(user.id);
+
+    // Optimista
+    if (!isJoined) {
+      setIsJoined(true);
+      setAttendees(prev => [...prev, { id: user.id, name: user.name }]);
+      try {
+        await joinEvent(current.id);
+        Alert.alert('¡Genial!', 'Te has apuntado a este evento.');
+      } catch (e) {
+        // revertir
+        setIsJoined(false);
+        setAttendees(prev => prev.filter(a => String(a.id) !== uidStr));
+        Alert.alert('Error', e?.message || 'No se pudo apuntar. Inténtalo de nuevo.');
+      }
+    } else {
+      setIsJoined(false);
+      setAttendees(prev => prev.filter(a => String(a.id) !== uidStr));
+      try {
+        await leaveEvent(current.id);
+        Alert.alert('Cancelado', 'Ya no vas a este evento.');
+      } catch (e) {
+        // revertir
+        setIsJoined(true);
+        setAttendees(prev => [...prev, { id: user.id, name: user.name }]);
+        Alert.alert('Error', e?.message || 'No se pudo cancelar. Inténtalo de nuevo.');
+      }
+    }
+
+    // Refrescar lista real desde backend (mejor estado final)
+    try {
+      const res = await fetch(`${API_URL}/events/${current.id}/attendees`);
+      if (res.ok) {
+        const data = await res.json();
+        setAttendees(Array.isArray(data) ? data : []);
+        const uid = String(user.id);
+        setIsJoined(data.some(a => String(a.id) === uid));
+      }
+    } catch {}
+
+    setJoining(false);
+  };
 
   // ----- Comentarios -----
   const [comments, setComments] = useState([]);
@@ -199,18 +234,30 @@ export default function EventDetailScreen({ route, navigation }) {
         {current.type === 'api' ? (
           <Button title="Comprar entradas" onPress={() => {}} color="#1976d2" />
         ) : (
-          <Button
-            title={isJoined ? 'Ya no voy' : '¡Ya voy!'}
+          // Botón personalizado: se pone ROJO cuando estás apuntado
+          <TouchableOpacity
             onPress={handleJoinOrLeave}
-            color={isJoined ? '#d32f2f' : 'green'}
-          />
+            disabled={joining}
+            activeOpacity={0.8}
+            style={[
+              styles.attendBtn,
+              isJoined ? styles.attendBtnJoined : styles.attendBtnIdle,
+              joining && { opacity: 0.7 }
+            ]}
+          >
+            {joining ? (
+              <ActivityIndicator />
+            ) : (
+              <Text style={styles.attendBtnText}>
+                {isJoined ? 'Ya no voy' : '¡Ya voy!'}
+              </Text>
+            )}
+          </TouchableOpacity>
         )}
 
         {amOwner && (
           <View style={{ marginTop: 12 }}>
-            <Button
-              title="Eliminar evento"
-              color="red"
+            <TouchableOpacity
               onPress={() => {
                 Alert.alert('Confirmar', '¿Seguro que quieres eliminar este evento?', [
                   { text: 'Cancelar', style: 'cancel' },
@@ -224,17 +271,23 @@ export default function EventDetailScreen({ route, navigation }) {
                   },
                 ]);
               }}
-            />
+              activeOpacity={0.8}
+              style={[styles.attendBtn, styles.attendBtnJoined]}
+            >
+              <Text style={styles.attendBtnText}>Eliminar evento</Text>
+            </TouchableOpacity>
           </View>
         )}
 
         {amOwner && (
           <View style={{ marginTop: 12 }}>
-            <Button
-              title="Editar evento"
+            <TouchableOpacity
               onPress={() => navigation.navigate('EditEvent', { event: current })}
-              color="#1976d2"
-            />
+              activeOpacity={0.8}
+              style={[styles.attendBtn, styles.attendBtnEdit]}
+            >
+              <Text style={styles.attendBtnText}>Editar evento</Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -291,5 +344,24 @@ const styles = StyleSheet.create({
   commentDate: { fontSize: 10, color: '#888', marginTop: 2 },
   commentInput: {
     flex: 1, borderWidth: 1, borderRadius: 6, padding: 8, marginRight: 8, backgroundColor: '#fff',
+  },
+  // ---- Botón asistir personalizado ----
+  attendBtn: {
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  attendBtnIdle: {
+    backgroundColor: 'green',
+  },
+  attendBtnJoined: {
+    backgroundColor: '#d32f2f', // ROJO
+  },
+  attendBtnEdit: {
+    backgroundColor: '#1976d2', // Azul
+  },
+  attendBtnText: {
+    fontWeight: '700',
+    color: '#fff',
   },
 });

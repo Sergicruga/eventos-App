@@ -26,11 +26,12 @@ export default function TabNavigator() {
         tabBarActiveTintColor: '#1976d2',
         tabBarInactiveTintColor: 'gray',
       })}
-    >
+      >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Inicio' }} />
       <Tab.Screen name="Favorites" component={FavoritesScreen} options={{ title: 'Favoritos' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
       <Tab.Screen name="Amigos" component={FriendsScreen} />
+
     </Tab.Navigator>
   );
 }

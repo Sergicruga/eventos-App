@@ -29,6 +29,15 @@ dotenv.config();
 const { Pool } = pkg;
 
 const app = express();
+
+// Middleware para soportar override de método (POST + ?_method=PATCH/PUT)
+app.use((req, res, next) => {
+  if (req.method === 'POST' && req.query._method) {
+    req.method = req.query._method.toUpperCase();
+  }
+  next();
+});
+
 app.use(cors());
 app.use(express.json());
 app.use((req, _res, next) => {
@@ -578,169 +587,6 @@ app.get("/users/:userId/events-created", async (req, res) => {
   res.json(rows);
 });
 
-// Actualizar nombre y/o email
-app.put("/users/:userId/profile", async (req, res) => {
-  const { userId } = req.params;
-  const { name, email } = req.body;
-  if (!name && !email) return res.status(400).json({ error: "Nada que actualizar" });
-
-  // si viene email, opcional: comprobar que no esté ya usado
-  if (email) {
-    const exists = await pool.query(`SELECT 1 FROM users WHERE email=$1 AND id <> $2`, [email, userId]);
-    if (exists.rowCount > 0) return res.status(409).json({ error: "Email en uso" });
-  }
-
-  const { rows } = await pool.query(
-    `UPDATE users
-        SET name = COALESCE($1, name),
-            email = COALESCE($2, email)
-      WHERE id = $3
-    RETURNING id, name, email, photo`,
-    [name ?? null, email ?? null, userId]
-  );
-  res.json(rows[0]);
-});
-
-// Cambiar contraseña
-app.put("/users/:userId/password", async (req, res) => {
-  const { userId } = req.params;
-  const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) {
-    return res.status(400).json({ error: "Parámetros requeridos" });
-  }
-  const r = await pool.query(`SELECT password FROM users WHERE id=$1`, [userId]);
-  if (r.rowCount === 0) return res.status(404).json({ error: "Usuario no encontrado" });
-
-  const ok = await bcrypt.compare(currentPassword, r.rows[0].password);
-  if (!ok) return res.status(401).json({ error: "Contraseña actual incorrecta" });
-
-  const hash = await bcrypt.hash(newPassword, 10);
-  await pool.query(`UPDATE users SET password=$1 WHERE id=$2`, [hash, userId]);
-  res.json({ success: true });
-});
-
-// === FRIEND REQUESTS SYSTEM ===
-
-// Enviar solicitud de amistad
-app.post('/friend-requests', async (req, res) => {
-  const { senderId, receiverId } = req.body;
-  console.log('POST /friend-requests', { senderId, receiverId });
-  if (!senderId || !receiverId || senderId === receiverId) {
-    return res.status(400).json({ error: 'Datos inválidos' });
-  }
-  try {
-    await pool.query(
-      `INSERT INTO friend_requests (sender_id, receiver_id)
-       VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
-      [senderId, receiverId]
-    );
-    res.json({ success: true });
-  } catch (e) {
-    console.error('Error inserting friend request:', e);
-    res.status(500).json({ error: 'Error inserting friend request' });
-  }
-});
-
-// Obtener solicitudes recibidas
-app.get('/users/:userId/friend-requests', async (req, res) => {
-  const { userId } = req.params;
-  const { rows } = await pool.query(
-    `SELECT fr.id, fr.sender_id, u.name, u.email, u.photo, fr.created_at
-     FROM friend_requests fr
-     JOIN users u ON u.id = fr.sender_id
-     WHERE fr.receiver_id = $1
-     ORDER BY fr.created_at DESC`,
-    [userId]
-  );
-  res.json(rows);
-});
-
-// Aceptar solicitud de amistad
-app.post('/friend-requests/:requestId/accept', async (req, res) => {
-  const { requestId } = req.params;
-  // Get sender and receiver
-  const { rows } = await pool.query(
-    `DELETE FROM friend_requests WHERE id = $1 RETURNING sender_id, receiver_id`,
-    [requestId]
-  );
-  if (rows.length === 0) return res.status(404).json({ error: 'Solicitud no encontrada' });
-  const { sender_id, receiver_id } = rows[0];
-  // Add both as friends (bidirectional)
-  await pool.query(
-    `INSERT INTO friends (user_id, friend_id) VALUES ($1, $2), ($2, $1)
-     ON CONFLICT DO NOTHING`,
-    [sender_id, receiver_id]
-  );
-  res.json({ success: true });
-});
-
-// Rechazar solicitud de amistad
-app.delete('/friend-requests/:requestId', async (req, res) => {
-  const { requestId } = req.params;
-  await pool.query(`DELETE FROM friend_requests WHERE id = $1`, [requestId]);
-  res.json({ success: true });
-});
-// === ELIMINAR EVENTO ===
-app.delete("/events/:eventId", async (req, res) => {
-  const eventId = Number(req.params.eventId);
-  if (!Number.isInteger(eventId)) {
-    return res.status(400).json({ error: "eventId inválido" });
-  }
-
-  try {
-    // Si tu base tiene FKs sin CASCADE, elimina dependencias primero:
-    await pool.query(`DELETE FROM event_comments WHERE event_id = $1`, [eventId]);
-    await pool.query(`DELETE FROM event_attendees WHERE event_id = $1`, [eventId]);
-    await pool.query(`DELETE FROM event_favorites WHERE event_id = $1`, [eventId]);
-
-    // Finalmente elimina el evento
-    const result = await pool.query(`DELETE FROM events WHERE id = $1 RETURNING id`, [eventId]);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Evento no encontrado" });
-    }
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("❌ DELETE /events error:", err);
-    res.status(500).json({ error: "Error eliminando evento" });
-  }
-});
-/**
- * POST /events/:eventId/photo
- * body: multipart/form-data con campo "photo"
- * -> actualiza e.image con ruta relativa "/uploads/events/..."
- */
-app.post("/events/:eventId/photo", uploadEventImage.single("photo"), async (req, res) => {
-  try {
-    const { eventId } = req.params;
-    if (!req.file) return res.status(400).json({ error: "Falta archivo 'photo'" });
-
-    const relPath = `/uploads/events/${req.file.filename}`;
-    await pool.query(`UPDATE events SET image = $1 WHERE id = $2`, [relPath, eventId]);
-
-    // opcional: devolver todo el evento actualizado
-    const { rows } = await pool.query(
-      `SELECT id, title, description, event_at, location, type, image, latitude, longitude, created_by
-       FROM events WHERE id = $1`,
-      [eventId]
-    );
-    res.json({ ok: true, image: relPath, event: rows[0] });
-  } catch (e) {
-    console.error("PHOTO UPLOAD ERROR:", e);
-    res.status(500).json({ error: "Error subiendo foto del evento" });
-  }
-});
-
-
-// Endpoint para subir imagen de evento
-app.post('/upload', uploadEventImage.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  // Ruta pública
-  const url = `${req.protocol}://${req.get('host')}/uploads/events/${req.file.filename}`;
-  res.json({ url });
-});
 
 // Servir archivos estáticos
 app.use('/uploads', express.static(uploadsBaseDir));
@@ -749,5 +595,122 @@ app.listen(port, "0.0.0.0", () => {
   console.log(`✅ API escuchando en http://localhost:${port}`);
 });
 
+// === ACTUALIZAR EVENTO ===
+app.patch("/events/:eventId", async (req, res) => {
+  const eventId = Number(req.params.eventId);
+  if (!Number.isInteger(eventId)) {
+    return res.status(400).json({ error: "eventId inválido" });
+  }
+
+  // Campos permitidos
+  const {
+    title,
+    description,
+    event_at,      // ← OJO: tu cliente mapea date -> event_at
+    location,
+    type,
+    image,
+    latitude,
+    longitude,
+  } = req.body || {};
+
+  // Construcción dinámica del UPDATE (solo campos definidos)
+  const set = [];
+  const values = [];
+  let i = 1;
+
+  const pushIfDefined = (field, value) => {
+    if (typeof value !== "undefined") {
+      set.push(`${field} = $${i++}`);
+      values.push(value);
+    }
+  };
+
+  pushIfDefined("title", title);
+  pushIfDefined("description", description);
+  pushIfDefined("event_at", event_at);
+  pushIfDefined("location", location);
+  pushIfDefined("type", type);
+  pushIfDefined("image", image);
+  // Normaliza numéricos si vienen como string
+  pushIfDefined("latitude", typeof latitude !== "undefined" ? Number(latitude) : undefined);
+  pushIfDefined("longitude", typeof longitude !== "undefined" ? Number(longitude) : undefined);
+
+  if (set.length === 0) {
+    return res.status(400).json({ error: "No hay campos para actualizar" });
+  }
+
+  values.push(eventId); // para el WHERE
+
+  try {
+    const { rows } = await pool.query(
+      `
+      UPDATE events
+         SET ${set.join(", ")}
+       WHERE id = $${i}
+       RETURNING id, title, description, event_at, location, type, image, latitude, longitude, created_by
+      `,
+      values
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Evento no encontrado" });
+    }
+
+    res.json(rows[0]);
+  } catch (e) {
+    console.error("PATCH /events error:", e);
+    res.status(500).json({ error: "Error actualizando evento" });
+  }
+  });
+
+  // Alias con PUT (por si el cliente usa PUT)
+  app.put("/events/:eventId", async (req, res) => {
+    req.method = "PATCH";
+    app._router.handle(req, res); // reusa la misma lógica
+  });
+
+// PATCH / PUT /events/:eventId -> actualiza campos permitidos dinámicamente
+app.patch('/events/:eventId', async (req, res) => {
+  const eventId = Number(req.params.eventId);
+  if (!Number.isInteger(eventId)) return res.status(400).json({ error: 'eventId inválido' });
+
+  const allowed = ['title','description','event_at','location','type','image','latitude','longitude'];
+  const entries = Object.entries(req.body || {}).filter(([k,v]) => allowed.includes(k) && typeof v !== 'undefined');
+
+  if (entries.length === 0) return res.status(400).json({ error: 'No hay campos para actualizar' });
+
+  const sets = [];
+  const values = [];
+  let idx = 1;
+  for (const [k, v] of entries) {
+    sets.push(`${k} = $${idx}`);
+    // normaliza tipos numéricos
+    if (k === 'latitude' || k === 'longitude') {
+      values.push(v === null ? null : Number(v));
+    } else {
+      values.push(v);
+    }
+    idx++;
+  }
+  values.push(eventId); // último parámetro para WHERE
+
+  const sql = `UPDATE events SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`;
+  try {
+    const result = await pool.query(sql, values);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Evento no encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('PATCH /events/:eventId error:', err);
+    res.status(500).json({ error: 'Error actualizando evento' });
+  }
+});
+
+// opcional: aceptar PUT con la misma lógica
+app.put('/events/:eventId', async (req, res) => {
+  // reusar la misma lógica delegando en PATCH handler
+  req.method = 'PATCH';
+  return app._router.handle(req, res);
+});
 
 

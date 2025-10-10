@@ -14,6 +14,7 @@ import TabNavigator from "./TabNavigator"; // <-- tu TabNavigator existente
 import EventDetail from "../screens/EventDetailScreen";
 import CreateEventScreen from "../screens/CreateEventScreen";
 import EditProfileScreen from "../screens/EditProfileScreen";
+import EditEventScreen from "../screens/EditEventScreen";
 // importa aquí cualquier otra pantalla "modal" o de detalle que abras desde tabs
 
 const Stack = createNativeStackNavigator();
@@ -49,9 +50,14 @@ function PrivateStack() {
         options={{ title: "Nuevo evento" }}
       />
       <Stack.Screen 
-      name="EditProfile" 
-      component={EditProfileScreen} 
-      options={{ title: "Editar perfil" }} 
+        name="EditProfile" 
+        component={EditProfileScreen} 
+        options={{ title: "Editar perfil" }} 
+      />
+      <Stack.Screen
+        name="EditEvent"
+        component={EditEventScreen}
+        options={{ presentation: 'modal', headerShown: true, title: 'Editar evento' }}
       />
       {/* añade aquí más screens de detalle si las tienes */}
     </Stack.Navigator>

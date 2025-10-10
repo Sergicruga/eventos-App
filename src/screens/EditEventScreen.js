@@ -1,19 +1,20 @@
+// screens/EditEventScreen.jsx
 import React, { useContext, useMemo, useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert, Image, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { EventContext } from '../EventContext';
-import * as ImagePicker from 'expo-image-picker';
 import { safePickImage } from '../utils/safePickImage';
+import { uploadEventPhoto } from '../api/events';
 
 export default function EditEventScreen({ route, navigation }) {
   // Puedes recibir el evento completo o solo el id
   const passedEvent = route.params?.event || null;
-  const eventId = route.params?.eventId || passedEvent?.id;
+  const routeEventId = route.params?.eventId || passedEvent?.id;
 
   const { events, updateEvent } = useContext(EventContext);
 
   const currentEvent = useMemo(
-    () => passedEvent || events.find(e => e.id === eventId),
-    [passedEvent, events, eventId]
+    () => passedEvent || events.find(e => String(e.id) === String(routeEventId)),
+    [passedEvent, events, routeEventId]
   );
 
   useEffect(() => {
@@ -23,9 +24,12 @@ export default function EditEventScreen({ route, navigation }) {
     }
   }, [currentEvent, navigation]);
 
-  const [type, setType] = useState(currentEvent?.type || '');
+  // Prefiere event_at (backend) y cae a date si viene del front
+  const initialDate = (currentEvent?.event_at || currentEvent?.date || '').toString();
+
+  const [type, setType] = useState(currentEvent?.type || 'local');
   const [title, setTitle] = useState(currentEvent?.title || '');
-  const [date, setDate] = useState(currentEvent?.date || '');
+  const [date, setDate] = useState(initialDate);
   const [locationName, setLocationName] = useState(currentEvent?.location || '');
   const [description, setDescription] = useState(currentEvent?.description || '');
   const [imageUri, setImageUri] = useState(
@@ -34,62 +38,82 @@ export default function EditEventScreen({ route, navigation }) {
     currentEvent?.imageUrl ||
     null
   );
+  const [saving, setSaving] = useState(false);
 
   const pickImage = async () => {
     const uri = await safePickImage();
-    if (uri) setImageUri(uri); {
-      Alert.alert('Permiso requerido', 'Necesitas permitir acceso a tus fotos.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: [ImagePicker.MediaType.Image],
-      allowsEditing: true,
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets?.[0]?.uri) {
-      setImageUri(result.assets[0].uri);
-    }
+    if (!uri) return; // cancelado
+    setImageUri(uri);
   };
 
-  const handleSave = () => {
-    if (!currentEvent) return;
+  const validate = () => {
     if (!title?.trim()) {
       Alert.alert('Falta título', 'Añade un título al evento.');
-      return;
+      return false;
     }
     if (!date?.trim()) {
       Alert.alert('Falta fecha', 'Añade una fecha (YYYY-MM-DD).');
-      return;
+      return false;
     }
-
-    // Validación rápida en cliente (ya validas también en el Context)
-    const today = new Date();
-    const eventDate = new Date(date);
-    if (eventDate < new Date(today.setHours(0,0,0,0))) {
-      Alert.alert('Fecha inválida', 'No puedes poner una fecha anterior a hoy.');
-      return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
+      Alert.alert('Fecha inválida', 'Usa formato YYYY-MM-DD.');
+      return false;
     }
+    return true;
+  };
 
-    updateEvent({
-      ...currentEvent,
-      type,
+  const handleSave = async () => {
+    if (!currentEvent) return;
+    if (!validate()) return;
+
+    setSaving(true);
+
+    // Construimos el payload que espera EventContext.updateEvent
+    const basePayload = {
+      id: currentEvent.id,
       title: title.trim(),
-      date: date.trim(),
-      location: locationName.trim(),
       description: description.trim(),
-      image: imageUri ?? null, 
-      // mantenemos lat/lon tal cual salvo que quieras cambiarlos aquí
-    });
+      date: date.trim(), // EventContext lo mapea a event_at
+      location: locationName.trim(),
+      type: type || 'local',
+      // Si la imagen es http(s), se envía; si es file://, la subimos aparte
+      image: (typeof imageUri === 'string' && imageUri.startsWith('http')) ? imageUri : undefined,
+    };
 
-    Alert.alert('Guardado', 'Evento actualizado correctamente.');
-    navigation.goBack();
+    try {
+      // 1) Actualiza datos básicos (usa lógica robusta del contexto con timeout y 204-safe)
+      const updated = await updateEvent(basePayload);
+      if (!updated) throw new Error('No se pudo actualizar los datos del evento');
+
+      // 2) Si la imagen es local (file://), súbela y vuelve a sincronizar
+      if (imageUri && typeof imageUri === 'string' && imageUri.startsWith('file://')) {
+        try {
+          const uploadRes = await uploadEventPhoto(Number(currentEvent.id), imageUri);
+          // El backend puede devolver { event } o { image }
+          if (uploadRes?.event) {
+            await updateEvent({ id: currentEvent.id, ...uploadRes.event });
+          } else if (uploadRes?.image) {
+            await updateEvent({ id: currentEvent.id, image: uploadRes.image });
+          }
+        } catch (e) {
+          console.warn('Subida de imagen falló:', e?.message || e);
+        }
+      }
+
+      Alert.alert('Listo', 'Evento actualizado correctamente.');
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'No se pudo actualizar el evento.');
+    } finally {
+      setSaving(false); // evita quedarse pensando
+    }
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Editar evento</Text>
 
-      <TouchableOpacity onPress={pickImage}>
+      <TouchableOpacity onPress={pickImage} disabled={saving}>
         <View style={styles.imagePicker}>
           {imageUri ? (
             <Image source={{ uri: imageUri }} style={styles.image} />
@@ -104,34 +128,47 @@ export default function EditEventScreen({ route, navigation }) {
         placeholder="Título"
         value={title}
         onChangeText={setTitle}
+        editable={!saving}
       />
       <TextInput
         style={styles.input}
         placeholder="Fecha (YYYY-MM-DD)"
         value={date}
         onChangeText={setDate}
+        editable={!saving}
       />
       <TextInput
         style={styles.input}
         placeholder="Lugar"
         value={locationName}
         onChangeText={setLocationName}
+        editable={!saving}
       />
       <TextInput
         style={styles.input}
         placeholder="Tipo (Concierto, Fiesta, ...)"
         value={type}
         onChangeText={setType}
+        editable={!saving}
       />
       <TextInput
-        style={styles.input}
+        style={[styles.input, { height: 100 }]}
         placeholder="Descripción"
         value={description}
         onChangeText={setDescription}
         multiline
+        editable={!saving}
       />
 
-      <Button title="Guardar cambios" onPress={handleSave} />
+      {saving ? (
+        <View style={{ marginTop: 8 }}>
+          <ActivityIndicator />
+        </View>
+      ) : null}
+
+      <View style={{ marginTop: 16 }}>
+        <Button title="Guardar cambios" onPress={handleSave} disabled={saving} />
+      </View>
     </View>
   );
 }
@@ -146,6 +183,7 @@ const styles = StyleSheet.create({
   imagePicker: {
     alignItems: 'center', justifyContent: 'center', height: 160, marginBottom: 20,
     borderWidth: 1, borderColor: '#ccc', borderRadius: 8, backgroundColor: '#f4f4f4',
+    overflow: 'hidden'
   },
   image: { width: '100%', height: 160, borderRadius: 8 },
 });
