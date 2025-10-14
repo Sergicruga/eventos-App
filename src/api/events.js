@@ -152,7 +152,15 @@ export async function uploadEventPhoto(eventId, localUri) {
     const t = await res.text().catch(() => "");
     throw new Error(`HTTP ${res.status} ${t}`);
   }
-
   const json = await parseJsonSafe(res);
   return json ?? { ok: true, event: { id: eventId }, image: null };
+}
+
+export async function deleteEvent(id) {
+  const res = await fetch(`${API_URL}/api/events/${id}`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 204) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'No se pudo eliminar el evento');
+  }
+  return true;
 }
