@@ -590,6 +590,44 @@ app.get("/users/:userId/events-created", async (req, res) => {
 
 // Servir archivos estáticos
 app.use('/uploads', express.static(uploadsBaseDir));
+// Healthcheck explícito
+app.get("/health", (_req, res) => res.json({ ok: true }));
+// =================== DELETE EVENTO ===================
+app.delete("/events/:eventId", async (req, res) => {
+  // Normaliza a entero (si usas UUID, quita esta validación y pasa tal cual)
+  const eventId = Number(req.params.eventId);
+
+  if (!Number.isInteger(eventId)) {
+    return res.status(400).json({ error: "eventId inválido" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Borrar dependencias primero si NO tienes ON DELETE CASCADE
+    await client.query(`DELETE FROM event_attendees WHERE event_id = $1`, [eventId]);
+    await client.query(`DELETE FROM event_favorites WHERE event_id = $1`, [eventId]);
+    await client.query(`DELETE FROM event_comments  WHERE event_id = $1`, [eventId]);
+
+    // Borrar el evento
+    const del = await client.query(`DELETE FROM events WHERE id = $1 RETURNING id`, [eventId]);
+
+    if (del.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Evento no encontrado" });
+    }
+
+    await client.query("COMMIT");
+    return res.status(204).send(); // éxito, sin contenido
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("DELETE /events/:eventId error:", e);
+    return res.status(500).json({ error: "Error eliminando el evento" });
+  } finally {
+    client.release();
+  }
+});
 
 app.listen(port, "0.0.0.0", () => {
   console.log(`✅ API escuchando en http://localhost:${port}`);
