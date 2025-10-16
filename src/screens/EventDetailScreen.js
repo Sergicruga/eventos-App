@@ -1,25 +1,42 @@
-import React, { useContext, useMemo, useState, useEffect } from 'react';
-import { View, Text, Image, StyleSheet, Button, Alert, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import React, { useContext, useMemo, useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, Image, StyleSheet, Alert, ScrollView, TouchableOpacity,
+  TextInput, ActivityIndicator, Platform, KeyboardAvoidingView
+} from 'react-native';
 import { EventContext } from '../EventContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import { API_URL } from '../api/config';
 import { AuthContext } from '../context/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+
+const COLORS = {
+  primary: '#3B5BA9',
+  secondary: '#6C757D',
+  accent: '#F5CBA7',
+  background: '#F8FAFC',
+  white: '#fff',
+  gray: '#888',
+  inputBg: '#F1F5F9',
+  border: '#D1D5DB',
+  shadow: '#B0BEC5',
+  text: '#444',
+  error: '#d32f2f',
+  success: 'green',
+};
 
 function isOwner(ev, user) {
   if (!ev || !user) return false;
   const uid = user?.id != null ? String(user.id) : null;
   const uname = typeof user?.name === 'string' ? user.name.trim().toLowerCase() : null;
-
   if (ev?.createdById != null && uid && String(ev.createdById) === uid) return true;
   if (ev?.created_by != null && uid && String(ev.created_by) === uid) return true;
   if (typeof ev?.createdBy === 'number' && uid && String(ev.createdBy) === uid) return true;
-
   if (typeof ev?.createdBy === 'string' && uid) {
     const v = ev.createdBy.trim();
     if (/^\d+$/.test(v) && v === uid) return true;
   }
-
   if (typeof ev?.createdBy === 'string' && uname) {
     if (ev.createdBy.trim().toLowerCase() === uname) return true;
   }
@@ -78,7 +95,7 @@ export default function EventDetailScreen({ route, navigation }) {
     return () => { cancelled = true; };
   }, [current.id, user?.id]);
 
-  const handleJoinOrLeave = async () => {
+  const handleJoinOrLeave = useCallback(async () => {
     if (!user?.id) {
       Alert.alert('Inicia sesión', 'Necesitas iniciar sesión para apuntarte.');
       return;
@@ -94,9 +111,7 @@ export default function EventDetailScreen({ route, navigation }) {
       setAttendees(prev => [...prev, { id: user.id, name: user.name }]);
       try {
         await joinEvent(current.id);
-        Alert.alert('¡Genial!', 'Te has apuntado a este evento.');
       } catch (e) {
-        // revertir
         setIsJoined(false);
         setAttendees(prev => prev.filter(a => String(a.id) !== uidStr));
         Alert.alert('Error', e?.message || 'No se pudo apuntar. Inténtalo de nuevo.');
@@ -106,9 +121,7 @@ export default function EventDetailScreen({ route, navigation }) {
       setAttendees(prev => prev.filter(a => String(a.id) !== uidStr));
       try {
         await leaveEvent(current.id);
-        Alert.alert('Cancelado', 'Ya no vas a este evento.');
       } catch (e) {
-        // revertir
         setIsJoined(true);
         setAttendees(prev => [...prev, { id: user.id, name: user.name }]);
         Alert.alert('Error', e?.message || 'No se pudo cancelar. Inténtalo de nuevo.');
@@ -127,7 +140,7 @@ export default function EventDetailScreen({ route, navigation }) {
     } catch {}
 
     setJoining(false);
-  };
+  }, [user, joining, isJoined, current.id, joinEvent, leaveEvent]);
 
   // ----- Comentarios -----
   const [comments, setComments] = useState([]);
@@ -135,7 +148,7 @@ export default function EventDetailScreen({ route, navigation }) {
   const [loadingComments, setLoadingComments] = useState(false);
   const [sending, setSending] = useState(false);
 
-  const fetchComments = async () => {
+  const fetchComments = useCallback(async () => {
     setLoadingComments(true);
     try {
       const res = await fetch(`${API_URL}/events/${current.id}/comments`);
@@ -144,9 +157,9 @@ export default function EventDetailScreen({ route, navigation }) {
       setComments([]);
     }
     setLoadingComments(false);
-  };
+  }, [current.id]);
 
-  const sendComment = async () => {
+  const sendComment = useCallback(async () => {
     if (!newComment.trim()) return;
     setSending(true);
     try {
@@ -159,209 +172,390 @@ export default function EventDetailScreen({ route, navigation }) {
       fetchComments();
     } catch {}
     setSending(false);
+  }, [current.id, user?.id, newComment, fetchComments]);
+
+  useEffect(() => { fetchComments(); }, [fetchComments]);
+
+  // ---- Date formatting ----
+  const formatDate = (d) => {
+    if (!d) return '';
+    const dateObj = typeof d === 'string' ? new Date(d) : d;
+    return dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  useEffect(() => { fetchComments(); }, [current.id]);
-
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
-      <TouchableOpacity
-        onPress={() => toggleFavorite(current.id, current)}
-        style={{ position: 'absolute', right: 20, top: 18, zIndex: 10 }}
-        hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-      >
-        <Text style={{ fontSize: 32 }}>{isFavorite ? '⭐' : '☆'}</Text>
-      </TouchableOpacity>
-
-      {/* Imagen */}
-      <View style={styles.headerImageWrap}>
-        {imgFallbackLocal ? (
-          <Image
-            source={require('../../assets/iconoApp.png')}
-            style={styles.headerImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <Image
-            source={getEventImageSource(effectiveImage)}
-            style={styles.headerImage}
-            resizeMode="cover"
-            onError={() => setImgFallbackLocal(true)}
-          />
-        )}
-      </View>
-
-      <Text style={styles.title}>{current.title}</Text>
-      <Text style={styles.date}>{current.date} | {current.location}</Text>
-      <Text style={styles.description}>{current.description || 'Sin descripción'}</Text>
-
-      {current.latitude != null && current.longitude != null && (
-        <View style={{ height: 220, borderRadius: 12, overflow: 'hidden', marginVertical: 12 }}>
-          <MapView
-            style={{ flex: 1 }}
-            initialRegion={{
-              latitude: Number(current.latitude),
-              longitude: Number(current.longitude),
-              latitudeDelta: 0.03,
-              longitudeDelta: 0.03,
-            }}
-          >
-            <Marker
-              coordinate={{ latitude: Number(current.latitude), longitude: Number(current.longitude) }}
-              title={current.title}
-              description={current.location}
-            />
-          </MapView>
-        </View>
-      )}
-
-      <View style={{ marginTop: 12 }}>
-        <Text style={{ fontWeight: 'bold' }}>
-          Asistentes ({attendees.length})
-        </Text>
-        {attendees.length > 0 ? (
-          <View style={{ marginTop: 6 }}>
-            {attendees.map(a => (
-              <Text key={a.id}>• {a.name}</Text>
-            ))}
-          </View>
-        ) : (
-          <Text style={{ color: '#777', marginTop: 4 }}>Sé el primero en apuntarte</Text>
-        )}
-      </View>
-
-      <View style={{ marginTop: 20, marginBottom: insets.bottom + 12 }}>
-        {current.type === 'api' ? (
-          <Button title="Comprar entradas" onPress={() => {}} color="#1976d2" />
-        ) : (
-          // Botón personalizado: se pone ROJO cuando estás apuntado
-          <TouchableOpacity
-            onPress={handleJoinOrLeave}
-            disabled={joining}
-            activeOpacity={0.8}
-            style={[
-              styles.attendBtn,
-              isJoined ? styles.attendBtnJoined : styles.attendBtnIdle,
-              joining && { opacity: 0.7 }
-            ]}
-          >
-            {joining ? (
-              <ActivityIndicator />
+    <LinearGradient
+      colors={['#f8fafc', '#e0e7ef', '#f5e8e4']}
+      style={{ flex: 1 }}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Imagen con estrella de favorito */}
+          <View style={styles.headerImageWrap}>
+            {imgFallbackLocal ? (
+              <Image
+                source={require('../../assets/iconoApp.png')}
+                style={styles.headerImage}
+                resizeMode="cover" // reverted back to "cover"
+              />
             ) : (
-              <Text style={styles.attendBtnText}>
-                {isJoined ? 'Ya no voy' : '¡Ya voy!'}
-              </Text>
+              <Image
+                source={getEventImageSource(effectiveImage)}
+                style={styles.headerImage}
+                resizeMode="cover" // reverted back to "cover"
+                onError={() => setImgFallbackLocal(true)}
+              />
             )}
-          </TouchableOpacity>
-        )}
-
-        {amOwner && (
-          <View style={{ marginTop: 12 }}>
             <TouchableOpacity
-              onPress={() => {
-                Alert.alert('Confirmar', '¿Seguro que quieres eliminar este evento?', [
-                  { text: 'Cancelar', style: 'cancel' },
-                  {
-                    text: 'Eliminar',
-                    style: 'destructive',
-                    onPress: async () => {
-                      await deleteEvent(current.id);
-                      navigation.goBack();
-                    },
-                  },
-                ]);
-              }}
-              activeOpacity={0.8}
-              style={[styles.attendBtn, styles.attendBtnJoined]}
+              onPress={() => toggleFavorite(current.id, current)}
+              style={styles.favoriteBtn}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              accessibilityLabel={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
             >
-              <Text style={styles.attendBtnText}>Eliminar evento</Text>
+              <Ionicons
+                name={isFavorite ? 'star' : 'star-outline'}
+                size={32}
+                color={COLORS.primary}
+                style={{ textShadowColor: COLORS.shadow, textShadowRadius: 4 }}
+              />
             </TouchableOpacity>
           </View>
-        )}
 
-        {amOwner && (
-          <View style={{ marginTop: 12 }}>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('EditEvent', { event: current })}
-              activeOpacity={0.8}
-              style={[styles.attendBtn, styles.attendBtnEdit]}
-            >
-              <Text style={styles.attendBtnText}>Editar evento</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
-      {/* Comentarios */}
-      <View style={{ marginTop: 24 }}>
-        <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>Comentarios:</Text>
-        {loadingComments ? (
-          <ActivityIndicator />
-        ) : comments.length > 0 ? (
-          comments.map(item => (
-            <View key={item.id} style={styles.commentContainer}>
-              <Text style={styles.commentName}>{item.name}</Text>
-              <Text>{item.comment}</Text>
-              <Text style={styles.commentDate}>{new Date(item.created_at).toLocaleString()}</Text>
+          {/* Card */}
+          <View style={styles.card}>
+            <Text style={styles.title}>{current.title}</Text>
+            <View style={styles.row}>
+              <Ionicons name="calendar-outline" size={18} color={COLORS.secondary} style={{ marginRight: 6 }} />
+              <Text style={styles.date}>{formatDate(current.date)}</Text>
             </View>
-          ))
-        ) : (
-          <Text>No hay comentarios.</Text>
-        )}
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
-          <TextInput
-            value={newComment}
-            onChangeText={setNewComment}
-            placeholder="Escribe un comentario..."
-            style={styles.commentInput}
-            editable={!sending}
-          />
-          <Button title="Enviar" onPress={sendComment} disabled={sending || !newComment.trim()} />
-        </View>
-      </View>
-    </ScrollView>
+            <View style={styles.row}>
+              <Ionicons name="location-outline" size={18} color={COLORS.secondary} style={{ marginRight: 6 }} />
+              <Text style={styles.location}>{current.location}</Text>
+            </View>
+            <Text style={styles.description}>{current.description || 'Sin descripción'}</Text>
+            {current.type && (
+              <View style={styles.typeTag}>
+                <Ionicons name="pricetag-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.typeTagText}>{current.type}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Mapa */}
+          {current.latitude != null && current.longitude != null && (
+            <View style={styles.mapWrap}>
+              <MapView
+                style={{ flex: 1 }}
+                initialRegion={{
+                  latitude: Number(current.latitude),
+                  longitude: Number(current.longitude),
+                  latitudeDelta: 0.03,
+                  longitudeDelta: 0.03,
+                }}
+                scrollEnabled={false}
+                zoomEnabled={false}
+                pitchEnabled={false}
+                rotateEnabled={false}
+              >
+                <Marker
+                  coordinate={{ latitude: Number(current.latitude), longitude: Number(current.longitude) }}
+                  title={current.title}
+                  description={current.location}
+                  pinColor={COLORS.primary}
+                />
+              </MapView>
+            </View>
+          )}
+
+          {/* Asistentes */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>
+              <Ionicons name="people-outline" size={18} color={COLORS.primary} /> Asistentes ({attendees.length})
+            </Text>
+            {attendees.length > 0 ? (
+              <View style={{ marginTop: 6 }}>
+                {attendees.map(a => (
+                  <Text key={a.id} style={styles.attendeeText}>• {a.name}</Text>
+                ))}
+              </View>
+            ) : (
+              <Text style={{ color: COLORS.gray, marginTop: 4 }}>Sé el primero en apuntarte</Text>
+            )}
+          </View>
+
+          {/* Botones de acción */}
+          <View style={styles.actionBtnContainer}>
+            <TouchableOpacity
+              onPress={handleJoinOrLeave}
+              disabled={joining}
+              activeOpacity={0.85}
+              style={[
+                styles.primaryBtn,
+                joining && { opacity: 0.7 }
+              ]}
+              accessibilityLabel={isJoined ? 'Cancelar asistencia' : 'Apuntarse al evento'}
+            >
+              {joining ? (
+                <ActivityIndicator color={COLORS.white} style={{ marginRight: 8 }} />
+              ) : (
+                <Ionicons name={isJoined ? 'close-circle-outline' : 'checkmark-circle-outline'} size={20} color={COLORS.white} style={{ marginRight: 8 }} />
+              )}
+              <Text style={styles.primaryBtnText}>{isJoined ? 'Ya no voy' : '¡Ya voy!'}</Text>
+            </TouchableOpacity>
+
+            {amOwner && (
+              <>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('EditEvent', { event: current })}
+                  activeOpacity={0.85}
+                  style={[styles.primaryBtn, { backgroundColor: COLORS.secondary }]}
+                >
+                  <Ionicons name="create-outline" size={20} color={COLORS.white} style={{ marginRight: 8 }} />
+                  <Text style={styles.primaryBtnText}>Editar evento</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    Alert.alert('Confirmar', '¿Seguro que quieres eliminar este evento?', [
+                      { text: 'Cancelar', style: 'cancel' },
+                      {
+                        text: 'Eliminar',
+                        style: 'destructive',
+                        onPress: async () => {
+                          await deleteEvent(current.id);
+                          navigation.goBack();
+                        },
+                      },
+                    ]);
+                  }}
+                  activeOpacity={0.85}
+                  style={[styles.primaryBtn, { backgroundColor: COLORS.error }]}
+                >
+                  <Ionicons name="trash-outline" size={20} color={COLORS.white} style={{ marginRight: 8 }} />
+                  <Text style={styles.primaryBtnText}>Eliminar evento</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+
+          {/* Comentarios */}
+          <View style={[styles.card, { marginTop: 28 }]}>
+            <Text style={styles.sectionTitle}>
+              <Ionicons name="chatbubble-ellipses-outline" size={18} color={COLORS.primary} /> Comentarios
+            </Text>
+            {loadingComments ? (
+              <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 12 }} />
+            ) : comments.length > 0 ? (
+              comments.map(item => (
+                <View key={item.id} style={styles.commentContainer}>
+                  <Text style={styles.commentName}>{item.name}</Text>
+                  <Text style={styles.commentText}>{item.comment}</Text>
+                  <Text style={styles.commentDate}>{new Date(item.created_at).toLocaleString()}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={{ color: COLORS.gray, marginVertical: 8 }}>No hay comentarios.</Text>
+            )}
+            <View style={styles.commentInputRow}>
+              <TextInput
+                value={newComment}
+                onChangeText={setNewComment}
+                placeholder="Escribe un comentario..."
+                style={styles.commentInput}
+                editable={!sending}
+                placeholderTextColor={COLORS.gray}
+                selectionColor={COLORS.primary}
+              />
+              <TouchableOpacity
+                onPress={sendComment}
+                disabled={sending || !newComment.trim()}
+                style={[
+                  styles.sendBtn,
+                  (sending || !newComment.trim()) && { opacity: 0.5 }
+                ]}
+                accessibilityLabel="Enviar comentario"
+              >
+                <Ionicons name="send" size={20} color={COLORS.white} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
+  container: { flex: 1, padding: 0, backgroundColor: 'transparent' },
   headerImageWrap: {
-    width: '100%',
+    width: '92%',
     height: 200,
-    backgroundColor: '#eef2f7',
-    borderRadius: 12,
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 18,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginTop: 32,
+    marginBottom: 16,
+    alignSelf: 'center',
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 2,
+    position: 'relative', // For absolute positioning of favoriteBtn
   },
-  headerImage: { width: '100%', height: '100%' },
-  title: { fontSize: 22, fontWeight: 'bold', marginBottom: 8, paddingRight: 42 },
-  date: { color: '#1976d2', marginBottom: 8 },
-  description: { fontSize: 16, marginBottom: 10 },
-  commentContainer: {
-    marginVertical: 4, backgroundColor: '#f3f3f3', borderRadius: 6, padding: 8,
+  favoriteBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    zIndex: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 22,
+    padding: 4,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  commentName: { fontWeight: 'bold', marginBottom: 2 },
-  commentDate: { fontSize: 10, color: '#888', marginTop: 2 },
-  commentInput: {
-    flex: 1, borderWidth: 1, borderRadius: 6, padding: 8, marginRight: 8, backgroundColor: '#fff',
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    padding: 18,
+    marginHorizontal: '4%',
+    marginBottom: 16,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  // ---- Botón asistir personalizado ----
-  attendBtn: {
-    paddingVertical: 12,
-    borderRadius: 10,
+  title: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    marginBottom: 8,
+    letterSpacing: 1.1,
+    textShadowColor: COLORS.shadow,
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+    fontFamily: Platform.OS === 'ios' ? 'AvenirNext-DemiBold' : 'sans-serif-medium',
+  },
+  row: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  date: { color: COLORS.secondary, fontSize: 16, fontWeight: '500' },
+  location: { color: COLORS.secondary, fontSize: 16, flex: 1, flexWrap: 'wrap' },
+  description: { fontSize: 16, color: COLORS.text, marginTop: 10, marginBottom: 6 },
+  typeTag: {
+    flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 8,
   },
-  attendBtnIdle: {
-    backgroundColor: 'green',
+  typeTagText: {
+    color: COLORS.primary,
+    fontWeight: '600',
+    marginLeft: 6,
+    fontSize: 14,
   },
-  attendBtnJoined: {
-    backgroundColor: '#d32f2f', // ROJO
+  mapWrap: {
+    height: 180,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginHorizontal: '4%',
+    marginBottom: 18,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  attendBtnEdit: {
-    backgroundColor: '#1976d2', // Azul
+  sectionTitle: {
+    fontWeight: 'bold',
+    fontSize: 18,
+    color: COLORS.primary,
+    marginBottom: 6,
+    letterSpacing: 0.5,
   },
-  attendBtnText: {
-    fontWeight: '700',
-    color: '#fff',
+  attendeeText: {
+    color: COLORS.text,
+    fontSize: 15,
+    marginVertical: 1,
+    marginLeft: 2,
+  },
+  actionBtnContainer: {
+    width: '92%',
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 10,
+  },
+  primaryBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
+    marginTop: 0,
+    marginBottom: 0,
+    width: '100%',
+  },
+  commentContainer: {
+    marginVertical: 6,
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 10,
+    padding: 10,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  commentName: { fontWeight: 'bold', color: COLORS.primary, marginBottom: 2 },
+  commentText: { color: COLORS.text, fontSize: 15 },
+  commentDate: { fontSize: 10, color: COLORS.gray, marginTop: 2, alignSelf: 'flex-end' },
+  commentInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  commentInput: {
+    flex: 1,
+    borderWidth: 0,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 15,
+    backgroundColor: 'transparent',
+    color: COLORS.text,
+  },
+  sendBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    padding: 10,
+    marginLeft: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 1,
   },
 });
