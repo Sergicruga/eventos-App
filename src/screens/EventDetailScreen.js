@@ -46,8 +46,7 @@ function isOwner(ev, user) {
 export default function EventDetailScreen({ route, navigation }) {
   const { event } = route.params;
   const {
-    events, favorites, toggleFavorite, joinEvent, leaveEvent, deleteEvent,
-    getEventImageSource, getEffectiveEventImage
+    events, favorites, toggleFavorite, joinEvent, leaveEvent, deleteEvent
   } = useContext(EventContext);
   const { user } = useContext(AuthContext);
   const insets = useSafeAreaInsets();
@@ -59,9 +58,6 @@ export default function EventDetailScreen({ route, navigation }) {
   );
   const isFavorite = favorites.includes(current.id);
   const amOwner = isOwner(current, user);
-
-  // Imagen efectiva (override > server)
-  const effectiveImage = getEffectiveEventImage(current.id, current.image);
 
   // ----- Asistentes -----
   const [attendees, setAttendees] = useState([]);
@@ -183,6 +179,13 @@ export default function EventDetailScreen({ route, navigation }) {
     return dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
+  // --- MAIN IMAGE LOGIC: identical to ProfileScreen miniatures ---
+  const getImageUri = (imgPath) => {
+    if (!imgPath) return null;
+    if (imgPath.startsWith('http')) return imgPath;
+    return `${API_URL}${imgPath}`;
+  };
+
   return (
     <LinearGradient
       colors={['#f8fafc', '#e0e7ef', '#f5e8e4']}
@@ -197,21 +200,15 @@ export default function EventDetailScreen({ route, navigation }) {
           showsVerticalScrollIndicator={false}
         >
           {/* Imagen con estrella de favorito */}
-          <View style={styles.headerImageWrap}>
-            {imgFallbackLocal ? (
-              <Image
-                source={require('../../assets/iconoApp.png')}
-                style={styles.headerImage}
-                resizeMode="cover" // reverted back to "cover"
-              />
-            ) : (
-              <Image
-                source={getEventImageSource(effectiveImage)}
-                style={styles.headerImage}
-                resizeMode="cover" // reverted back to "cover"
-                onError={() => setImgFallbackLocal(true)}
-              />
-            )}
+          <View style={[styles.headerImageWrap, { justifyContent: 'center', alignItems: 'center' }]}>
+            <Image
+              source={
+                current.image
+                  ? { uri: `http://10.86.3.189:4000${current.image}` }
+                  : require('../../assets/iconoApp.png')
+              }
+              style={styles.headerImage}
+            />
             <TouchableOpacity
               onPress={() => toggleFavorite(current.id, current)}
               style={styles.favoriteBtn}
@@ -406,7 +403,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
     elevation: 2,
-    position: 'relative', // For absolute positioning of favoriteBtn
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+    backgroundColor: '#eee',
+    resizeMode: 'cover',
   },
   favoriteBtn: {
     position: 'absolute',

@@ -751,4 +751,27 @@ app.put('/events/:eventId', async (req, res) => {
   return app._router.handle(req, res);
 });
 
+// === SUBIR IMAGEN DE EVENTO ===
+// ⬇️ Place this BEFORE app.use(express.json())
+app.post('/events/upload', uploadEventImage.single('image'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No se subió ninguna imagen' });
+  }
+  // Elimina la imagen anterior si se proporciona
+  const oldImagePath = req.body.oldImagePath;
+  if (oldImagePath && typeof oldImagePath === 'string' && oldImagePath.startsWith('/uploads/events/')) {
+    const fullPath = path.join(process.cwd(), oldImagePath);
+    fs.unlink(fullPath, err => {
+      if (err) {
+        console.warn('No se pudo borrar la imagen anterior:', fullPath, err.message);
+      }
+    });
+  }
+  res.json({ path: `/uploads/events/${req.file.filename}` });
+});
+
+app.use(express.json());
+
+// ...rest of your routes...
+
 

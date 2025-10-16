@@ -8,6 +8,7 @@ import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
+import { AuthContext } from '../context/AuthContext';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
 
@@ -88,6 +89,7 @@ function EventCard({ item, isFavorite, onToggleFavorite, onPress, getEventImageS
 
 export default function HomeScreen() {
   const { communityEvents, favorites, toggleFavorite, getEventImageSource, getEffectiveEventImage } = useContext(EventContext);
+  const { user } = useContext(AuthContext);
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState(null);
   const [loadingLocation, setLoadingLocation] = useState(true);
@@ -115,8 +117,17 @@ export default function HomeScreen() {
       .finally(() => setLoadingApiEvents(false));
   }, []);
 
+  const myUserId = user?.id != null ? String(user.id) : null;
+
+  // Show all events except those created by you
+  const otherUserEvents = communityEvents.filter(ev =>
+    myUserId
+      ? String(ev.created_by) !== myUserId
+      : true
+  );
+
   const allEvents = [
-    ...communityEvents.map(ev => ({ ...ev, type: 'local' })),
+    ...otherUserEvents.map(ev => ({ ...ev, type: 'local' })),
     ...apiEvents.map(ev => {
       const venue = ev._embedded?.venues?.[0];
       const lat = venue?.location?.latitude ? parseFloat(venue.location.latitude) : null;

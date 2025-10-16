@@ -1,23 +1,25 @@
 // /src/api/upload.js
 import { API_URL } from '../api/config';
 
-export async function uploadEventPhoto(localUri) {
+// Usa un nombre único para cada imagen subida
+export async function uploadEventImage(localUri, oldImagePath = '') {
+  const uniqueName = `event_${Date.now()}.jpg`;
   const form = new FormData();
-  form.append('photo', {
+  form.append('image', {
     uri: localUri,
-    name: 'event.jpg',
+    name: uniqueName,
     type: 'image/jpeg',
   });
+  if (oldImagePath) {
+    form.append('oldImagePath', oldImagePath);
+  }
 
   const res = await fetch(`${API_URL}/events/upload`, {
     method: 'POST',
-    // OJO: no pongas 'Content-Type' manualmente con FormData en RN
     body: form,
   });
 
   if (!res.ok) throw new Error('Error subiendo imagen');
   const data = await res.json();
-  // Preferimos guardar la ruta relativa para que funcione toImageSource
-  // y se convierta con API_URL: "/uploads/xxxx.jpg"
   return data.path || data.url;
 }

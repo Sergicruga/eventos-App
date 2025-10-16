@@ -13,6 +13,7 @@ import { API_URL } from '../api/config';
 // Optional: Uncomment if you have these installed
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { uploadEventImage } from '../api/upload'; // Add this import
 
 const COLORS = {
   primary: '#3B5BA9', // Soft blue
@@ -177,7 +178,7 @@ export default function CreateEventScreen({ navigation }) {
 
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permiso denegado', 'No podemos guardar el evento sin ubicación.');
+      Alert.alert('Permiso denegado', 'No se puede guardar el evento sin ubicación.');
       setSaving(false);
       return;
     }
@@ -211,8 +212,17 @@ export default function CreateEventScreen({ navigation }) {
       }
     }
 
-    // --- Use local image URI directly ---
-    let imageUrl = imageUri || 'https://placehold.co/600x300?text=Evento';
+    // --- Upload image if present ---
+    let imageUrl = '';
+    if (imageUri) {
+      try {
+        imageUrl = await uploadEventImage(imageUri);
+      } catch (e) {
+        Alert.alert('Error', 'No se pudo subir la imagen.');
+        setSaving(false);
+        return;
+      }
+    }
 
     // Save event
     addEvent({
@@ -223,7 +233,7 @@ export default function CreateEventScreen({ navigation }) {
         `${baseCoords.latitude.toFixed(5)}, ${baseCoords.longitude.toFixed(5)}`,
       description,
       type,
-      image: imageUrl,
+      image: imageUrl, // Use uploaded image path or empty string
       latitude: baseCoords.latitude,
       longitude: baseCoords.longitude,
     });

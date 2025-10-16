@@ -20,3 +20,15 @@ export function toImageSource(img) {
 }
 
 export const DEFAULT_IMAGE = { uri: DEFAULT_IMAGE_URI };
+
+export function getEventImageSource(imagePath) {
+  if (!imagePath) {
+    return require('../../assets/iconoApp.png');
+  }
+  if (imagePath.startsWith('http')) {
+    return { uri: imagePath };
+  }
+  // Remove double slashes if present
+  const cleanPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+  return { uri: `${API_URL}${cleanPath}` };
+}
