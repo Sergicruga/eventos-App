@@ -30,7 +30,8 @@
           "apiKey": "AIzaSyC5OaOH5s6obmHZNMzw8bO6hXuh7G6I7cw"
         }
       },
-      "package": "com.sergicruga.eventoapp"
+      "package": "com.sergicruga.eventoapp",
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
