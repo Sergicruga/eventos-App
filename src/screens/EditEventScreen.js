@@ -1,5 +1,5 @@
 // screens/EditEventScreen.jsx
-import React, { useContext, useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useContext, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Alert, Image, TouchableOpacity,
   Platform, Modal, ScrollView, KeyboardAvoidingView, ActivityIndicator
@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { uploadEventImage } from '../api/upload';
 import { Calendar } from 'react-native-calendars'; // Add this import at the top
+import { API_URL } from '../api/config'; // <-- necesario para resolver rutas relativas
 
 const COLORS = {
   primary: '#3B5BA9',
@@ -32,6 +33,20 @@ const EVENT_TYPES = [
   { label: 'Deportivo', value: 'Deportivo' },
   { label: 'Otro', value: 'Otro' },
 ];
+
+// --- Helper para normalizar imagen a URL absoluta al renderizar ---
+const toAbsoluteUrl = (uri) => {
+  if (!uri) return null;
+  if (typeof uri !== 'string') uri = String(uri);
+
+  // Ya absoluta o file:// (local)
+  if (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('file://')) return uri;
+
+  // Quitar slash final en API_URL y unir correctamente
+  const base = API_URL?.replace(/\/+$/, '') || '';
+  if (uri.startsWith('/')) return `${base}${uri}`;
+  return `${base}/${uri}`;
+};
 
 export default function EditEventScreen({ route, navigation }) {
   const passedEvent = route.params?.event || null;
@@ -64,13 +79,11 @@ export default function EditEventScreen({ route, navigation }) {
     longitude: currentEvent?.longitude ?? null,
   });
   const [hasLocPerm, setHasLocPerm] = useState(false);
-  const [imageUri, setImageUri] = useState(
-    currentEvent?.image && currentEvent.image.startsWith('http')
-      ? currentEvent.image
-      : currentEvent?.image
-        ? `${currentEvent.image}`
-        : null
-  );
+
+  // --- Imagen: resolver a absoluta para que se vea al abrir ---
+  const resolvedInitialImage = toAbsoluteUrl(currentEvent?.image || '');
+  const initialResolvedRef = useRef(resolvedInitialImage);
+  const [imageUri, setImageUri] = useState(resolvedInitialImage);
 
   // Modal map
   const [mapVisible, setMapVisible] = useState(false);
@@ -114,7 +127,7 @@ export default function EditEventScreen({ route, navigation }) {
       quality: 0.8,
     });
     if (!result.canceled && result.assets?.[0]?.uri) {
-      setImageUri(result.assets[0].uri);
+      setImageUri(result.assets[0].uri); // file://
     }
   }, []);
 
@@ -228,21 +241,22 @@ export default function EditEventScreen({ route, navigation }) {
       }
     }
 
-    // --- Upload image if changed and local ---
+    // --- Upload image si ha cambiado ---
     let imageUrl = currentEvent?.image || '';
-    let oldImagePath = '';
+    const initialResolved = initialResolvedRef.current || '';
     if (imageUri && imageUri.startsWith('file://')) {
       try {
-        oldImagePath = currentEvent?.image || '';
+        const oldImagePath = currentEvent?.image || '';
         imageUrl = await uploadEventImage(imageUri, oldImagePath); // pass old image path
       } catch (e) {
         Alert.alert('Error', 'No se pudo subir la imagen.');
         setSaving(false);
         return;
       }
-    } else if (imageUri) {
+    } else if (imageUri && imageUri !== initialResolved) {
+      // Se seleccionó una imagen remota distinta (p.ej. pegaste una URL)
       imageUrl = imageUri;
-    }
+    } // si no ha cambiado, mantenemos currentEvent.image tal cual (evita pasar absoluta si guardabas relativa)
 
     // Save event
     try {
