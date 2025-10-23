@@ -24,7 +24,6 @@ const eventStorage = multer.diskStorage({
 });
 const uploadEventImage = multer({ storage: eventStorage });
 
-
 dotenv.config();
 const { Pool } = pkg;
 
@@ -61,6 +60,50 @@ const pool = new Pool({
 pool.connect()
   .then(c => { console.log("✅ Conectado a PostgreSQL"); c.release(); })
   .catch(err => console.error("❌ Error conectando a PostgreSQL:", err.message));
+
+/* ============================================================
+   Middleware para normalizar :eventId (soporta IDs externos)
+   ============================================================ */
+const isNumericId = v => /^\d+$/.test(String(v ?? ''));
+
+app.param('eventId', async (req, res, next, rawId) => {
+  try {
+    // Si es numérico, úsalo tal cual
+    if (isNumericId(rawId)) {
+      req.eventId = Number(rawId);
+      return next();
+    }
+
+    // Si es alfanumérico (tm-...), necesitamos source y externalId
+    const source = req.query.source || req.body?.source;
+    const externalId = req.query.externalId || req.body?.externalId || rawId;
+
+    if (!source || !externalId) {
+      return res.status(400).json({
+        error: 'eventId_externo_necesita_source_y_externalId',
+        detail: 'Usa ?source=ticketmaster&externalId=tm-XXXX o envíalos en el body.'
+      });
+    }
+
+    // Traducir api_events -> events.id
+    const r = await pool.query(
+      'SELECT event_id FROM api_events WHERE source=$1 AND external_id=$2',
+      [source, externalId]
+    );
+    if (!r.rows.length || !r.rows[0].event_id) {
+      return res.status(404).json({
+        error: 'evento_externo_no_enlazado',
+        detail: `No existe mapeo en api_events(source='${source}', external_id='${externalId}')`
+      });
+    }
+
+    req.eventId = r.rows[0].event_id; // id interno numérico
+    return next();
+  } catch (e) {
+    console.error('app.param(eventId) ERROR:', e);
+    return res.status(500).json({ error: 'resolver_evento_falló', detail: e.message });
+  }
+});
 
 // health
 app.get("/", (_req, res) => res.json({ ok: true, msg: "API viva" }));
@@ -107,9 +150,6 @@ app.get("/events", async (req, res) => {
     res.status(500).json({ error: "Error listando eventos" });
   }
 });
-
-
-
 
 app.post("/events", async (req, res) => {
   try {
@@ -298,7 +338,6 @@ app.get('/users/:userId/created-events', async (req, res) => {
   res.json(rows);
 });
 
-
 // Servir imágenes de perfil
 app.use("/uploads", express.static(uploadDir));
 
@@ -319,9 +358,9 @@ app.delete('/friends', async (req, res) => {
   }
 });
 
-// Obtener comentarios de un evento
+// Obtener comentarios de un evento (usa req.eventId)
 app.get('/events/:eventId/comments', async (req, res) => {
-  const { eventId } = req.params;
+  const eventId = req.eventId; // ✅ normalizado
   const { rows } = await pool.query(
     `SELECT ec.id, ec.comment, ec.created_at, u.name
      FROM event_comments ec
@@ -333,9 +372,9 @@ app.get('/events/:eventId/comments', async (req, res) => {
   res.json(rows);
 });
 
-// Añadir comentario a un evento
+// Añadir comentario a un evento (usa req.eventId)
 app.post('/events/:eventId/comments', async (req, res) => {
-  const { eventId } = req.params;
+  const eventId = req.eventId; // ✅ normalizado
   const { userId, comment } = req.body;
   if (!userId || !comment) return res.status(400).json({ error: 'userId y comment requeridos' });
   const { rows } = await pool.query(
@@ -346,6 +385,7 @@ app.post('/events/:eventId/comments', async (req, res) => {
   );
   res.status(201).json(rows[0]);
 });
+
 // =================== AUTH (registro / login) ===================
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_super_largo_cámbialo";
 
@@ -418,9 +458,9 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-// Marcar evento como favorito
+// Marcar evento como favorito (usa req.eventId)
 app.post('/events/:eventId/favorite', async (req, res) => {
-  const { eventId } = req.params;
+  const eventId = req.eventId; // ✅ normalizado
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId requerido' });
   await pool.query(
@@ -432,9 +472,9 @@ app.post('/events/:eventId/favorite', async (req, res) => {
   res.json({ success: true });
 });
 
-// Quitar favorito
+// Quitar favorito (usa req.eventId)
 app.delete('/events/:eventId/favorite', async (req, res) => {
-  const { eventId } = req.params;
+  const eventId = req.eventId; // ✅ normalizado
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId requerido' });
   await pool.query(
@@ -443,7 +483,6 @@ app.delete('/events/:eventId/favorite', async (req, res) => {
   );
   res.json({ success: true });
 });
-
 
 // === FAVORITOS ===
 
@@ -471,7 +510,7 @@ app.get('/users/:userId/favorites/events', async (req, res) => {
   res.json(result.rows);
 });
 
-// Marcar favorito
+// Marcar favorito (legacy por body numérico; lo dejo tal cual)
 app.post('/favorites', async (req, res) => {
   try {
     const userId = Number(req.body.userId);
@@ -510,7 +549,7 @@ app.delete('/favorites', async (req, res) => {
 
 // === ASISTENTES ===
 
-// Apuntarse a un evento
+// Apuntarse a un evento (legacy por body; lo dejo igual)
 app.post('/attendees', async (req, res) => {
   const { userId, eventId } = req.body;
   if (!userId || !eventId) return res.status(400).json({ error: 'userId y eventId requeridos' });
@@ -524,7 +563,7 @@ app.post('/attendees', async (req, res) => {
   res.json({ success: true });
 });
 
-// Dejar de asistir
+// Dejar de asistir (legacy por body; lo dejo igual)
 app.delete('/attendees', async (req, res) => {
   const { userId, eventId } = req.body;
   if (!userId || !eventId) return res.status(400).json({ error: 'userId y eventId requeridos' });
@@ -536,9 +575,9 @@ app.delete('/attendees', async (req, res) => {
   res.json({ success: true });
 });
 
-// Obtener asistentes de un evento
+// Obtener asistentes de un evento (usa req.eventId)
 app.get('/events/:eventId/attendees', async (req, res) => {
-  const { eventId } = req.params;
+  const eventId = req.eventId; // ✅ normalizado
   try {
     const { rows } = await pool.query(
       `SELECT u.id, u.name
@@ -554,15 +593,17 @@ app.get('/events/:eventId/attendees', async (req, res) => {
   }
 });
 
-// (Opcional) comprobar si un usuario asiste
+// (Opcional) comprobar si un usuario asiste (usa req.eventId)
 app.get('/events/:eventId/attendees/:userId', async (req, res) => {
-  const { eventId, userId } = req.params;
+  const eventId = req.eventId; // ✅ normalizado
+  const { userId } = req.params;
   const r = await pool.query(
     `SELECT 1 FROM event_attendees WHERE event_id = $1 AND user_id = $2`,
     [eventId, userId]
   );
   res.json({ attending: r.rowCount > 0 });
 });
+
 // Obtener datos de un usuario
 app.get("/users/:userId", async (req, res) => {
   const { userId } = req.params;
@@ -587,19 +628,15 @@ app.get("/users/:userId/events-created", async (req, res) => {
   res.json(rows);
 });
 
-
 // Servir archivos estáticos
 app.use('/uploads', express.static(uploadsBaseDir));
 // Healthcheck explícito
 app.get("/health", (_req, res) => res.json({ ok: true }));
-// =================== DELETE EVENTO ===================
-app.delete("/events/:eventId", async (req, res) => {
-  // Normaliza a entero (si usas UUID, quita esta validación y pasa tal cual)
-  const eventId = Number(req.params.eventId);
 
-  if (!Number.isInteger(eventId)) {
-    return res.status(400).json({ error: "eventId inválido" });
-  }
+// =================== DELETE EVENTO ===================
+// Usa req.eventId (normalizado por app.param), sin Number(...)
+app.delete("/events/:eventId", async (req, res) => {
+  const eventId = req.eventId; // ✅ normalizado
 
   const client = await pool.connect();
   try {
@@ -629,16 +666,10 @@ app.delete("/events/:eventId", async (req, res) => {
   }
 });
 
-app.listen(port, "0.0.0.0", () => {
-  console.log(`✅ API escuchando en http://localhost:${port}`);
-});
-
 // === ACTUALIZAR EVENTO ===
+// Handler 1 (usa req.eventId)
 app.patch("/events/:eventId", async (req, res) => {
-  const eventId = Number(req.params.eventId);
-  if (!Number.isInteger(eventId)) {
-    return res.status(400).json({ error: "eventId inválido" });
-  }
+  const eventId = req.eventId; // ✅ normalizado
 
   // Campos permitidos
   const {
@@ -660,7 +691,9 @@ app.patch("/events/:eventId", async (req, res) => {
   const pushIfDefined = (field, value) => {
     if (typeof value !== "undefined") {
       set.push(`${field} = $${i++}`);
-      values.push(value);
+      values.push(field === 'latitude' || field === 'longitude'
+        ? (value === null ? null : Number(value))
+        : value);
     }
   };
 
@@ -670,9 +703,8 @@ app.patch("/events/:eventId", async (req, res) => {
   pushIfDefined("location", location);
   pushIfDefined("type", type);
   pushIfDefined("image", image);
-  // Normaliza numéricos si vienen como string
-  pushIfDefined("latitude", typeof latitude !== "undefined" ? Number(latitude) : undefined);
-  pushIfDefined("longitude", typeof longitude !== "undefined" ? Number(longitude) : undefined);
+  pushIfDefined("latitude", latitude);
+  pushIfDefined("longitude", longitude);
 
   if (set.length === 0) {
     return res.status(400).json({ error: "No hay campos para actualizar" });
@@ -700,18 +732,17 @@ app.patch("/events/:eventId", async (req, res) => {
     console.error("PATCH /events error:", e);
     res.status(500).json({ error: "Error actualizando evento" });
   }
-  });
+});
 
-  // Alias con PUT (por si el cliente usa PUT)
-  app.put("/events/:eventId", async (req, res) => {
-    req.method = "PATCH";
-    app._router.handle(req, res); // reusa la misma lógica
-  });
+// Alias con PUT (por si el cliente usa PUT)
+app.put("/events/:eventId", async (req, res) => {
+  req.method = "PATCH";
+  app._router.handle(req, res); // reusa la misma lógica
+});
 
-// PATCH / PUT /events/:eventId -> actualiza campos permitidos dinámicamente
+// PATCH duplicado (lo dejo por compatibilidad, pero usa req.eventId)
 app.patch('/events/:eventId', async (req, res) => {
-  const eventId = Number(req.params.eventId);
-  if (!Number.isInteger(eventId)) return res.status(400).json({ error: 'eventId inválido' });
+  const eventId = req.eventId; // ✅ normalizado
 
   const allowed = ['title','description','event_at','location','type','image','latitude','longitude'];
   const entries = Object.entries(req.body || {}).filter(([k,v]) => allowed.includes(k) && typeof v !== 'undefined');
@@ -723,7 +754,6 @@ app.patch('/events/:eventId', async (req, res) => {
   let idx = 1;
   for (const [k, v] of entries) {
     sets.push(`${k} = $${idx}`);
-    // normaliza tipos numéricos
     if (k === 'latitude' || k === 'longitude') {
       values.push(v === null ? null : Number(v));
     } else {
@@ -752,7 +782,6 @@ app.put('/events/:eventId', async (req, res) => {
 });
 
 // === SUBIR IMAGEN DE EVENTO ===
-// ⬇️ Place this BEFORE app.use(express.json())
 app.post('/events/upload', uploadEventImage.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No se subió ninguna imagen' });
@@ -770,8 +799,25 @@ app.post('/events/upload', uploadEventImage.single('image'), (req, res) => {
   res.json({ path: `/uploads/events/${req.file.filename}` });
 });
 
+app.get('/api/favorites/:id', async (req, res) => {
+  try {
+    const { id } = req.params; // id como string (ej. "tm-...")
+    // Antes (mal): '... WHERE event_id = $1::int', [parseInt(id)]
+    const { rows } = await pool.query(
+      'SELECT * FROM favorites WHERE event_id = $1',
+      [id]
+    );
+    if (rows.length === 0) return res.status(404).json({ message: 'No encontrado' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error del servidor' });
+  }
+});
+
 app.use(express.json());
 
-// ...rest of your routes...
-
-
+/* ====== START ====== */
+app.listen(port, "0.0.0.0", () => {
+  console.log(`✅ API escuchando en http://localhost:${port}`);
+});
