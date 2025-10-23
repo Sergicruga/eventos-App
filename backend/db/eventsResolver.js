@@ -42,4 +42,4 @@ export async function resolveEventId(pool, { source, externalId, payload }) {
 }
 
 // util para detectar numérico
-export const isNumericId = (v) => /^\d+$/.test(String(v ?? ''));
+export const isNumericId = (v) => /^\d+$/.test(String(v ?? ''));  
