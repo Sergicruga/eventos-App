@@ -1,4 +1,4 @@
-import React, { useContext, createContext, useState, useEffect, useMemo } from 'react';
+import React, { useContext, createContext, useState, useEffect, useMemo, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -13,7 +13,109 @@ import { toImageSource } from './utils/imageSource';
 export const EventContext = createContext();
 
 // Utils
-const isNumericId = (id) => /^\d+$/.test(String(id));
+const isNumericId = (v) =>
+  typeof v === 'number' || (typeof v === 'string' && /^\d+$/.test(v));
+
+// Extrae un external_id razonable (TM u otros)
+const externalIdFrom = (ev) => {
+  const ext = ev?.externalId ?? ev?.tm_id ?? ev?.sourceId ?? null;
+  if (ext) return String(ext);
+  if (ev?.id && !isNumericId(ev.id)) return String(ev.id);
+  return null;
+};
+
+// Busca un evento por external_id en el backend
+async function findByExternalId(extId, token) {
+  if (!extId) return null;
+  const base = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+  const urls = [
+    `${base}/events/by-external/${encodeURIComponent(extId)}`,
+    `${base}/api/events/by-external/${encodeURIComponent(extId)}`,
+    `${base}/v1/events/by-external/${encodeURIComponent(extId)}`,
+  ];
+  const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  for (const url of urls) {
+    try {
+      const res = await safeFetch(url, { headers }, { timeoutMs: 10000 });
+      if (!res.ok) continue;
+      const json = await parseJsonSafe(res);
+      const id = json?.id ?? json?.data?.id ?? null;
+      if (id != null) return String(id);
+    } catch {}
+  }
+  return null;
+}
+
+// Crea/actualiza en BD un evento externo y devuelve su id interno
+async function ensureEventOnServer(ev, token) {
+  if (!ev) return null;
+
+  // Si ya es id numérico, nada que hacer
+  if (isNumericId(ev.id)) return String(ev.id);
+
+  const external_id = externalIdFrom(ev);
+  const payload = {
+    title: ev.title ?? '',
+    description: ev.description ?? '',
+    location: ev.location ?? '',
+    event_at: ev.date ?? ev.event_at ?? null,
+    image: ev.image ?? null,
+    latitude: ev.latitude ?? null,
+    longitude: ev.longitude ?? null,
+    type: ev.type || 'api',
+    source: ev.source || 'ticketmaster',
+    external_id,
+    url: ev.url || ev.purchaseUrl || ev.externalUrl || ev.buyUrl || null,
+  };
+
+  const base = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  // 1) Endpoints de importación (si existen)
+  const importUrls = [
+    `${base}/events/import-external`,
+    `${base}/api/events/import-external`,
+    `${base}/v1/events/import-external`,
+  ];
+  for (const url of importUrls) {
+    try {
+      const res = await safeFetch(url, { method: 'POST', headers, body: JSON.stringify(payload) }, { timeoutMs: 12000 });
+      if (res.status === 409 && external_id) {
+        // ya existe: intenta obtenerlo
+        const id = await findByExternalId(external_id, token);
+        if (id) return id;
+      }
+      const json = await parseJsonSafe(res);
+      const id = json?.id ?? json?.data?.id ?? null;
+      if (res.ok && id != null) return String(id);
+    } catch {}
+  }
+
+  // 2) Fallback: crear evento estándar
+  const createUrls = [
+    `${base}/events`,
+    `${base}/api/events`,
+    `${base}/v1/events`,
+  ];
+  for (const url of createUrls) {
+    try {
+      const res = await safeFetch(url, { method: 'POST', headers, body: JSON.stringify(payload) }, { timeoutMs: 12000 });
+      if (res.status === 409 && external_id) {
+        const id = await findByExternalId(external_id, token);
+        if (id) return id;
+      }
+      const json = await parseJsonSafe(res);
+      const id = json?.id ?? json?.data?.id ?? null;
+      if (res.ok && id != null) return String(id);
+    } catch {}
+  }
+
+  return await findByExternalId(external_id, token);
+}
+
 const dbIdFrom = (id) => (isNumericId(id) ? Number(id) : null);
 const isLocalUri = (uri) => typeof uri === 'string' && uri.startsWith('file://');
 
@@ -671,53 +773,68 @@ const updateEvent = async (updatedEvent) => {
   };
 
   // ===== FAVORITOS =====
-  const toggleFavorite = async (eventId, eventObj) => {
-    const alreadyFav = favorites.includes(eventId);
+  const toggleFavorite = useCallback(
+    async (id, ev) => {
+      const key = String(id ?? ev?.id);
 
-    // UI optimista
-    setFavorites(prev => (alreadyFav ? prev.filter(id => id !== eventId) : [eventId, ...prev]));
-    if (!alreadyFav && eventObj) {
-      setFavoriteItems(prevMap => ({
-        ...prevMap,
-        [eventId]: {
-          id: String(eventObj.id),
-          title: eventObj.title || '',
-          date: eventObj.date || '',
-          location: eventObj.location || '',
-          description: eventObj.description || '',
-          image: eventObj.image || (eventObj.images?.[0]?.url ?? null),
-          type: eventObj.type || 'local',
-          latitude: eventObj.latitude != null ? Number(eventObj.latitude) : null,
-          longitude: eventObj.longitude != null ? Number(eventObj.longitude) : null,
-        },
-      }));
-    }
-    if (alreadyFav) {
-      setFavoriteItems(prevMap => {
-        const copy = { ...prevMap };
-        delete copy[eventId];
-        return copy;
+      // Optimista en local
+      setFavorites((prev) =>
+        prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
+      );
+      setFavoriteItems((prev) => {
+        const next = { ...prev };
+        if (prev[key]) delete next[key];
+        else next[key] = { ...ev };
+        return next;
       });
-    }
 
-    try {
       const uid = auth?.user?.id;
-      const dbId = dbIdFrom(eventId);
-
-      if (!uid) { console.warn('[fav] no user logged → solo local'); return; }
-      if (dbId == null) { console.warn('[fav] evento externo (no BD) → solo local'); return; }
-
-      if (alreadyFav) {
-        await removeFavorite(uid, dbId);
-      } else {
-        await addFavorite(uid, dbId);
+      if (!uid) {
+        console.warn('[fav] sin usuario → solo local');
+        return;
       }
-    } catch (e) {
-      console.warn('toggleFavorite (persistencia) error:', e.message);
-      // revert si falla
-      setFavorites(prev => (alreadyFav ? [eventId, ...prev] : prev.filter(id => id !== eventId)));
-    }
-  };
+
+      try {
+        const already = favorites.includes(key);
+
+        if (!already) {
+          // Añadir favorito
+          let serverId = isNumericId(key) ? key : null;
+          if (!serverId) {
+            serverId = await ensureEventOnServer(ev, authToken); // ✅ ahora sí
+          }
+          if (serverId) {
+            await fetch(`${API_URL}/users/${uid}/favorites/events`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+              },
+              body: JSON.stringify({ eventId: serverId }),
+            });
+          } else {
+            console.warn('[fav] evento externo (no BD) → solo local');
+          }
+        } else {
+          // Quitar favorito
+          if (isNumericId(key)) {
+            await fetch(`${API_URL}/users/${uid}/favorites/events/${key}`, {
+              method: 'DELETE',
+              headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+            });
+          } else {
+            await fetch(
+              `${API_URL}/users/${uid}/favorites/events/by-external/${encodeURIComponent(key)}`,
+              { method: 'DELETE', headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) } }
+            ).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn('[fav] sync con server falló:', e?.message || e);
+      }
+    },
+    [favorites, auth?.user?.id, authToken]
+  );
 
   // ===== ASISTIR / SALIR =====
   const joinEvent = async (eventId) => {
