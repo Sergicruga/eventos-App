@@ -6,6 +6,7 @@ import {
 import { EventContext } from '../EventContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
+// import { API_URL, TICKETMASTER_API_KEY } from '../api/config';
 import { API_URL } from '../api/config';
 import { AuthContext } from '../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -45,9 +46,7 @@ function isOwner(ev, user) {
   return false;
 }
 
-/* ===== Helpers locales ===== */
-
-// Ticketmaster: elige la mejor imagen 16:9 y fuerza https
+// ===== Helpers locales =====
 const pickTMImage = (images) => {
   if (!Array.isArray(images) || images.length === 0) return null;
   const sorted = [...images].sort((a, b) => (b?.width ?? 0) - (a?.width ?? 0));
@@ -58,7 +57,6 @@ const pickTMImage = (images) => {
 
 const toHttps = (u) => (u && typeof u === 'string' ? u.replace(/^http:\/\//, 'https://') : u);
 
-// Algunas URLs vienen envueltas en un redirect (tm750x.net?url=ENCODED)
 const unwrapRedirect = (s) => {
   try {
     const u = new URL(s);
@@ -70,24 +68,15 @@ const unwrapRedirect = (s) => {
   }
 };
 
-// Sanea lo mínimo sin romper parámetros
 const sanitizeExternalUrl = (u) => {
   if (!u || typeof u !== 'string') return null;
   let s = u.trim();
-
-  // protocolo relativo -> https
   if (s.startsWith('//')) s = 'https:' + s;
-
-  // añade https si no hay esquema
   if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(s)) s = 'https://' + s;
-
-  // des‐envolver redirects tipo tm7508.net?url=...
   s = unwrapRedirect(s);
-
   return s;
 };
 
-// query param para invalidar caché de imagen cuando se actualiza
 const withCacheBust = (url, updatedAt) => {
   if (!url || typeof url !== 'string') return url;
   const ts = updatedAt ? String(updatedAt) : '';
@@ -97,11 +86,21 @@ const withCacheBust = (url, updatedAt) => {
     u.searchParams.set('t', ts);
     return u.toString();
   } catch {
-    // si no es URL absoluta, añadir ?t=...
     return url + (url.includes('?') ? '&' : '?') + 't=' + ts;
   }
 };
-/* ============================================== */
+
+const isHttpUrl = (s) => typeof s === 'string' && /^https?:\/\//i.test(String(s).trim());
+const looksLikeTicketmasterId = (id) => typeof id === 'string' && !/^\d+$/.test(id) && id.length >= 10;
+
+// 🔹 NUEVO: construir URL directa de TM como último recurso
+const buildTicketmasterUrl = (id) => {
+  if (!looksLikeTicketmasterId(id)) return null;
+  // ES primero; si no existiera, el usuario igualmente puede usar el botón del navegador
+  return `https://www.ticketmaster.es/event/${encodeURIComponent(id)}`;
+};
+
+// ==============================================
 
 export default function EventDetailScreen({ route, navigation }) {
   const { event } = route.params;
@@ -113,21 +112,53 @@ export default function EventDetailScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const [imgFallbackLocal, setImgFallbackLocal] = useState(false);
 
+  // 🔎 Buscar el evento “equivalente” en la lista (id, externalId, título+fecha)
+  const matchedFromList = useMemo(() => {
+    if (!Array.isArray(events) || !event) return null;
+
+    const id = event?.id != null ? String(event.id) : null;
+    const ext =
+      (event?.externalId != null && String(event.externalId)) ||
+      (event?.tm_id != null && String(event.tm_id)) ||
+      (event?.sourceId != null && String(event.sourceId)) ||
+      null;
+
+    // 1) por id exacto
+    if (id) {
+      const byId = events.find(e => String(e.id) === id);
+      if (byId) return byId;
+    }
+    // 2) por externalId
+    if (ext) {
+      const byExt = events.find(e =>
+        String(e.externalId ?? e.tm_id ?? e.sourceId ?? '') === ext
+      );
+      if (byExt) return byExt;
+    }
+    // 3) por título + fecha (normalizado)
+    const norm = (s) => (typeof s === 'string' ? s.trim().toLowerCase() : '');
+    const title = norm(event.title);
+    const date = (event.date || '').slice(0, 10);
+    if (title && date) {
+      const byTD = events.find(e =>
+        norm(e.title) === title && String(e.date || '').slice(0, 10) === date
+      );
+      if (byTD) return byTD;
+    }
+    return null;
+  }, [events, event]);
+
+  // El "current" preferirá el emparejado; si no, usa lo que vino por la ruta
   const current = useMemo(
-    () => events.find(e => String(e.id) === String(event.id)) ?? event,
-    [events, event.id, event]
+    () => matchedFromList ?? event,
+    [matchedFromList, event]
   );
 
   const isFavorite = favorites.includes(current.id);
   const amOwner = isOwner(current, user);
 
-  // Imagen efectiva (override > server) para tus eventos locales
   const effectiveImage = getEffectiveEventImage(current.id, current.image);
-
-  // Ticketmaster (array images) -> mejor URL
   const ticketmasterImage = useMemo(() => pickTMImage(current?.images), [current?.images]);
-
-  // Fecha de actualización conocida (sirve para cache-busting si existe)
   const updatedAt =
     current?.updatedAt ||
     current?.imageUpdatedAt ||
@@ -135,7 +166,6 @@ export default function EventDetailScreen({ route, navigation }) {
     current?.image_updated_at ||
     '';
 
-  // URL final priorizando Ticketmaster; si no, la de tu sistema (siempre https + cache bust si procede)
   const finalImageUrl = useMemo(() => {
     const base = ticketmasterImage || effectiveImage || null;
     if (!base) return null;
@@ -143,9 +173,6 @@ export default function EventDetailScreen({ route, navigation }) {
     return withCacheBust(https, updatedAt);
   }, [ticketmasterImage, effectiveImage, updatedAt]);
 
-  // Fuente de imagen para <Image/>:
-  // - Si es http(s) → pasar como { uri }
-  // - Si no, usar tu helper (para rutas locales / require)
   const imageSource = useMemo(() => {
     if (finalImageUrl && /^https?:\/\//i.test(finalImageUrl)) {
       return { uri: finalImageUrl };
@@ -153,18 +180,61 @@ export default function EventDetailScreen({ route, navigation }) {
     return getEventImageSource(finalImageUrl);
   }, [finalImageUrl, getEventImageSource]);
 
-  // URL de compra
-  const buyUrl = useMemo(() => {
-    const raw =
-      current?.url ||
-      current?.buyUrl ||
-      current?.website ||
-      current?.externalUrl ||
-      current?._embedded?.attractions?.[0]?.url ||
-      null;
-    const cleaned = sanitizeExternalUrl(raw);
-    return cleaned ? toHttps(cleaned) : null;
-  }, [current]);
+  // ✅ URL de compra (prioriza lo que venga por params, luego current y matchedFromList)
+  const computedBuyUrl = useMemo(() => {
+    const pick = (obj) => {
+      if (!obj) return null;
+      const keys = [
+        'url','purchaseUrl','purchase_url','buyUrl','buy_url',
+        'website','externalUrl','external_url','ticketUrl','saleUrl','link',
+        'sourceUrl','source_url',
+      ];
+      for (const k of keys) {
+        const v = obj?.[k];
+        if (typeof v === 'string' && v.trim()) {
+          const clean = toHttps(sanitizeExternalUrl(v));
+          if (isHttpUrl(clean)) return clean;
+        }
+      }
+      const a = obj?._embedded?.attractions?.[0]?.url;
+      const v = obj?._embedded?.venues?.[0]?.url;
+      for (const raw of [a, v]) {
+        const clean = toHttps(sanitizeExternalUrl(raw));
+        if (isHttpUrl(clean)) return clean;
+      }
+      return null;
+    };
+
+    // 1) lo que venga explícito desde Favoritos
+    const fromParam = toHttps(sanitizeExternalUrl(route?.params?.buyUrl));
+    if (isHttpUrl(fromParam)) return fromParam;
+
+    // 2) lo que venga en el objeto de la ruta
+    const fromRouteEvent = pick(route?.params?.event);
+    if (fromRouteEvent) return fromRouteEvent;
+
+    // 3) lo que ya tenga el current
+    const fromCurrent = pick(current);
+    if (fromCurrent) return fromCurrent;
+
+    // 4) ⭐ Fallback: construir URL de Ticketmaster por id
+    const idCandidate = current?.externalId || current?.tm_id || current?.id;
+    const tmFallback = buildTicketmasterUrl(idCandidate);
+    return tmFallback || null;
+  }, [route?.params?.buyUrl, route?.params?.event, current]);
+
+  // ✅ URL usada por el botón
+  const buyUrl = computedBuyUrl;
+
+  // 🔎 Debug
+  useEffect(() => {
+    const idCandidate = current?.externalId || current?.tm_id || current?.id;
+    console.log('=== [EventDetail] Debug ===');
+    console.log('route.params.buyUrl:', route?.params?.buyUrl);
+    console.log('current.id/title:', current?.id, current?.title);
+    console.log('idCandidate (TM fallback):', idCandidate);
+    console.log('=> buyUrl:', buyUrl);
+  }, [route?.params?.buyUrl, current?.id, buyUrl]);
 
   // ----- Asistentes -----
   const [attendees, setAttendees] = useState([]);
@@ -208,7 +278,6 @@ export default function EventDetailScreen({ route, navigation }) {
 
     const uidStr = String(user.id);
 
-    // Optimista
     if (!isJoined) {
       setIsJoined(true);
       setAttendees(prev => [...prev, { id: user.id, name: user.name }]);
@@ -231,7 +300,6 @@ export default function EventDetailScreen({ route, navigation }) {
       }
     }
 
-    // Refrescar lista real desde backend
     try {
       const res = await fetch(`${API_URL}/events/${current.id}/attendees`);
       if (res.ok) {
@@ -279,14 +347,12 @@ export default function EventDetailScreen({ route, navigation }) {
 
   useEffect(() => { fetchComments(); }, [fetchComments]);
 
-  // ---- Date formatting ----
   const formatDate = (d) => {
     if (!d) return '';
     const dateObj = typeof d === 'string' ? new Date(d) : d;
     return dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  // ---- UI ----
   return (
     <LinearGradient
       colors={['#f8fafc', '#e0e7ef', '#f5e8e4']}
@@ -300,7 +366,7 @@ export default function EventDetailScreen({ route, navigation }) {
           contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Imagen con estrella de favorito */}
+          {/* Imagen principal */}
           <View style={styles.headerImageOuter}>
             <View style={styles.headerImageClip}>
               {imgFallbackLocal ? (
@@ -311,7 +377,6 @@ export default function EventDetailScreen({ route, navigation }) {
                 />
               ) : (
                 <Image
-                  // 👉 Para externas usamos { uri }, para locales tu helper
                   source={imageSource}
                   style={styles.headerImage}
                   resizeMode="cover"
@@ -335,7 +400,7 @@ export default function EventDetailScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Card */}
+          {/* Info principal */}
           <View style={styles.card}>
             <Text style={styles.title}>{current.title}</Text>
             <View style={styles.row}>
@@ -404,7 +469,7 @@ export default function EventDetailScreen({ route, navigation }) {
             )}
           </View>
 
-          {/* Botones de acción */}
+          {/* Botones */}
           <View style={styles.actionBtnContainer}>
             <TouchableOpacity
               onPress={handleJoinOrLeave}
@@ -426,12 +491,17 @@ export default function EventDetailScreen({ route, navigation }) {
               <Text style={styles.primaryBtnText}>{isJoined ? 'Ya no voy' : '¡Ya voy!'}</Text>
             </TouchableOpacity>
 
-            {/* Comprar entradas (solo si hay URL válida) */}
+            {/* ✅ Botón de comprar entradas */}
             {buyUrl && (
               <TouchableOpacity
                 onPress={async () => {
                   try {
-                    await Linking.openURL(buyUrl);
+                    const supported = await Linking.canOpenURL(buyUrl);
+                    if (supported) {
+                      await Linking.openURL(buyUrl);
+                    } else {
+                      Alert.alert('No se pudo abrir el enlace', buyUrl);
+                    }
                   } catch (e) {
                     Alert.alert('Enlace no válido', String(e?.message || e));
                   }
@@ -445,6 +515,7 @@ export default function EventDetailScreen({ route, navigation }) {
               </TouchableOpacity>
             )}
 
+            {/* Botones de propietario */}
             {amOwner && (
               <>
                 <TouchableOpacity
@@ -455,6 +526,7 @@ export default function EventDetailScreen({ route, navigation }) {
                   <Ionicons name="create-outline" size={20} color={COLORS.white} style={{ marginRight: 8 }} />
                   <Text style={styles.primaryBtnText}>Editar evento</Text>
                 </TouchableOpacity>
+
                 <TouchableOpacity
                   onPress={() => {
                     Alert.alert('Confirmar', '¿Seguro que quieres eliminar este evento?', [
@@ -524,15 +596,11 @@ export default function EventDetailScreen({ route, navigation }) {
 }
 
 const IMG_RADIUS = 18;
-// altura responsiva 16:9
 const IMG_WIDTH = SCREEN_WIDTH * 0.92;
 const IMG_HEIGHT = Math.round((IMG_WIDTH * 9) / 16);
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 0, backgroundColor: 'transparent' },
-
-  // Patrón doble envoltorio:
-  // Outer con sombras (sin overflow hidden) + Inner que recorta (overflow hidden)
   headerImageOuter: {
     width: '92%',
     alignSelf: 'center',
@@ -551,13 +619,10 @@ const styles = StyleSheet.create({
     width: '100%',
     height: IMG_HEIGHT,
     borderRadius: IMG_RADIUS,
-    overflow: 'hidden', // Android: asegura recorte del borderRadius
+    overflow: 'hidden',
     backgroundColor: COLORS.inputBg,
   },
-  headerImage: {
-    width: '100%',
-    height: '100%',
-  },
+  headerImage: { width: '100%', height: '100%' },
   favoriteBtn: {
     position: 'absolute',
     top: 14,
@@ -576,7 +641,6 @@ const styles = StyleSheet.create({
       },
     }),
   },
-
   card: {
     backgroundColor: COLORS.white,
     borderRadius: 18,
@@ -585,7 +649,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -595,13 +659,11 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     marginBottom: 8,
     letterSpacing: 0.5,
-    fontFamily: Platform.OS === 'ios' ? 'AvenirNext-DemiBold' : 'sans-serif-medium',
   },
   row: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   date: { color: COLORS.secondary, fontSize: 16, fontWeight: '500' },
   location: { color: COLORS.secondary, fontSize: 16, flex: 1, flexWrap: 'wrap' },
   description: { fontSize: 16, color: COLORS.text, marginTop: 10, marginBottom: 6 },
-
   typeTag: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -612,13 +674,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     marginTop: 8,
   },
-  typeTagText: {
-    color: COLORS.primary,
-    fontWeight: '600',
-    marginLeft: 6,
-    fontSize: 14,
-  },
-
+  typeTagText: { color: COLORS.primary, fontWeight: '600', marginLeft: 6, fontSize: 14 },
   mapWrap: {
     height: 180,
     borderRadius: 16,
@@ -627,25 +683,12 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 2,
   },
-
-  sectionTitle: {
-    fontWeight: 'bold',
-    fontSize: 18,
-    color: COLORS.primary,
-    marginBottom: 6,
-    letterSpacing: 0.5,
-  },
-  attendeeText: {
-    color: COLORS.text,
-    fontSize: 15,
-    marginVertical: 1,
-    marginLeft: 2,
-  },
-
+  sectionTitle: { fontWeight: 'bold', fontSize: 18, color: COLORS.primary, marginBottom: 6 },
+  attendeeText: { color: COLORS.text, fontSize: 15, marginVertical: 1, marginLeft: 2 },
   actionBtnContainer: {
     width: '92%',
     alignSelf: 'center',
@@ -667,12 +710,7 @@ const styles = StyleSheet.create({
     elevation: 3,
     width: '100%',
   },
-  primaryBtnText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-
+  primaryBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 16 },
   commentContainer: {
     marginVertical: 6,
     backgroundColor: COLORS.inputBg,
@@ -687,7 +725,6 @@ const styles = StyleSheet.create({
   commentName: { fontWeight: 'bold', color: COLORS.primary, marginBottom: 2 },
   commentText: { color: COLORS.text, fontSize: 15 },
   commentDate: { fontSize: 10, color: COLORS.gray, marginTop: 2, alignSelf: 'flex-end' },
-
   commentInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
