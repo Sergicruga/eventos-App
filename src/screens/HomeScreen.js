@@ -120,11 +120,14 @@ export default function HomeScreen() {
   const myUserId = user?.id != null ? String(user.id) : null;
 
   // Show all events except those created by you
-  const otherUserEvents = communityEvents.filter(ev =>
-    myUserId
-      ? String(ev.created_by) !== myUserId
-      : true
-  );
+  // + No mostrar eventos 'api' de la BD si no están en favoritos
+  const otherUserEvents = communityEvents
+    .filter(ev => (ev.type === 'api' ? favorites.includes(String(ev.id)) : true))
+    .filter(ev =>
+      myUserId
+        ? String(ev.created_by) !== myUserId
+        : true
+    );
 
   const allEvents = [
     ...otherUserEvents.map(ev => ({ ...ev, type: 'local' })),

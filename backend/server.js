@@ -646,6 +646,8 @@ app.delete("/events/:eventId", async (req, res) => {
     await client.query(`DELETE FROM event_attendees WHERE event_id = $1`, [eventId]);
     await client.query(`DELETE FROM event_favorites WHERE event_id = $1`, [eventId]);
     await client.query(`DELETE FROM event_comments  WHERE event_id = $1`, [eventId]);
+    // ✅ limpiar mapeos de eventos externos
+    await client.query(`DELETE FROM api_events WHERE event_id = $1`, [eventId]);
 
     // Borrar el evento
     const del = await client.query(`DELETE FROM events WHERE id = $1 RETURNING id`, [eventId]);

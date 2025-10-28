@@ -817,16 +817,34 @@ const updateEvent = async (updatedEvent) => {
           }
         } else {
           // Quitar favorito
+          const delHeaders = { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) };
+
           if (isNumericId(key)) {
             await fetch(`${API_URL}/users/${uid}/favorites/events/${key}`, {
               method: 'DELETE',
-              headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+              headers: delHeaders,
             });
           } else {
             await fetch(
               `${API_URL}/users/${uid}/favorites/events/by-external/${encodeURIComponent(key)}`,
-              { method: 'DELETE', headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) } }
+              { method: 'DELETE', headers: delHeaders }
             ).catch(() => {});
+          }
+
+          // 👉 Punto 2: si es evento externo (type 'api'), elimínalo de BD para que no reaparezca
+          try {
+            if (ev && ev.type === 'api') {
+              if (isNumericId(key)) {
+                await safeFetch(`${API_URL}/events/${key}`, { method: 'DELETE', headers: delHeaders }, { timeoutMs: 12000 });
+              } else {
+                const src = ev.source || 'ticketmaster';
+                const ext = ev.externalId || key;
+                const url = `${API_URL}/events/${encodeURIComponent(key)}?source=${encodeURIComponent(src)}&externalId=${encodeURIComponent(ext)}`;
+                await safeFetch(url, { method: 'DELETE', headers: delHeaders }, { timeoutMs: 12000 });
+              }
+            }
+          } catch (e) {
+            console.warn('[fav] no se pudo borrar evento externo:', e?.message || e);
           }
         }
       } catch (e) {
