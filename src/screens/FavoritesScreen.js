@@ -104,16 +104,18 @@ export default function FavoritesScreen({ navigation }) {
     }, [fetchServerFavs])
   );
 
-  // Refetch si cambian los IDs de favoritos
+  // Limpia el botón cuando la pantalla pierde foco y si no hay favoritos
+  useFocusEffect(
+    useCallback(() => {
+      if ((favEvents?.length ?? 0) === 0) setBuyUrl(null);
+      return () => setBuyUrl(null); // al salir de Favoritos
+    }, [favEvents?.length])
+  );
+
+  // Si cambia la lista y se queda vacía, oculta el botón
   useEffect(() => {
-    const controller = new AbortController();
-    (async () => {
-      try {
-        await fetchServerFavs(controller.signal);
-      } catch {}
-    })();
-    return () => controller.abort();
-  }, [favorites.join('|'), fetchServerFavs]);
+    if ((favEvents?.length ?? 0) === 0 && buyUrl) setBuyUrl(null);
+  }, [favEvents?.length]);
 
   // Pull-to-refresh
   const onRefresh = useCallback(async () => {
@@ -293,7 +295,7 @@ export default function FavoritesScreen({ navigation }) {
         />
       </View>
 
-      {buyUrl ? (
+      {buyUrl && favEvents.length > 0 ? (
         <TouchableOpacity
           onPress={handleOpenBuy}
           activeOpacity={0.85}
