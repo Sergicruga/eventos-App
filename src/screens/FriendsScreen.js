@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   Modal,
   Button,
-  Keyboard
+  Keyboard,
+  RefreshControl,
+  Pressable,
 } from "react-native";
 import { API_URL } from '../api/config';
 import { AuthContext } from "../context/AuthContext";
@@ -19,15 +21,13 @@ import { useNavigation } from "@react-navigation/native"; // <-- Only this is ne
 
 const AVATAR_PLACEHOLDER = "https://placehold.co/80x80?text=User";
 
-
-
 // Helper to get full avatar URL
 const getAvatarUrl = (photo) =>
   photo ? API_URL + photo : AVATAR_PLACEHOLDER;
 
 export default function FriendsScreen() {
   const { user } = useContext(AuthContext);
-  const navigation = useNavigation(); // <-- move here!
+  const navigation = useNavigation();
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [friends, setFriends] = useState([]);
@@ -36,16 +36,24 @@ export default function FriendsScreen() {
   const [friendEvents, setFriendEvents] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [eventsLoading, setEventsLoading] = useState(false);
-
-  // Friend requests
+  const [friendActionVisible, setFriendActionVisible] = useState(false);
+  const [currentActionFriend, setCurrentActionFriend] = useState(null);
   const [friendRequests, setFriendRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch friends and requests on mount
+  // Fetch friends and requests on mount / when user available
   useEffect(() => {
+    if (!user?.id) return;
     fetchFriends();
     fetchFriendRequests();
-  }, [user.id]);
+  }, [user?.id]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchFriends(), fetchFriendRequests()]);
+    setRefreshing(false);
+  }, [user?.id]);
 
   // Search users
   const searchUsers = async (text) => {
@@ -69,6 +77,7 @@ export default function FriendsScreen() {
 
   // Fetch friends
   const fetchFriends = async () => {
+    if (!user?.id) return;
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/users/${user.id}/friends`);
@@ -82,6 +91,7 @@ export default function FriendsScreen() {
 
   // Fetch friend requests
   const fetchFriendRequests = async () => {
+    if (!user?.id) return;
     setLoadingRequests(true);
     try {
       const res = await fetch(`${API_URL}/users/${user.id}/friend-requests`);
@@ -95,41 +105,51 @@ export default function FriendsScreen() {
 
   // Send friend request
   const sendFriendRequest = async (friendId) => {
-    await fetch(`${API_URL}/friend-requests`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ senderId: user.id, receiverId: friendId }),
-    });
-    setQuery("");
-    setSearchResults([]);
-    Keyboard.dismiss();
-    alert("¡Solicitud enviada!");
+    try {
+      await fetch(`${API_URL}/friend-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senderId: user.id, receiverId: friendId }),
+      });
+      setQuery("");
+      setSearchResults([]);
+      Keyboard.dismiss();
+      alert("¡Solicitud enviada!");
+    } catch (e) {
+      alert("No se pudo enviar la solicitud.");
+    }
   };
 
   // Accept friend request
   const acceptRequest = async (requestId) => {
-    await fetch(`${API_URL}/friend-requests/${requestId}/accept`, { method: "POST" });
-    fetchFriendRequests();
-    fetchFriends();
+    try {
+      await fetch(`${API_URL}/friend-requests/${requestId}/accept`, { method: "POST" });
+      fetchFriendRequests();
+      fetchFriends();
+    } catch { /* ignore */ }
   };
 
   // Reject friend request
   const rejectRequest = async (requestId) => {
-    await fetch(`${API_URL}/friend-requests/${requestId}`, { method: "DELETE" });
-    fetchFriendRequests();
+    try {
+      await fetch(`${API_URL}/friend-requests/${requestId}`, { method: "DELETE" });
+      fetchFriendRequests();
+    } catch { /* ignore */ }
   };
 
   // Remove friend
   const removeFriend = async (friendId) => {
-    await fetch(`${API_URL}/users/${user.id}/friends/${friendId}`, {
-      method: "DELETE",
-    });
-    fetchFriends();
-    if (selectedFriend && selectedFriend.id === friendId) {
-      setModalVisible(false);
-      setSelectedFriend(null);
-      setFriendEvents([]);
-    }
+    try {
+      await fetch(`${API_URL}/users/${user.id}/friends/${friendId}`, {
+        method: "DELETE",
+      });
+      fetchFriends();
+      if (selectedFriend && selectedFriend.id === friendId) {
+        setModalVisible(false);
+        setSelectedFriend(null);
+        setFriendEvents([]);
+      }
+    } catch { /* ignore */ }
   };
 
   // View friend's events
@@ -147,27 +167,39 @@ export default function FriendsScreen() {
     setEventsLoading(false);
   };
 
+  // Open action sheet for friend (View events / Remove)
+  const openFriendActions = (friend) => {
+    setCurrentActionFriend(friend);
+    setFriendActionVisible(true);
+  };
+
+  const handleActionViewEvents = () => {
+    if (currentActionFriend) viewFriendEvents(currentActionFriend);
+    setFriendActionVisible(false);
+  };
+  const handleActionRemove = async () => {
+    if (currentActionFriend) await removeFriend(currentActionFriend.id);
+    setFriendActionVisible(false);
+  };
+
   // Render friend card
   const renderFriend = ({ item }) => (
     <TouchableOpacity
       style={styles.friendCard}
       onPress={() => viewFriendEvents(item)}
-      activeOpacity={0.8}
+      activeOpacity={0.88}
     >
       <Image
         source={{ uri: getAvatarUrl(item.photo) }}
         style={styles.avatar}
       />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.friendName}>{item.name}</Text>
-        <Text style={styles.friendEmail}>{item.email}</Text>
+      <View style={{ flex: 1, paddingRight: 8, marginLeft: 12 }}>
+        <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.friendEmail} numberOfLines={1}>{item.email}</Text>
       </View>
-      <TouchableOpacity
-        onPress={() => removeFriend(item.id)}
-        style={styles.removeBtn}
-      >
-        <Ionicons name="person-remove" size={22} color="#d32f2f" />
-      </TouchableOpacity>
+      <Pressable onPress={() => openFriendActions(item)} style={styles.iconBtn}>
+        <Ionicons name="ellipsis-vertical" size={20} color="#444" />
+      </Pressable>
     </TouchableOpacity>
   );
 
@@ -178,67 +210,74 @@ export default function FriendsScreen() {
         source={{ uri: getAvatarUrl(item.photo) }}
         style={styles.avatar}
       />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.friendName}>{item.name}</Text>
-        <Text style={styles.friendEmail}>{item.email}</Text>
+      <View style={{ flex: 1, paddingRight: 8, marginLeft: 12 }}>
+        <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.friendEmail} numberOfLines={1}>{item.email}</Text>
       </View>
       <TouchableOpacity
         onPress={() => sendFriendRequest(item.id)}
         style={styles.addBtn}
       >
-        <Ionicons name="person-add" size={22} color="#1976d2" />
+        <Ionicons name="person-add" size={20} color="#1976d2" />
       </TouchableOpacity>
     </View>
   );
 
-  // Render friend request card
+  // Render friend request card (compact)
   const renderFriendRequest = ({ item }) => (
-    <View style={styles.friendCard}>
-      <Image
-        source={{ uri: getAvatarUrl(item.photo) }}
-        style={styles.avatar}
-      />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.friendName}>{item.name}</Text>
-        <Text style={styles.friendEmail}>{item.email}</Text>
+    <View style={[styles.requestCard]}>
+      <Image source={{ uri: getAvatarUrl(item.photo) }} style={styles.requestAvatar} />
+      <View style={{ flex: 1, paddingHorizontal: 8, marginLeft: 4 }}>
+        <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.friendEmail} numberOfLines={1}>{item.email}</Text>
       </View>
-      <TouchableOpacity
-        style={[styles.addBtn, { backgroundColor: "#c8e6c9" }]}
-        onPress={() => acceptRequest(item.id)}
-      >
-        <Ionicons name="checkmark" size={22} color="#388e3c" />
+      <TouchableOpacity style={[styles.smallBtn, { backgroundColor: '#c8e6c9' }]} onPress={() => acceptRequest(item.id)}>
+        <Ionicons name="checkmark" size={18} color="#2e7d32" />
       </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.removeBtn, { backgroundColor: "#ffcdd2" }]}
-        onPress={() => rejectRequest(item.id)}
-      >
-        <Ionicons name="close" size={22} color="#d32f2f" />
+      <TouchableOpacity style={[styles.smallBtn, { backgroundColor: '#ffcdd2', marginLeft: 8 }]} onPress={() => rejectRequest(item.id)}>
+        <Ionicons name="close" size={18} color="#c62828" />
       </TouchableOpacity>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Amigos</Text>
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Buscar usuarios por nombre o email..."
-        value={query}
-        onChangeText={searchUsers}
-        autoCapitalize="none"
-        autoCorrect={false}
-        clearButtonMode="while-editing"
-      />
-      {loading && <ActivityIndicator style={{ marginVertical: 10 }} />}
+      <View style={styles.topCard}>
+        <View>
+          <Text style={styles.header}>Amigos</Text>
+          <Text style={styles.subtitle}>Conéctate y descubre eventos con tus amigos</Text>
+        </View>
+      </View>
+
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={18} color="#9e9e9e" style={{ marginRight: 8 }} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar por nombre o email..."
+          value={query}
+          onChangeText={searchUsers}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {query.length > 0 ? (
+          <TouchableOpacity onPress={() => { setQuery(''); setSearchResults([]); Keyboard.dismiss(); }} style={{ padding: 8 }}>
+            <Ionicons name="close-circle" size={18} color="#bdbdbd" />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {loading && <ActivityIndicator style={{ marginVertical: 12 }} />}
+
       {query.length > 0 && (
         <FlatList
           data={searchResults}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderSearchResult}
-          style={{ marginBottom: 10 }}
+          style={{ marginHorizontal: 16, marginTop: 8 }}
           ListEmptyComponent={
             !loading && (
-              <Text style={{ textAlign: "center", color: "#888" }}>
+              <Text style={{ textAlign: "center", color: "#888", padding: 12 }}>
                 No se encontraron usuarios.
               </Text>
             )
@@ -246,37 +285,49 @@ export default function FriendsScreen() {
         />
       )}
 
-      <Text style={styles.subHeader}>Solicitudes de amistad</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.subHeader}>Solicitudes</Text>
+        <Text style={styles.badge}>{friendRequests.length}</Text>
+      </View>
+
       {loadingRequests ? (
-        <ActivityIndicator style={{ marginVertical: 10 }} />
+        <ActivityIndicator style={{ marginVertical: 12 }} />
       ) : friendRequests.length > 0 ? (
         <FlatList
           data={friendRequests}
-          keyExtractor={item => String(item.id)}
+          keyExtractor={(item) => String(item.id)}
           renderItem={renderFriendRequest}
+          style={{ marginHorizontal: 16 }}
+          contentContainerStyle={{ paddingBottom: 6 }}
         />
       ) : (
-        <Text style={{ textAlign: "center", color: "#888", marginBottom: 10 }}>
-          No tienes solicitudes pendientes.
-        </Text>
+        <Text style={styles.emptyText}>No tienes solicitudes pendientes.</Text>
       )}
 
-      <Text style={styles.subHeader}>Tus amigos</Text>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.subHeader}>Tus amigos</Text>
+        <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
+          <Ionicons name="refresh" size={18} color="#1976d2" />
+        </TouchableOpacity>
+      </View>
+
       <FlatList
         data={friends}
-        keyExtractor={item => item.id.toString()}
-        renderItem={renderFriend} // <-- use renderFriend, not FriendItem
+        keyExtractor={(item) => String(item.id)}
+        renderItem={renderFriend}
         ListEmptyComponent={
           !loading && (
-            <Text style={{ textAlign: "center", color: "#888", marginTop: 20 }}>
-              No tienes amigos aún. ¡Busca y añade algunos!
+            <Text style={[styles.emptyText, { marginTop: 20 }]}>
+              No tienes amigos aún. Busca y añade algunos.
             </Text>
           )
         }
-        contentContainerStyle={{ paddingBottom: 40 }}
+        style={{ marginHorizontal: 16 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
       />
 
-      {/* Modal for friend's events */}
+      {/* Friend's events modal */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -287,19 +338,20 @@ export default function FriendsScreen() {
           <View style={styles.modalContent}>
             {selectedFriend ? (
               <>
-                {/* Profile Card */}
                 <View style={styles.profileCard}>
-                  <Image
-                    source={{ uri: getAvatarUrl(selectedFriend.photo) }}
-                    style={styles.avatarLarge}
-                  />
-                  <View style={{ marginLeft: 16 }}>
+                  <Image source={{ uri: getAvatarUrl(selectedFriend.photo) }} style={styles.avatarLarge} />
+                  <View style={{ marginLeft: 12, flex: 1 }}>
                     <Text style={styles.profileName}>{selectedFriend.name}</Text>
                     <Text style={styles.profileEmail}>{selectedFriend.email}</Text>
                   </View>
+                  <TouchableOpacity style={styles.iconBtn} onPress={() => setModalVisible(false)}>
+                    <Ionicons name="close" size={22} color="#777" />
+                  </TouchableOpacity>
                 </View>
+
                 <View style={styles.divider} />
-                <Text style={styles.modalHeader}>Eventos de {selectedFriend.name}</Text>
+
+                <Text style={styles.modalHeader}>Eventos</Text>
                 {eventsLoading ? (
                   <ActivityIndicator style={{ marginVertical: 20 }} />
                 ) : friendEvents.length > 0 ? (
@@ -309,7 +361,7 @@ export default function FriendsScreen() {
                     renderItem={({ item }) => (
                       <TouchableOpacity
                         style={styles.eventCard}
-                        activeOpacity={0.85}
+                        activeOpacity={0.9}
                         onPress={() => {
                           setModalVisible(false);
                           navigation.navigate("EventDetail", { event: item });
@@ -324,25 +376,17 @@ export default function FriendsScreen() {
                           }}
                           style={styles.eventImage}
                         />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.eventTitle}>{item.title}</Text>
+                        <View style={{ flex: 1, paddingLeft: 8 }}>
+                          <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
                           <Text style={styles.eventDate}>{item.event_at}</Text>
-                          <Text style={styles.eventLocation}>{item.location}</Text>
+                          <Text style={styles.eventLocation} numberOfLines={1}>{item.location}</Text>
                         </View>
                       </TouchableOpacity>
                     )}
-                    ListEmptyComponent={
-                      <Text style={{ color: "#888", textAlign: "center" }}>
-                        No hay eventos.
-                      </Text>
-                    }
                   />
                 ) : (
-                  <Text style={{ color: "#888", textAlign: "center" }}>
-                    No hay eventos.
-                  </Text>
+                  <Text style={{ color: "#888", textAlign: "center", marginVertical: 18 }}>No hay eventos.</Text>
                 )}
-                <Button title="Cerrar" onPress={() => setModalVisible(false)} />
               </>
             ) : (
               <ActivityIndicator style={{ marginVertical: 40 }} />
@@ -350,86 +394,175 @@ export default function FriendsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Friend actions modal (compact) */}
+      <Modal visible={friendActionVisible} transparent animationType="fade" onRequestClose={() => setFriendActionVisible(false)}>
+        <Pressable style={styles.actionOverlay} onPress={() => setFriendActionVisible(false)}>
+          <View style={styles.actionSheet}>
+            <Text style={styles.actionTitle}>{currentActionFriend?.name}</Text>
+            <TouchableOpacity style={styles.actionRow} onPress={handleActionViewEvents}>
+              <Ionicons name="calendar" size={18} color="#1976d2" style={{ marginRight: 12 }} />
+              <Text style={styles.actionText}>Ver eventos</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionRow} onPress={handleActionRemove}>
+              <Ionicons name="person-remove" size={18} color="#d32f2f" style={{ marginRight: 12 }} />
+              <Text style={[styles.actionText, { color: '#d32f2f' }]}>Eliminar amigo</Text>
+            </TouchableOpacity>
+            <Button title="Cerrar" onPress={() => setFriendActionVisible(false)} />
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f7f9fa", padding: 0 },
-  header: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginTop: 24,
-    marginBottom: 8,
-    marginLeft: 20,
-    color: "#1976d2",
+  container: { flex: 1, backgroundColor: "#f6f8fb" },
+  topCard: {
+    paddingHorizontal: 16,
+    paddingTop: 26,
+    paddingBottom: 12,
+    backgroundColor: "#fff",
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  subHeader: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 10,
-    marginBottom: 6,
-    marginLeft: 20,
-    color: "#333",
+  header: {
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#0d47a1",
+  },
+  subtitle: {
+    color: "#607d8b",
+    marginTop: 4,
+    fontSize: 13,
+  },
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 2,
   },
   searchInput: {
-    margin: 16,
-    marginBottom: 8,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: "#fff",
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: 4,
+  },
+  subHeader: {
     fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
+    fontWeight: "700",
+    color: "#37474f",
+  },
+  sectionHeader: {
+    marginTop: 18,
+    marginHorizontal: 16,
+    marginBottom: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  badge: {
+    backgroundColor: "#e3f2fd",
+    color: "#1976d2",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  refreshBtn: {
+    padding: 6,
+    borderRadius: 999,
+    backgroundColor: "transparent",
   },
   friendCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    marginLeft: 20, // align with header
-    marginRight: 16,
-    marginVertical: 6,
+    marginVertical: 8,
     padding: 12,
     borderRadius: 12,
     shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginRight: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: "#e0e0e0",
   },
   avatarLarge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    marginRight: 8,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: "#e0e0e0",
   },
   friendName: {
-    fontSize: 17,
-    fontWeight: "bold",
-    color: "#222",
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#212121",
   },
   friendEmail: {
     fontSize: 13,
-    color: "#888",
+    color: "#757575",
+    marginTop: 2,
   },
   addBtn: {
-    padding: 8,
-    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
     backgroundColor: "#e3f2fd",
-    marginLeft: 8,
   },
   removeBtn: {
     padding: 8,
     borderRadius: 20,
     backgroundColor: "#ffebee",
     marginLeft: 8,
+  },
+  iconBtn: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  requestCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    marginVertical: 8,
+    padding: 10,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  requestAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#e0e0e0",
+  },
+  smallBtn: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#9e9e9e",
+    marginHorizontal: 16,
+    paddingVertical: 12,
   },
   modalOverlay: {
     flex: 1,
@@ -438,72 +571,97 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalContent: {
-    width: "90%",
+    width: "92%",
     backgroundColor: "#fff",
-    borderRadius: 18,
-    padding: 18,
+    borderRadius: 14,
+    padding: 14,
     shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 8,
-    maxHeight: "80%",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 6,
+    maxHeight: "84%",
   },
   modalHeader: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 18,
+    fontSize: 16,
+    fontWeight: "700",
     marginBottom: 8,
-    color: "#1976d2",
+    color: "#0d47a1",
     textAlign: "center",
   },
   profileCard: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
-    marginTop: 4,
+    marginBottom: 6,
   },
   profileName: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#1976d2",
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0d47a1",
   },
   profileEmail: {
-    fontSize: 15,
-    color: "#555",
-    marginTop: 2,
+    fontSize: 13,
+    color: "#616161",
+    marginTop: 4,
   },
   divider: {
     height: 1,
-    backgroundColor: "#e0e0e0",
+    backgroundColor: "#eceff1",
     marginVertical: 10,
-    marginHorizontal: -18,
+    marginHorizontal: -14,
   },
   eventCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f5f5f5",
-    marginVertical: 6,
+    backgroundColor: "#fafafa",
+    marginVertical: 8,
     padding: 8,
     borderRadius: 10,
   },
   eventImage: {
-    width: 60,
-    height: 40,
-    borderRadius: 6,
-    marginRight: 10,
+    width: 72,
+    height: 44,
+    borderRadius: 8,
     backgroundColor: "#e0e0e0",
   },
   eventTitle: {
-    fontWeight: "bold",
+    fontWeight: "700",
     fontSize: 15,
-    color: "#222",
+    color: "#212121",
   },
   eventDate: {
     fontSize: 13,
     color: "#1976d2",
+    marginTop: 4,
   },
   eventLocation: {
     fontSize: 12,
-    color: "#888",
+    color: "#757575",
+    marginTop: 2,
+  },
+  actionOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "flex-end",
+  },
+  actionSheet: {
+    backgroundColor: "#fff",
+    padding: 16,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+  },
+  actionTitle: {
+    fontWeight: "700",
+    fontSize: 16,
+    marginBottom: 12,
+    color: "#37474f",
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  actionText: {
+    fontSize: 15,
+    color: "#37474f",
   },
 });
