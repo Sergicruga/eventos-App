@@ -18,6 +18,7 @@ import { API_URL } from '../api/config';
 import { AuthContext } from "../context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native"; // <-- Only this is needed
+import { EventContext } from "../EventContext";
 
 const AVATAR_PLACEHOLDER = "https://placehold.co/80x80?text=User";
 
@@ -26,8 +27,29 @@ const getAvatarUrl = (photo) =>
   photo ? API_URL + photo : AVATAR_PLACEHOLDER;
 
 export default function FriendsScreen() {
-  const { user } = useContext(AuthContext);
-  const navigation = useNavigation();
+  const { getEventImageSource, getEffectiveEventImage } = useContext(EventContext);
+   const { user } = useContext(AuthContext);
+   const navigation = useNavigation();
+   // Small component that mirrors HomeScreen loading/fallback behavior
+   const EventThumb = ({ event }) => {
+     const [thumbFallback, setThumbFallback] = useState(false);
+     const effective = getEffectiveEventImage ? getEffectiveEventImage(event.id, event.image) : event.image;
+     const source = thumbFallback
+       ? require("../../assets/iconoApp.png")
+       : getEventImageSource
+         ? getEventImageSource(effective)
+         : (effective ? { uri: effective } : require("../../assets/iconoApp.png"));
+
+     return (
+       <Image
+         source={source}
+         style={styles.eventImage}
+         resizeMode="cover"
+         onError={() => setThumbFallback(true)}
+       />
+     );
+   };
+
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [friends, setFriends] = useState([]);
@@ -324,76 +346,72 @@ export default function FriendsScreen() {
         }
         style={{ marginHorizontal: 16 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        contentContainerStyle={{ paddingBottom: 40, paddingTop: 8 }}
       />
 
-      {/* Friend's events modal */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
-        transparent
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {selectedFriend ? (
-              <>
-                <View style={styles.profileCard}>
-                  <Image source={{ uri: getAvatarUrl(selectedFriend.photo) }} style={styles.avatarLarge} />
-                  <View style={{ marginLeft: 12, flex: 1 }}>
-                    <Text style={styles.profileName}>{selectedFriend.name}</Text>
-                    <Text style={styles.profileEmail}>{selectedFriend.email}</Text>
-                  </View>
-                  <TouchableOpacity style={styles.iconBtn} onPress={() => setModalVisible(false)}>
-                    <Ionicons name="close" size={22} color="#777" />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.divider} />
-
-                <Text style={styles.modalHeader}>Eventos</Text>
-                {eventsLoading ? (
-                  <ActivityIndicator style={{ marginVertical: 20 }} />
-                ) : friendEvents.length > 0 ? (
-                  <FlatList
-                    data={friendEvents}
-                    keyExtractor={(item) => String(item.id)}
-                    renderItem={({ item }) => (
-                      <TouchableOpacity
-                        style={styles.eventCard}
-                        activeOpacity={0.9}
-                        onPress={() => {
-                          setModalVisible(false);
-                          navigation.navigate("EventDetail", { event: item });
-                        }}
-                      >
-                        <Image
-                          source={{
-                            uri:
-                              item.image && item.image.trim() !== ""
-                                ? item.image
-                                : "https://placehold.co/600x300?text=Evento",
-                          }}
-                          style={styles.eventImage}
-                        />
-                        <View style={{ flex: 1, paddingLeft: 8 }}>
-                          <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
-                          <Text style={styles.eventDate}>{item.event_at}</Text>
-                          <Text style={styles.eventLocation} numberOfLines={1}>{item.location}</Text>
+      {/* Friend events modal */}
+      <Modal visible={modalVisible} transparent animationType="slide">
+        <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
+          <Pressable style={styles.modalContent} onPress={() => { /* absorb inside presses */ }}>
+             {selectedFriend ? (
+               <>
+                 <View style={styles.profileCard}>
+                   <Image
+                     source={{ uri: getAvatarUrl(selectedFriend.photo) }}
+                     style={styles.avatarLarge}
+                   />
+                   <View style={{ flex: 1, marginLeft: 12 }}>
+                     <Text style={styles.profileName}>{selectedFriend.name}</Text>
+                     <Text style={styles.profileEmail}>{selectedFriend.email}</Text>
+                   </View>
+                 </View>
+ 
+                 <View style={styles.divider} />
+ 
+                 <Text style={styles.modalHeader}>Eventos</Text>
+                 {eventsLoading ? (
+                   <ActivityIndicator style={{ marginVertical: 20 }} />
+                 ) : friendEvents.length > 0 ? (
+                   <FlatList
+                     data={friendEvents}
+                     keyExtractor={(item) => String(item.id)}
+                     renderItem={({ item }) => (
+                       <TouchableOpacity
+                         style={styles.eventCard}
+                         activeOpacity={0.9}
+                         onPress={() => {
+                           setModalVisible(false);
+                           navigation.navigate("EventDetail", { event: item });
+                         }}
+                       >
+                        <EventThumb event={item} />
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <Text style={styles.eventTitle} numberOfLines={2}>
+                            {item.title ? String(item.title) : 'Sin título'}
+                          </Text>
+                          {item.date ? (
+                            <Text style={styles.eventDate} numberOfLines={1}>
+                              {String(item.date)}
+                            </Text>
+                          ) : null}
+                          {item.location ? (
+                            <Text style={styles.eventLocation} numberOfLines={1}>
+                              {String(item.location)}
+                            </Text>
+                          ) : null}
                         </View>
-                      </TouchableOpacity>
-                    )}
-                  />
-                ) : (
-                  <Text style={{ color: "#888", textAlign: "center", marginVertical: 18 }}>No hay eventos.</Text>
-                )}
-              </>
-            ) : (
-              <ActivityIndicator style={{ marginVertical: 40 }} />
-            )}
-          </View>
-        </View>
-      </Modal>
+                       </TouchableOpacity>
+                     )}
+                   />
+                 ) : (
+                   <Text style={{ color: "#888", textAlign: "center", marginVertical: 18 }}>No hay eventos.</Text>
+                 )}
+               </>
+             ) : (
+               <ActivityIndicator style={{ marginVertical: 40 }} />
+             )}
+          </Pressable>
+        </Pressable>
+       </Modal>
 
       {/* Friend actions modal (compact) */}
       <Modal visible={friendActionVisible} transparent animationType="fade" onRequestClose={() => setFriendActionVisible(false)}>
