@@ -26,15 +26,63 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-async function fetchTicketmasterEvents(city = 'Barcelona') {
-  const url = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${TICKETMASTER_API_KEY}&countryCode=ES&city=${encodeURIComponent(city)}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return data._embedded?.events || [];
+async function fetchTicketmasterEvents(city = 'Barcelona', monthsAhead = 6) {
+  const baseUrl = 'https://app.ticketmaster.com/discovery/v2/events.json';
+  const toIsoNoMs = (d) => d.toISOString().split('.')[0] + 'Z';
+
+  const now = new Date();
+  const start = new Date(now); // desde ahora
+  const end = new Date(now);
+  end.setMonth(end.getMonth() + monthsAhead); // +6 meses
+
+  const params = new URLSearchParams({
+    apikey: TICKETMASTER_API_KEY,
+    countryCode: 'ES',
+    city: city,
+    startDateTime: toIsoNoMs(start),
+    endDateTime: toIsoNoMs(end),
+    sort: 'date,asc',
+    size: '100',
+  });
+
+  const events = [];
+  for (let page = 0; page < 5; page++) { // hasta 5 páginas (~500 items)
+    params.set('page', String(page));
+    const url = `${baseUrl}?${params.toString()}`;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      const batch = data._embedded?.events ?? [];
+      events.push(...batch);
+
+      const pg = data.page;
+      if (!pg || pg.number + 1 >= pg.totalPages || batch.length === 0) break;
+    } catch {
+      break;
+    }
+  }
+  return events;
 }
 
 const CARD_MARGIN = 10;
 const CARD_WIDTH = (Dimensions.get('window').width - CARD_MARGIN * 3) / 2;
+
+// Formatea "YYYY-MM-DD" (u otras variantes) a "DD - MM - YYYY"
+function formatDateDMY(dateStr) {
+  if (!dateStr) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  const m2 = /^(\d{4})\/(\d{2})\/(\d{2})/.exec(dateStr);
+  if (m2) return `${m2[3]}-${m2[2]}-${m2[1]}`;
+  const d = new Date(dateStr);
+  if (!isNaN(d)) {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  }
+  return dateStr;
+}
 
 /** Card hija (puede usar hooks propios sin romper FlatList) */
 function EventCard({ item, isFavorite, onToggleFavorite, onPress, getEventImageSource, effectiveImage }) {
@@ -77,7 +125,7 @@ function EventCard({ item, isFavorite, onToggleFavorite, onPress, getEventImageS
           {item.title}
         </Text>
         <Text style={styles.cardDate} numberOfLines={1} ellipsizeMode="tail">
-          {item.date}
+          {formatDateDMY(item.date)}
         </Text>
         <Text style={styles.cardLocation} numberOfLines={1} ellipsizeMode="tail">
           <Ionicons name="location-outline" size={14} color="#5a7bb6" /> {item.location}
@@ -111,7 +159,7 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    fetchTicketmasterEvents('Barcelona')
+    fetchTicketmasterEvents('Barcelona', 6) // ahora 6 meses vista
       .then(setApiEvents)
       .catch(() => setApiEvents([]))
       .finally(() => setLoadingApiEvents(false));
