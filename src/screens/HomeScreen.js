@@ -9,6 +9,7 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
 import { AuthContext } from '../context/AuthContext';
+import { Image as ExpoImage } from 'expo-image';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
 
@@ -91,18 +92,27 @@ function EventCard({ item, isFavorite, onToggleFavorite, onPress, getEventImageS
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.88} onPress={onPress}>
       <View style={styles.imageWrapper}>
-        {thumbFallback ? (
-          <Image
+        <ExpoImage
+          source={
+            effectiveImage
+              ? getEventImageSource(effectiveImage)
+              : require('../../assets/iconoApp.png')
+          }
+          style={styles.cardImage}
+          contentFit="cover"
+          transition={200}
+          cachePolicy="memory-disk"
+          onError={() => {
+            // If the image fails to load, show the placeholder
+            setThumbFallback(true);
+          }}
+        />
+        {thumbFallback && (
+          <ExpoImage
             source={require('../../assets/iconoApp.png')}
-            style={styles.cardImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <Image
-            source={getEventImageSource(effectiveImage)}
-            style={styles.cardImage}
-            resizeMode="cover"
-            onError={() => setThumbFallback(true)}
+            style={[styles.cardImage, { position: 'absolute', top: 0, left: 0 }]}
+            contentFit="cover"
+            transition={200}
           />
         )}
 

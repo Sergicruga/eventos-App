@@ -154,8 +154,16 @@ app.get("/events", async (req, res) => {
 app.post("/events", async (req, res) => {
   try {
     let { title, description, event_at, location, type, image, latitude, longitude, created_by } = req.body;
-    const DEFAULT_EVENT_IMAGE = "https://placehold.co/800x400?text=Evento";
-    if (!image || String(image).trim() === "") image = DEFAULT_EVENT_IMAGE;
+    const DEFAULT_EVENT_IMAGE = "/assets/iconoApp.png"; // Use your local asset path
+
+    // Treat empty, null, or placeholder URL as "no image"
+    if (
+      !image ||
+      String(image).trim() === "" ||
+      String(image).startsWith("https://placehold.co/")
+    ) {
+      image = DEFAULT_EVENT_IMAGE;
+    }
      // created_by debe ser integer o null
     const createdByInt = created_by ? Number(created_by) : null;
     const { rows } = await pool.query(

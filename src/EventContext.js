@@ -406,7 +406,25 @@ export function EventProvider({ children }) {
   };
 
   // 👉 source válido para <Image>
-  const getEventImageSource = (img) => toImageSource(img);
+  const getEventImageSource = (img) => {
+    // If no image, or it's the placeholder URL, or it's the backend placeholder path, use the local asset
+    if (
+      !img ||
+      img === '/assets/iconoApp.png' ||
+      img === 'assets/iconoApp.png' ||
+      img === 'iconoApp.png' ||
+      img.startsWith('https://placehold.co/') ||
+      img.startsWith('https://via.placeholder.com/')
+    ) {
+      return require('../assets/iconoApp.png');
+    }
+    if (img.startsWith('/uploads/')) {
+      // If served from backend, prepend your backend URL
+      return { uri: `${API_URL}${img}` };
+    }
+    // Otherwise, treat as remote URL
+    return { uri: img };
+  };
 
   // 👉 imagen efectiva: override local > servidor
   const getEffectiveEventImage = (eventId, serverImage) => {
