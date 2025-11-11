@@ -10,6 +10,31 @@ import { API_URL } from "../api/config";
 import { getUser, getUserCreatedEvents, uploadUserPhoto } from "../api/users";
 
 /* -----------------------------------------------------------------------------
+  Helpers de fecha para ocultar eventos pasados (solo hoy y futuros)
+----------------------------------------------------------------------------- */
+function toLocalMidnightMs(dateStr) {
+  if (!dateStr) return NaN;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (m) {
+    const [, y, mm, dd] = m;
+    return new Date(Number(y), Number(mm) - 1, Number(dd), 0, 0, 0, 0).getTime();
+  }
+  const t = new Date(dateStr).getTime();
+  if (Number.isNaN(t)) return NaN;
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+}
+function todayLocalMidnightMs() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+}
+function isUpcoming(dateStr) {
+  const e = toLocalMidnightMs(dateStr);
+  const t = todayLocalMidnightMs();
+  return !Number.isNaN(e) && e >= t;
+}
+
+/* -----------------------------------------------------------------------------
   Miniatura de evento con la cadena de fallbacks:
   override local (file://) > imagen servidor > backup web > asset local
 ----------------------------------------------------------------------------- */
@@ -17,12 +42,9 @@ function EventThumbImage({ eventId, serverImage, style }) {
   const { getEffectiveEventImage, getEventImageSource, overridesReady } = useContext(EventContext);
   const [stage, setStage] = React.useState(0); // 0: efectiva, 1: backup web, 2: asset local
 
-  // Resuelve la imagen efectiva en cada render (incluye override local si existe)
   const effective = getEffectiveEventImage?.(eventId, serverImage) ?? serverImage ?? null;
 
   React.useEffect(() => {
-    // cuando cambie el id, la imagen del servidor o por fin
-    // estén cargados los overrides => reintenta con la imagen efectiva
     setStage(0);
   }, [eventId, serverImage, overridesReady]);
 
@@ -38,7 +60,7 @@ function EventThumbImage({ eventId, serverImage, style }) {
 
   const src =
     stage === 1
-      ? { uri: "https://picsum.photos/400/300" } // backup web
+      ? { uri: "https://picsum.photos/400/300" }
       : getEventImageSource?.(effective) ?? { uri: "https://picsum.photos/400/300" };
 
   return (
@@ -78,19 +100,24 @@ export default function ProfileScreen() {
 
       // Estado local de pantalla
       setMe(prev => prev && prev.id === u.id ? { ...prev, ...u } : u);
-      setMyEvents(
-        (evs || []).map(e => ({
+
+      // Mapeo + FILTRO de futuros (clave del cambio)
+      const mine = (evs || [])
+        .map(e => ({
           id: String(e.id),
           title: e.title,
           date: e.event_at?.slice(0, 10) ?? "",
           location: e.location ?? "",
-          image: getEffectiveEventImage?.(e.id, e.image) ?? e.image ?? null, // la resolvemos en el componente con getEffectiveEventImage
+          image: getEffectiveEventImage?.(e.id, e.image) ?? e.image ?? null,
           description: e.description ?? "",
           latitude: e.latitude ?? null,
           longitude: e.longitude ?? null,
           type: e.type ?? "local",
         }))
-      );
+        .filter(ev => isUpcoming(ev.date)) // ⬅️ oculta pasados
+        .sort((a, b) => toLocalMidnightMs(a.date) - toLocalMidnightMs(b.date)); // opcional: orden asc
+
+      setMyEvents(mine);
 
       // Sincroniza contextos si cambia algo
       if (updateUser) {
@@ -113,7 +140,7 @@ export default function ProfileScreen() {
     } finally {
       setLoading(false);
     }
-  }, [uid, token]);
+  }, [uid, token, evCtxUser?.id, evCtxUser?.name, evCtxUser?.email, evCtxUser?.photo, updateUser, login, authUser, getEffectiveEventImage]);
 
   // Carga inicial
   useEffect(() => { hydrate(); }, [hydrate]);
@@ -122,7 +149,7 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       hydrate();
-    }, [uid])
+    }, [uid, hydrate])
   );
 
   // Refleja cambios del EventContext en pantalla
@@ -149,7 +176,6 @@ export default function ProfileScreen() {
 
   const onChangePhoto = async () => {
     try {
-      // Request permission first
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permiso requerido", "Se necesita permiso para acceder a tus fotos.");
@@ -157,7 +183,7 @@ export default function ProfileScreen() {
       }
 
       const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images, // <-- fix here
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -168,12 +194,11 @@ export default function ProfileScreen() {
 
       const data = await uploadUserPhoto(uid, res.assets[0].uri); // { photo: "/uploads/profile_<id>.jpg" }
 
-      // Actualiza local y contextos
       setMe(prev => ({ ...(prev || {}), photo: data.photo }));
       updateUser?.({ ...(evCtxUser || {}), id: uid, photo: data.photo });
       await login({ user: { ...(authUser || {}), photo: data.photo }, token });
 
-      setPhotoBust(Date.now()); // cache-busting
+      setPhotoBust(Date.now());
       Alert.alert("Foto actualizada");
     } catch (e) {
       Alert.alert("Error", "No se pudo subir la foto");
@@ -228,13 +253,13 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Mis eventos */}
+      {/* Mis eventos (solo próximos) */}
       <Text style={{ paddingHorizontal: 16, paddingTop: 12, fontSize: 16, fontWeight: "700" }}>Mis eventos</Text>
       <FlatList
         data={myEvents}
         keyExtractor={(i) => i.id}
         contentContainerStyle={{ padding: 16, paddingTop: 8 }}
-        ListEmptyComponent={<Text>No has creado eventos.</Text>}
+        ListEmptyComponent={<Text>No tienes eventos próximos.</Text>}
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() => navigation.navigate("EventDetail", { event: item })}
@@ -256,7 +281,7 @@ export default function ProfileScreen() {
         )}
       />
 
-      {/* Logout flotante */} 
+      {/* Logout flotante */}
       <TouchableOpacity
         onPress={logout}
         activeOpacity={0.85}

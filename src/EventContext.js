@@ -5,18 +5,16 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Alert } from 'react-native';
 import { AuthContext } from "./context/AuthContext";
 import { API_URL } from './api/config';
-import { getFavoriteIds, addFavorite, removeFavorite } from './api/favorites';
+import { getFavoriteIds } from './api/favorites';
 import { attend as apiAttend, unattend as apiUnattend } from './api/attendees';
 import { pickAndPersistImage } from './utils/pickAndPersistImage';
-import { toImageSource } from './utils/imageSource';
 
 export const EventContext = createContext();
 
-// Utils
+// ========= Utils =========
 const isNumericId = (v) =>
   typeof v === 'number' || (typeof v === 'string' && /^\d+$/.test(v));
 
-// Extrae un external_id razonable (TM u otros)
 const externalIdFrom = (ev) => {
   const ext = ev?.externalId ?? ev?.tm_id ?? ev?.sourceId ?? null;
   if (ext) return String(ext);
@@ -24,7 +22,64 @@ const externalIdFrom = (ev) => {
   return null;
 };
 
-// Busca un evento por external_id en el backend
+const parseJsonSafe = async (res) => {
+  try {
+    const text = await res.text();
+    if (!text) return null;
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+
+async function safeFetch(url, options = {}, { timeoutMs = 12000 } = {}) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+const dbIdFrom = (id) => (isNumericId(id) ? Number(id) : null);
+const isLocalUri = (uri) => typeof uri === 'string' && uri.startsWith('file://');
+
+const DEFAULT_EVENT_IMAGE = "https://via.placeholder.com/800x450.png?text=Evento";
+
+const BASE_EVENTS_KEY = 'eventos_guardados';
+const BASE_FAVORITES_KEY = 'favoritos_eventos_ids';
+const BASE_FAVORITES_MAP_KEY = 'favoritos_eventos_map';
+const EVENT_IMAGE_OVERRIDES_KEY = 'event_image_overrides'; // global (por dispositivo)
+
+const storageKey = (base, uid) => `${base}:${uid ?? 'guest'}`;
+
+// ========= Fecha / futuros =========
+const toLocalMidnightMs = (d) => {
+  if (!d) return NaN;
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    const [y, m, day] = d.split('-').map(Number);
+    return new Date(y, m - 1, day, 0, 0, 0, 0).getTime();
+  }
+  const t = new Date(d).getTime();
+  if (Number.isNaN(t)) return NaN;
+  const dt = new Date(t);
+  return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0).getTime();
+};
+
+const todayLocalMidnightMs = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+};
+
+const isUpcoming = (dateStr) => {
+  const eventMs = toLocalMidnightMs(dateStr);
+  const todayMs = todayLocalMidnightMs();
+  return !Number.isNaN(eventMs) && eventMs >= todayMs;
+};
+
+// ========= Resolver por external_id =========
 async function findByExternalId(extId, token) {
   if (!extId) return null;
   const base = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
@@ -46,11 +101,9 @@ async function findByExternalId(extId, token) {
   return null;
 }
 
-// Crea/actualiza en BD un evento externo y devuelve su id interno
+// Crear/actualizar evento externo y devolver id interno
 async function ensureEventOnServer(ev, token) {
   if (!ev) return null;
-
-  // Si ya es id numérico, nada que hacer
   if (isNumericId(ev.id)) return String(ev.id);
 
   const external_id = externalIdFrom(ev);
@@ -74,7 +127,6 @@ async function ensureEventOnServer(ev, token) {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
-  // 1) Endpoints de importación (si existen)
   const importUrls = [
     `${base}/events/import-external`,
     `${base}/api/events/import-external`,
@@ -84,7 +136,6 @@ async function ensureEventOnServer(ev, token) {
     try {
       const res = await safeFetch(url, { method: 'POST', headers, body: JSON.stringify(payload) }, { timeoutMs: 12000 });
       if (res.status === 409 && external_id) {
-        // ya existe: intenta obtenerlo
         const id = await findByExternalId(external_id, token);
         if (id) return id;
       }
@@ -94,7 +145,6 @@ async function ensureEventOnServer(ev, token) {
     } catch {}
   }
 
-  // 2) Fallback: crear evento estándar
   const createUrls = [
     `${base}/events`,
     `${base}/api/events`,
@@ -116,84 +166,30 @@ async function ensureEventOnServer(ev, token) {
   return await findByExternalId(external_id, token);
 }
 
-const dbIdFrom = (id) => (isNumericId(id) ? Number(id) : null);
-const isLocalUri = (uri) => typeof uri === 'string' && uri.startsWith('file://');
-
-const DEFAULT_EVENT_IMAGE = "https://via.placeholder.com/800x450.png?text=Evento";
-
-const EVENTS_KEY = 'eventos_guardados';
-const FAVORITES_KEY = 'favoritos_eventos_ids';
-const FAVORITES_MAP_KEY = 'favoritos_eventos_map';
-const EVENT_IMAGE_OVERRIDES_KEY = 'event_image_overrides'; // { [eventId]: "file://..." }
-
-// ===== Helpers de red robustos =====
-const parseJsonSafe = async (res) => {
-  try {
-    const text = await res.text();
-    if (!text) return null;
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-};
-
-async function safeFetch(url, options = {}, { timeoutMs = 12000 } = {}) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    return res;
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-// Helpers para normalizar URL y construir intentos
-const stripTrailingSlash = (u) => (u.endsWith('/') ? u.slice(0, -1) : u);
-
+// Intentos de actualización (PATCH/PUT/POST _method)
 const attemptsFor = (base, id, basePayload, payloadWithId, headers) => {
-  // Orden de intentos: PATCH/PUT/POST override en varias rutas comunes
   const urls = [
-    // sin prefijo
-    `${base}/events/${id}`,
-    `${base}/event/${id}`,
-    `${base}/events/update/${id}`,
-    `${base}/event/update/${id}`,
-    `${base}/events`,
-    `${base}/event`,
-    // con /api prefijo típico
-    `${base}/api/events/${id}`,
-    `${base}/api/event/${id}`,
-    `${base}/api/events/update/${id}`,
-    `${base}/api/event/update/${id}`,
-    `${base}/api/events`,
-    `${base}/api/event`,
-    // con /v1 prefijo típico
-    `${base}/v1/events/${id}`,
-    `${base}/v1/event/${id}`,
-    `${base}/v1/events/update/${id}`,
-    `${base}/v1/event/update/${id}`,
-    `${base}/v1/events`,
-    `${base}/v1/event`,
+    `${base}/events/${id}`, `${base}/event/${id}`, `${base}/events/update/${id}`, `${base}/event/update/${id}`,
+    `${base}/events`, `${base}/event`,
+    `${base}/api/events/${id}`, `${base}/api/event/${id}`, `${base}/api/events/update/${id}`, `${base}/api/event/update/${id}`,
+    `${base}/api/events`, `${base}/api/event`,
+    `${base}/v1/events/${id}`, `${base}/v1/event/${id}`, `${base}/v1/events/update/${id}`, `${base}/v1/event/update/${id}`,
+    `${base}/v1/events`, `${base}/v1/event`,
   ];
 
   const attempts = [];
-
   for (const u of urls) {
     if (u.endsWith(`/${id}`)) {
-      // endpoints con :id
       attempts.push({ method: 'PATCH', url: u, body: basePayload });
       attempts.push({ method: 'PUT',   url: u, body: basePayload });
       attempts.push({ method: 'POST',  url: `${u}?_method=PUT`,   body: basePayload });
       attempts.push({ method: 'POST',  url: `${u}?_method=PATCH`, body: basePayload });
     } else {
-      // endpoints sin :id (id va en el body)
-      attempts.push({ method: 'PUT',   url: u, body: payloadWithId });
-      attempts.push({ method: 'POST',  url: `${u}?_method=PUT`,   body: payloadWithId });
-      attempts.push({ method: 'POST',  url: `${u}?_method=PATCH`, body: payloadWithId });
+      attempts.push({ method: 'PUT',   url: u, body: { ...payloadWithId } });
+      attempts.push({ method: 'POST',  url: `${u}?_method=PUT`,   body: { ...payloadWithId } });
+      attempts.push({ method: 'POST',  url: `${u}?_method=PATCH`, body: { ...payloadWithId } });
     }
   }
-  // Quita duplicados manteniendo orden
   const seen = new Set();
   return attempts.filter(a => {
     const key = `${a.method} ${a.url}`;
@@ -202,20 +198,16 @@ const attemptsFor = (base, id, basePayload, payloadWithId, headers) => {
     return true;
   }).map(a => ({ ...a, headers }));
 };
-// Obtener un evento del servidor tras editar (verificación de persistencia)
+
+// Obtener evento por id (verificación tras update)
 async function fetchEventById(id, token) {
   const base = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
   const urls = [
-    `${base}/events/${id}`,
-    `${base}/event/${id}`,
-    `${base}/api/events/${id}`,
-    `${base}/api/event/${id}`,
-    `${base}/v1/events/${id}`,
-    `${base}/v1/event/${id}`,
+    `${base}/events/${id}`, `${base}/event/${id}`,
+    `${base}/api/events/${id}`, `${base}/api/event/${id}`,
+    `${base}/v1/events/${id}`, `${base}/v1/event/${id}`,
   ];
-  const headers = {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+  const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}) };
   for (const url of urls) {
     try {
       const res = await safeFetch(url, { headers }, { timeoutMs: 10000 });
@@ -227,30 +219,30 @@ async function fetchEventById(id, token) {
   return null;
 }
 
-
 export function EventProvider({ children }) {
-  // Usuario
+  // ===== Usuario / auth =====
   const [user, setUser] = useState({ name: 'Usuario', email: '' });
   const auth = AuthContext ? useContext(AuthContext) : null;
   const effectiveUser = auth?.user ?? user;
   const authToken = auth?.token ?? null;
+  const uid = auth?.user?.id ?? null;
 
-  // Estado principal
+  // ===== Estado principal =====
   const [events, setEvents] = useState([]);
 
-  // Formulario de creación/edición
+  // Formulario
   const [formEvent, setFormEvent] = useState({
     title: '',
     date: '',
     location: '',
     description: '',
-    image: null, // 'file://...' | 'https://...' | '/uploads/...'
+    image: null,
     type: 'local',
     latitude: null,
     longitude: null,
   });
 
-  // Ubicación global
+  // Ubicación
   const [coords, setCoords] = useState(null);
   const [city, setCity] = useState(null);
   const [locLoading, setLocLoading] = useState(true);
@@ -259,85 +251,27 @@ export function EventProvider({ children }) {
   const [favorites, setFavorites] = useState([]);
   const [favoriteItems, setFavoriteItems] = useState({});
 
-  // Overrides locales de imagen (idEvento -> file://ruta)
+  // Overrides locales de imagen (globales)
   const [imageOverrides, setImageOverrides] = useState({});
   const [overridesReady, setOverridesReady] = useState(false);
 
-  // ===== CARGA INICIAL =====
+  // ===== Overrides (global) =====
   useEffect(() => {
     (async () => {
-      try {
-        // Favoritos
-        const [favIds, favMap] = await Promise.all([
-          AsyncStorage.getItem(FAVORITES_KEY),
-          AsyncStorage.getItem(FAVORITES_MAP_KEY),
-        ]);
-        if (favIds) setFavorites(JSON.parse(favIds));
-        if (favMap) setFavoriteItems(JSON.parse(favMap));
-      } catch {}
-
-      // Overrides de imagen
       try {
         const raw = await AsyncStorage.getItem(EVENT_IMAGE_OVERRIDES_KEY);
         if (raw) setImageOverrides(JSON.parse(raw));
       } catch {} finally {
-        // muy importante: ya intentamos cargar los overrides
         setOverridesReady(true);
-      }
-
-      // Eventos desde backend (si hay)
-      try {
-        const uid = auth?.user?.id;
-        const url = `${API_URL}/events${uid ? `?userId=${uid}` : ''}`;
-        const res = await safeFetch(url, {}, { timeoutMs: 12000 });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-
-        // ⚠️ No mezcles overrides aquí; guarda lo del server y aplica override al pintar
-        const mapped = (data || []).map(ev => ({
-          id: String(ev.id),
-          title: ev.title,
-          description: ev.description ?? '',
-          date: ev.event_at?.slice(0, 10) ?? '',
-          location: ev.location ?? '',
-          type: ev.type || 'local',
-          image: (ev.image && String(ev.image).trim() !== "") ? ev.image : null,
-          latitude: ev.latitude != null ? Number(ev.latitude) : null,
-          longitude: ev.longitude != null ? Number(ev.longitude) : null,
-          createdById: ev.created_by != null ? Number(ev.created_by) : null,
-          createdBy: ev.created_by_name || 'Desconocido',
-          isAttending: Boolean(ev.is_attending),
-          attendeesCount: Number(ev.attendees_count ?? 0),
-          asistentes: [],
-        }));
-
-        setEvents(mapped);
-        AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(mapped)).catch(() => {});
-      } catch {
-        // Fallback a caché local
-        try {
-          const savedEvents = await AsyncStorage.getItem(EVENTS_KEY);
-          if (savedEvents) {
-            const arr = JSON.parse(savedEvents);
-            arr.forEach(ev => {
-              if (ev.latitude != null) ev.latitude = Number(ev.latitude);
-              if (ev.longitude != null) ev.longitude = Number(ev.longitude);
-              ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
-              ev.type = ev.type || 'local';
-            });
-            setEvents(arr);
-          }
-        } catch {}
       }
     })();
   }, []);
 
-  // Persistir overrides cuando cambien
   useEffect(() => {
     AsyncStorage.setItem(EVENT_IMAGE_OVERRIDES_KEY, JSON.stringify(imageOverrides)).catch(() => {});
   }, [imageOverrides]);
 
-  // ===== UBICACIÓN =====
+  // ===== Ubicación (una vez) =====
   useEffect(() => {
     (async () => {
       try {
@@ -361,37 +295,123 @@ export function EventProvider({ children }) {
     })();
   }, []);
 
-  // ===== PERSISTENCIAS =====
-  useEffect(() => {
-    AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites)).catch(() => {});
-  }, [favorites]);
-
-  useEffect(() => {
-    AsyncStorage.setItem(FAVORITES_MAP_KEY, JSON.stringify(favoriteItems)).catch(() => {});
-  }, [favoriteItems]);
-
-  useEffect(() => {
-    AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(events)).catch(() => {});
-  }, [events]);
-
-  // ===== SINCRONIZAR FAVORITOS CON BD =====
+  // ===== Favoritos por usuario =====
   useEffect(() => {
     (async () => {
-      const uid = auth?.user?.id;
-      if (!uid) return; // sin usuario => mantenemos favoritos locales
+      setFavorites([]);
+      setFavoriteItems({});
+
       try {
-        const serverIds = await getFavoriteIds(uid); // [1,5,9,...]
+        const favKey = storageKey(BASE_FAVORITES_KEY, uid);
+        const favMapKey = storageKey(BASE_FAVORITES_MAP_KEY, uid);
+        const [favIds, favMap] = await Promise.all([
+          AsyncStorage.getItem(favKey),
+          AsyncStorage.getItem(favMapKey),
+        ]);
+        if (favIds) setFavorites(JSON.parse(favIds));
+        if (favMap) setFavoriteItems(JSON.parse(favMap));
+      } catch {}
+
+      if (!uid) return;
+      try {
+        const serverIds = await getFavoriteIds(uid);
         const serverAsStrings = serverIds.map(String);
-        const localNonDb = favorites.filter((fid) => !isNumericId(fid));
+        const local = await AsyncStorage.getItem(storageKey(BASE_FAVORITES_KEY, uid))
+          .then(v => (v ? JSON.parse(v) : []))
+          .catch(() => []);
+        const localNonDb = local.filter((fid) => !isNumericId(fid));
         const merged = Array.from(new Set([...serverAsStrings, ...localNonDb]));
         setFavorites(merged);
       } catch (e) {
-        console.warn('No se pudieron cargar favoritos del servidor:', e.message);
+        console.warn('No se pudieron cargar favoritos del servidor:', e?.message);
       }
     })();
-  }, [auth?.user?.id]);
+  }, [uid]);
 
-  // ===== HELPERS =====
+  useEffect(() => {
+    AsyncStorage.setItem(storageKey(BASE_FAVORITES_KEY, uid), JSON.stringify(favorites)).catch(() => {});
+  }, [favorites, uid]);
+
+  useEffect(() => {
+    AsyncStorage.setItem(storageKey(BASE_FAVORITES_MAP_KEY, uid), JSON.stringify(favoriteItems)).catch(() => {});
+  }, [favoriteItems, uid]);
+
+  // ===== Cargar eventos al cambiar usuario (clave del bug) =====
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      // Limpiar para no ver datos del usuario anterior
+      setEvents([]);
+
+      // Backend del usuario actual
+      try {
+        const url = `${API_URL}/events${uid ? `?userId=${uid}` : ''}`;
+        const res = await safeFetch(url, {}, { timeoutMs: 12000 });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        const mapped = (data || []).map(ev => {
+          const rawEventAt = ev.event_at ?? null;
+          const rawStartsAt = ev.starts_at ?? ev.startsAt ?? rawEventAt ?? null;
+          const inferredTime =
+            ev.time_start ??
+            ev.timeStart ??
+            (rawStartsAt && rawStartsAt.length >= 16 ? rawStartsAt.slice(11, 16) : null) ??
+            (rawEventAt && rawEventAt.length >= 16 ? rawEventAt.slice(11, 16) : null);
+
+          return {
+            id: String(ev.id),
+            title: ev.title,
+            description: ev.description ?? '',
+            date: rawEventAt?.slice(0, 10) ?? '',              // conservamos la fecha (YYYY-MM-DD)
+            timeStart: inferredTime || null,                    // NUEVO: hora HH:MM
+            startsAt: rawStartsAt || null,                      // NUEVO: ISO completo si existe
+            location: ev.location ?? '',
+            type: ev.type || 'local',
+            image: (ev.image && String(ev.image).trim() !== "") ? ev.image : null,
+            latitude: ev.latitude != null ? Number(ev.latitude) : null,
+            longitude: ev.longitude != null ? Number(ev.longitude) : null,
+            createdById: ev.created_by != null ? Number(ev.created_by) : null,
+            createdBy: ev.created_by_name || 'Desconocido',
+            isAttending: Boolean(ev.is_attending),
+            attendeesCount: Number(ev.attendees_count ?? 0),
+            asistentes: [],
+          };
+        });
+
+        if (!cancelled) {
+          setEvents(mapped);
+          AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(mapped)).catch(() => {});
+        }
+        return;
+      } catch {}
+
+      // Fallback caché local por usuario
+      try {
+        const savedEvents = await AsyncStorage.getItem(storageKey(BASE_EVENTS_KEY, uid));
+        if (savedEvents && !cancelled) {
+          const arr = JSON.parse(savedEvents);
+          arr.forEach(ev => {
+            if (ev.latitude != null) ev.latitude = Number(ev.latitude);
+            if (ev.longitude != null) ev.longitude = Number(ev.longitude);
+            ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
+            ev.type = ev.type || 'local';
+          });
+          setEvents(arr);
+        }
+      } catch {}
+    })();
+
+    return () => { cancelled = true; };
+  }, [uid, authToken]);
+
+  // Persistir eventos por-usuario
+  useEffect(() => {
+    AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(events)).catch(() => {});
+  }, [events, uid]);
+
+  // ===== Helpers =====
   const normalizeEvent = (ev) => ({
     ...ev,
     image: ev.image ?? ev.imageUrl ?? ev.imageUri ?? null,
@@ -405,9 +425,7 @@ export function EventProvider({ children }) {
     return false;
   };
 
-  // 👉 source válido para <Image>
   const getEventImageSource = (img) => {
-    // If no image, or it's the placeholder URL, or it's the backend placeholder path, use the local asset
     if (
       !img ||
       img === '/assets/iconoApp.png' ||
@@ -418,21 +436,17 @@ export function EventProvider({ children }) {
     ) {
       return require('../assets/iconoApp.png');
     }
-    if (img.startsWith('/uploads/')) {
-      // If served from backend, prepend your backend URL
+    if (typeof img === 'string' && img.startsWith('/uploads/')) {
       return { uri: `${API_URL}${img}` };
     }
-    // Otherwise, treat as remote URL
     return { uri: img };
   };
 
-  // 👉 imagen efectiva: override local > servidor
   const getEffectiveEventImage = (eventId, serverImage) => {
     const over = imageOverrides?.[String(eventId)];
     return over ?? serverImage ?? null;
-    };
+  };
 
-  // ===== HELPERS DE BACKEND / FIELDS (NUEVOS) =====
   const toPatchPayload = (ev) => {
     const payload = {
       title: ev.title ?? '',
@@ -443,6 +457,9 @@ export function EventProvider({ children }) {
       latitude: ev.latitude ?? null,
       longitude: ev.longitude ?? null,
     };
+    // NUEVO: incluir hora y startsAt si están
+    if (ev.timeStart) payload.time_start = ev.timeStart;
+    if (ev.startsAt) payload.starts_at = ev.startsAt;
     if (ev.image && !isLocalUri(ev.image) && String(ev.image).trim() !== '') {
       payload.image = ev.image;
     }
@@ -458,7 +475,7 @@ export function EventProvider({ children }) {
     return next;
   };
 
-  // ===== ELEGIR IMAGEN (form) =====
+  // ===== Form: pick image =====
   const pickImageForForm = async () => {
     try {
       const localUri = await pickAndPersistImage();
@@ -473,7 +490,7 @@ export function EventProvider({ children }) {
     }
   };
 
-  // ===== CREAR EVENTO (con override si hay file://) =====
+  // ===== Crear =====
   const addEvent = async (event) => {
     const eventMs = Date.parse(event.date);
     const now = new Date();
@@ -487,7 +504,9 @@ export function EventProvider({ children }) {
       const payload = {
         title: event.title,
         description: event.description ?? '',
-        event_at: event.date,
+        event_at: event.date,                  // compatibilidad existente
+        time_start: event.timeStart ?? '',      // NUEVO
+        starts_at: event.startsAt ?? null,      // NUEVO (ISO completo)
         location: event.location ?? '',
         type: event.type || 'local',
         image: (event.image && !isLocalUri(event.image) && event.image.trim() !== "") ? event.image : "",
@@ -522,6 +541,12 @@ export function EventProvider({ children }) {
         title: saved.title,
         description: saved.description ?? '',
         date: saved.event_at?.slice(0, 10) ?? event.date,
+        timeStart:
+          saved.time_start ??
+          saved.timeStart ??
+          (saved.starts_at ? saved.starts_at.slice(11,16) : null) ??
+          (saved.event_at && saved.event_at.length >=16 ? saved.event_at.slice(11,16) : (event.timeStart || null)),
+        startsAt: saved.starts_at ?? saved.startsAt ?? saved.event_at ?? event.startsAt ?? null,
         location: saved.location ?? '',
         type: saved.type || 'local',
         image:
@@ -533,9 +558,10 @@ export function EventProvider({ children }) {
         createdById: saved?.created_by != null ? Number(saved.created_by) : (effectiveUser?.id ?? null),
         createdBy: saved?.created_by_name ?? effectiveUser?.name ?? user.name,
         asistentes: [],
+        isAttending: false,
+        attendeesCount: Number(saved?.attendees_count ?? 0),
       };
 
-      // Copia la imagen local al sandbox y guarda override
       if (event.image && isLocalUri(event.image)) {
         try {
           const ext = event.image.split('.').pop()?.toLowerCase() || 'jpg';
@@ -544,7 +570,6 @@ export function EventProvider({ children }) {
           const dest = `${dir}event_${saved.id}.${ext}`;
           await FileSystem.copyAsync({ from: event.image, to: dest });
 
-          // Actualiza overrides en memoria y en disco
           setImageOverrides(prev => ({ ...prev, [String(saved.id)]: dest }));
           const current = await AsyncStorage.getItem(EVENT_IMAGE_OVERRIDES_KEY).then(v => (v ? JSON.parse(v) : {})).catch(() => ({}));
           current[String(saved.id)] = dest;
@@ -565,9 +590,11 @@ export function EventProvider({ children }) {
         ...event,
         id: Date.now().toString(),
         type: event.type || 'local',
-        image: event.image || event.imageUrl || event.imageUri || DEFAULT_EVENT_IMAGE,
+        image: event.image || DEFAULT_EVENT_IMAGE,
         createdBy: user.name,
         asistentes: [],
+        isAttending: false,
+        attendeesCount: 0,
       };
       setEvents(prev => [local, ...prev]);
       return local;
@@ -591,188 +618,175 @@ export function EventProvider({ children }) {
     return e;
   };
 
-  // ===== EDITAR con verificación de persistencia (fallback + GET después) =====
-const updateEvent = async (updatedEvent) => {
-  const t = Date.parse(updatedEvent.date);
-  const now = new Date();
-  const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  if (Number.isNaN(t) || t < todayMid) {
-    Alert.alert('Fecha inválida', 'No puedes poner una fecha anterior a hoy.');
-    return null;
-  }
-
-  const u = normalizeEvent(updatedEvent);
-
-  // Snapshot previo para revertir
-  const prevSnapshot = events;
-
-  // Optimista
-  const optimistic = (() => {
-    const existing = events.find(e => String(e.id) === String(u.id));
-    const merged = {
-      ...(existing || {}),
-      ...u,
-      createdBy: u.createdBy ?? existing?.createdBy ?? (user?.name ?? 'Usuario'),
-      createdById: u.createdById ?? existing?.createdById ?? (effectiveUser?.id ?? null),
-      type: u.type || existing?.type || 'local',
-      asistentes: u.asistentes ?? existing?.asistentes ?? [],
-    };
-    return merged;
-  })();
-
-  setEvents(prev => mergeEventById(prev, optimistic));
-  try {
-    await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(mergeEventById(prevSnapshot, optimistic)));
-  } catch {}
-
-  const dbId = dbIdFrom(u.id);
-  if (dbId == null) {
-    // evento local/no-BD
-    return optimistic;
-  }
-
-  // payload + headers
-  const basePayload = toPatchPayload(u);
-  const payloadWithId = { id: dbId, ...basePayload };
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-  };
-
-  // Normaliza base URL (sin barra final)
-  const base = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
-
-  // Mismos intentos que ya tenías (PATCH → PUT → POST con _method y variantes)
-  const attempts = attemptsFor(base, dbId, basePayload, payloadWithId, headers);
-
-  const tryAll = async () => {
-    let lastRes = null;
-    for (const a of attempts) {
-      try {
-        console.log('[updateEvent] intento =>', a.method, a.url);
-        const res = await safeFetch(
-          a.url,
-          { method: a.method, headers: a.headers, body: JSON.stringify(a.body) },
-          { timeoutMs: 12000 }
-        );
-
-        const status = `${res.status} ${res.statusText || ''}`.trim();
-        let snippet = '';
-        try {
-          const txt = await res.text();
-          snippet = txt ? txt.slice(0, 120) : '';
-        } catch {}
-        console.log('[updateEvent] respuesta <=', status, snippet);
-
-        if (res.ok || res.status === 204) {
-          if (snippet && !snippet.startsWith('<!DOCTYPE')) {
-            try {
-              const json = JSON.parse(snippet);
-              return { ok: true, status: res.status, _json: json };
-            } catch {}
-          }
-          return { ok: true, status: res.status, _json: null };
-        }
-
-        lastRes = { ok: false, status: res.status, snippet };
-        const cannotMethod = /Cannot\s+(PATCH|PUT|POST)/i.test(snippet);
-        if (!(res.status === 404 || res.status === 405 || cannotMethod)) {
-          return lastRes; // 400/422, etc -> paramos
-        }
-      } catch (e) {
-        console.log('[updateEvent] network/abort en', a.method, a.url, e?.message);
-        lastRes = null;
-      }
+  // ===== Editar =====
+  const updateEvent = async (updatedEvent) => {
+    const t = Date.parse(updatedEvent.date);
+    const now = new Date();
+    const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    if (Number.isNaN(t) || t < todayMid) {
+      Alert.alert('Fecha inválida', 'No puedes poner una fecha anterior a hoy.');
+      return null;
     }
-    return lastRes; // puede ser null si todas fueron abort/network
-  };
 
-  try {
-    const result = await tryAll();
+    const u = normalizeEvent(updatedEvent);
+    // Aseguramos mantener los campos de hora si existen
+    if (!u.timeStart && u.startsAt && u.startsAt.length >= 16) {
+      u.timeStart = u.startsAt.slice(11,16);
+    }
+    const prevSnapshot = events;
 
-    if (!result) throw new Error('No se pudo contactar con el servidor para actualizar.');
+    const optimistic = (() => {
+      const existing = events.find(e => String(e.id) === String(u.id));
+      const merged = {
+        ...(existing || {}),
+        ...u,
+        createdBy: u.createdBy ?? existing?.createdBy ?? (user?.name ?? 'Usuario'),
+        createdById: u.createdById ?? existing?.createdById ?? (effectiveUser?.id ?? null),
+        type: u.type || existing?.type || 'local',
+        asistentes: u.asistentes ?? existing?.asistentes ?? [],
+      };
+      return merged;
+    })();
 
-    // 🔁 Paso clave: re-leer del servidor tras “éxito” para confirmar persistencia
-    if (result.status === 204 || (result.ok && !result._json)) {
-      const verified = await fetchEventById(dbId, authToken);
-      if (verified && typeof verified === 'object') {
-        const fromServer = {
-          id: String(verified.id ?? u.id),
-          title: verified.title ?? u.title,
-          description: verified.description ?? u.description ?? '',
-          date: verified.event_at?.slice(0, 10) ?? u.date,
-          location: verified.location ?? u.location ?? '',
-          type: verified.type || u.type || 'local',
-          image: (verified.image && String(verified.image).trim() !== '' ? verified.image : null)
-                  ?? (u.image && String(u.image).trim() !== '' ? u.image : null),
-          latitude: verified.latitude != null ? Number(verified.latitude) : (u.latitude ?? null),
-          longitude: verified.longitude != null ? Number(verified.longitude) : (u.longitude ?? null),
-          createdById: verified?.created_by != null ? Number(verified.created_by) : (optimistic.createdById ?? null),
-          createdBy: verified?.created_by_name ?? optimistic.createdBy ?? (user?.name ?? 'Usuario'),
-          isAttending: typeof verified?.is_attending === 'boolean' ? verified.is_attending : optimistic.isAttending,
-          attendeesCount: Number(verified?.attendees_count ?? optimistic.attendeesCount ?? 0),
-          asistentes: optimistic.asistentes ?? [],
-        };
-        setEvents(prev => mergeEventById(prev, fromServer));
+    setEvents(prev => mergeEventById(prev, optimistic));
+    try {
+      await AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(mergeEventById(prevSnapshot, optimistic)));
+    } catch {}
+
+    const dbId = dbIdFrom(u.id);
+    if (dbId == null) {
+      return optimistic;
+    }
+
+    const basePayload = toPatchPayload(u);
+    const payloadWithId = { id: dbId, ...basePayload };
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    };
+
+    const base = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+    const attempts = attemptsFor(base, dbId, basePayload, payloadWithId, headers);
+
+    const tryAll = async () => {
+      let lastRes = null;
+      for (const a of attempts) {
         try {
-          const latest = mergeEventById(prevSnapshot, fromServer);
-          await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(latest));
-        } catch {}
-        return fromServer;
+          const res = await safeFetch(a.url, { method: a.method, headers: a.headers, body: JSON.stringify(a.body) }, { timeoutMs: 12000 });
+          let snippet = '';
+          try { const txt = await res.text(); snippet = txt ? txt.slice(0, 120) : ''; } catch {}
+
+          if (res.ok || res.status === 204) {
+            if (snippet && !snippet.startsWith('<!DOCTYPE')) {
+              try {
+                const json = JSON.parse(snippet);
+                return { ok: true, status: res.status, _json: json };
+              } catch {}
+            }
+            return { ok: true, status: res.status, _json: null };
+          }
+
+          lastRes = { ok: false, status: res.status, snippet };
+          const cannotMethod = /Cannot\s+(PATCH|PUT|POST)/i.test(snippet);
+          if (!(res.status === 404 || res.status === 405 || cannotMethod)) {
+            return lastRes;
+          }
+        } catch {
+          lastRes = null;
+        }
       }
-      // No se pudo verificar → mantenemos optimista
-      const serverMapped = { ...optimistic };
+      return lastRes;
+    };
+
+    try {
+      const result = await tryAll();
+
+      if (!result) throw new Error('No se pudo contactar con el servidor para actualizar.');
+
+      if (result.status === 204 || (result.ok && !result._json)) {
+        const verified = await fetchEventById(dbId, authToken);
+        if (verified && typeof verified === 'object') {
+          const fromServer = {
+            id: String(verified.id ?? u.id),
+            title: verified.title ?? u.title,
+            description: verified.description ?? u.description ?? '',
+            date: verified.event_at?.slice(0, 10) ?? u.date,
+            location: verified.location ?? u.location ?? '',
+            type: verified.type || u.type || 'local',
+            image: (verified.image && String(verified.image).trim() !== '' ? verified.image : null)
+                    ?? (u.image && String(u.image).trim() !== '' ? u.image : null),
+            latitude: verified.latitude != null ? Number(verified.latitude) : (u.latitude ?? null),
+            longitude: verified.longitude != null ? Number(verified.longitude) : (u.longitude ?? null),
+            createdById: verified?.created_by != null ? Number(verified.created_by) : (optimistic.createdById ?? null),
+            createdBy: verified?.created_by_name ?? optimistic.createdBy ?? (user?.name ?? 'Usuario'),
+            isAttending: typeof verified?.is_attending === 'boolean' ? verified.is_attending : optimistic.isAttending,
+            attendeesCount: Number(verified?.attendees_count ?? optimistic.attendeesCount ?? 0),
+            asistentes: optimistic.asistentes ?? [],
+          };
+          setEvents(prev => mergeEventById(prev, fromServer));
+          try {
+            const latest = mergeEventById(prevSnapshot, fromServer);
+            await AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(latest));
+          } catch {}
+          return fromServer;
+        }
+        const serverMapped = { ...optimistic };
+        setEvents(prev => mergeEventById(prev, serverMapped));
+        try {
+          const latest = mergeEventById(prevSnapshot, serverMapped);
+          await AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(latest));
+        } catch {}
+        return serverMapped;
+      }
+
+      if (!result.ok) {
+        throw new Error(`HTTP ${result.status} ${result.snippet || ''}`.trim());
+      }
+
+      const saved = result._json;
+      const serverMapped = {
+        id: String(saved?.id ?? u.id),
+        title: saved?.title ?? u.title,
+        description: saved?.description ?? u.description ?? '',
+        date: saved?.event_at?.slice(0, 10) ?? u.date,
+        timeStart:
+          saved?.time_start ??
+          saved?.timeStart ??
+          (saved?.starts_at ? saved.starts_at.slice(11,16) : null) ??
+          u.timeStart ??
+          (saved?.event_at && saved.event_at.length >=16 ? saved.event_at.slice(11,16) : null),
+        startsAt: saved?.starts_at ?? saved?.startsAt ?? saved?.event_at ?? u.startsAt ?? null,
+        location: saved?.location ?? u.location ?? '',
+        type: saved?.type || u.type || 'local',
+        image:
+          (saved?.image && String(saved.image).trim() !== '' ? saved.image : null) ??
+          (u.image && String(u.image).trim() !== '' ? u.image : null),
+        latitude: saved?.latitude != null ? Number(saved.latitude) : (u.latitude ?? null),
+        longitude: saved?.longitude != null ? Number(saved.longitude) : (u.longitude ?? null),
+        createdById: saved?.created_by != null ? Number(saved.created_by) : (optimistic.createdById ?? null),
+        createdBy: saved?.created_by_name ?? optimistic.createdBy ?? (user?.name ?? 'Usuario'),
+        isAttending: typeof saved?.is_attending === 'boolean' ? saved.is_attending : optimistic.isAttending,
+        attendeesCount: Number(saved?.attendees_count ?? optimistic.attendeesCount ?? 0),
+        asistentes: optimistic.asistentes ?? [],
+      };
+
       setEvents(prev => mergeEventById(prev, serverMapped));
       try {
         const latest = mergeEventById(prevSnapshot, serverMapped);
-        await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(latest));
+        await AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(latest));
       } catch {}
+
       return serverMapped;
+    } catch (e) {
+      console.warn('updateEvent error:', e.message);
+      setEvents(prevSnapshot);
+      try { await AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(prevSnapshot)); } catch {}
+      Alert.alert('Error', e.message || 'No se pudo actualizar el evento.');
+      return null;
     }
+  };
 
-    if (!result.ok) {
-      throw new Error(`HTTP ${result.status} ${result.snippet || ''}`.trim());
-    }
-
-    const saved = result._json;
-    const serverMapped = {
-      id: String(saved?.id ?? u.id),
-      title: saved?.title ?? u.title,
-      description: saved?.description ?? u.description ?? '',
-      date: saved?.event_at?.slice(0, 10) ?? u.date,
-      location: saved?.location ?? u.location ?? '',
-      type: saved?.type || u.type || 'local',
-      image:
-        (saved?.image && String(saved.image).trim() !== '' ? saved.image : null) ??
-        (u.image && String(u.image).trim() !== '' ? u.image : null),
-      latitude: saved?.latitude != null ? Number(saved.latitude) : (u.latitude ?? null),
-      longitude: saved?.longitude != null ? Number(saved.longitude) : (u.longitude ?? null),
-      createdById: saved?.created_by != null ? Number(saved.created_by) : (optimistic.createdById ?? null),
-      createdBy: saved?.created_by_name ?? optimistic.createdBy ?? (user?.name ?? 'Usuario'),
-      isAttending: typeof saved?.is_attending === 'boolean' ? saved.is_attending : optimistic.isAttending,
-      attendeesCount: Number(saved?.attendees_count ?? optimistic.attendeesCount ?? 0),
-      asistentes: optimistic.asistentes ?? [],
-    };
-
-    setEvents(prev => mergeEventById(prev, serverMapped));
-    try {
-      const latest = mergeEventById(prevSnapshot, serverMapped);
-      await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(latest));
-    } catch {}
-
-    return serverMapped;
-  } catch (e) {
-    console.warn('updateEvent error:', e.message);
-    // Revertir optimista
-    setEvents(prevSnapshot);
-    try { await AsyncStorage.setItem(EVENTS_KEY, JSON.stringify(prevSnapshot)); } catch {}
-    Alert.alert('Error', e.message || 'No se pudo actualizar el evento.');
-    return null;
-  }
-};
-
-
-  // ===== BORRAR =====
+  // ===== Borrar =====
   const deleteEvent = async (eventId) => {
     try {
       const dbId = dbIdFrom(eventId);
@@ -790,12 +804,11 @@ const updateEvent = async (updatedEvent) => {
     }
   };
 
-  // ===== FAVORITOS =====
+  // ===== Favoritos =====
   const toggleFavorite = useCallback(
     async (id, ev) => {
       const key = String(id ?? ev?.id);
 
-      // Optimista en local
       setFavorites((prev) =>
         prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
       );
@@ -806,7 +819,6 @@ const updateEvent = async (updatedEvent) => {
         return next;
       });
 
-      const uid = auth?.user?.id;
       if (!uid) {
         console.warn('[fav] sin usuario → solo local');
         return;
@@ -816,10 +828,9 @@ const updateEvent = async (updatedEvent) => {
         const already = favorites.includes(key);
 
         if (!already) {
-          // Añadir favorito
           let serverId = isNumericId(key) ? key : null;
           if (!serverId) {
-            serverId = await ensureEventOnServer(ev, authToken); // ✅ ahora sí
+            serverId = await ensureEventOnServer(ev, authToken);
           }
           if (serverId) {
             await fetch(`${API_URL}/users/${uid}/favorites/events`, {
@@ -834,7 +845,6 @@ const updateEvent = async (updatedEvent) => {
             console.warn('[fav] evento externo (no BD) → solo local');
           }
         } else {
-          // Quitar favorito
           const delHeaders = { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) };
 
           if (isNumericId(key)) {
@@ -849,7 +859,6 @@ const updateEvent = async (updatedEvent) => {
             ).catch(() => {});
           }
 
-          // 👉 Punto 2: si es evento externo (type 'api'), elimínalo de BD para que no reaparezca
           try {
             if (ev && ev.type === 'api') {
               if (isNumericId(key)) {
@@ -869,15 +878,13 @@ const updateEvent = async (updatedEvent) => {
         console.warn('[fav] sync con server falló:', e?.message || e);
       }
     },
-    [favorites, auth?.user?.id, authToken]
+    [favorites, uid, authToken]
   );
 
-  // ===== ASISTIR / SALIR =====
+  // ===== Asistir / Salir =====
   const joinEvent = async (eventId) => {
-    const uid = auth?.user?.id;
     const dbId = dbIdFrom(eventId);
 
-    // UI optimista
     setEvents(prev => prev.map(e =>
       String(e.id) === String(eventId)
         ? {
@@ -891,13 +898,11 @@ const updateEvent = async (updatedEvent) => {
         : e
     ));
 
-    // Persistencia
     try {
       if (!uid || dbId == null) return;
       await apiAttend(uid, dbId);
     } catch (err) {
       console.warn('joinEvent persist error:', err?.message);
-      // revert
       setEvents(prev => prev.map(e =>
         String(e.id) === String(eventId)
           ? {
@@ -912,10 +917,8 @@ const updateEvent = async (updatedEvent) => {
   };
 
   const leaveEvent = async (eventId) => {
-    const uid = auth?.user?.id;
     const dbId = dbIdFrom(eventId);
 
-    // UI optimista
     setEvents(prev => prev.map(e =>
       String(e.id) === String(eventId)
         ? {
@@ -932,7 +935,6 @@ const updateEvent = async (updatedEvent) => {
       await apiUnattend(uid, dbId);
     } catch (err) {
       console.warn('leaveEvent persist error:', err?.message);
-      // revert
       setEvents(prev => prev.map(e =>
         String(e.id) === String(eventId)
           ? {
@@ -948,7 +950,6 @@ const updateEvent = async (updatedEvent) => {
     }
   };
 
-  // ===== ASISTENCIA: helpers para el botón "Ya voy" =====
   const isAttending = (eventId) => {
     const ev = events.find(e => String(e.id) === String(eventId));
     return !!ev?.isAttending;
@@ -964,15 +965,32 @@ const updateEvent = async (updatedEvent) => {
     }
   };
 
-  // Memoizados (por si los usas en otras vistas)
+  // ===== Derivados =====
   const myEvents = useMemo(() => events.filter(isMine), [events, user]);
   const communityEvents = useMemo(() => events.filter(e => !isMine(e)), [events, user]);
+
+  // Solo de hoy y futuro (para Home)
+  const eventsUpcoming = useMemo(
+    () => events.filter(e => isUpcoming(e.date)),
+    [events]
+  );
+
+  const myUpcomingEvents = useMemo(
+    () => events.filter(e => isMine(e) && isUpcoming(e.date)),
+    [events, user]
+  );
+
+  const communityUpcomingEvents = useMemo(
+    () => events.filter(e => !isMine(e) && isUpcoming(e.date)),
+    [events, user]
+  );
 
   return (
     <EventContext.Provider
       value={{
         // datos
         events, myEvents, communityEvents,
+        eventsUpcoming, myUpcomingEvents, communityUpcomingEvents,
         // CRUD
         addEvent, createEvent, updateEvent, deleteEvent,
         // formulario

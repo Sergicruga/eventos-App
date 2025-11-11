@@ -96,8 +96,62 @@ const looksLikeTicketmasterId = (id) => typeof id === 'string' && !/^\d+$/.test(
 // 🔹 NUEVO: construir URL directa de TM como último recurso
 const buildTicketmasterUrl = (id) => {
   if (!looksLikeTicketmasterId(id)) return null;
-  // ES primero; si no existiera, el usuario igualmente puede usar el botón del navegador
   return `https://www.ticketmaster.es/event/${encodeURIComponent(id)}`;
+};
+
+// ====== NUEVO: utilidades de fecha/hora ======
+const getEventDateFromEvent = (ev) => {
+  // Prioriza starts_at/event_at/startsAt/date y devuelve YYYY-MM-DD
+  const s =
+    ev?.startsAt ?? ev?.starts_at ??
+    ev?.event_at ?? ev?.date ?? null;
+
+  if (typeof s === 'string') {
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+  }
+  // Si viniera como Date
+  if (s instanceof Date) return s.toISOString().slice(0, 10);
+  return null;
+};
+
+// Obtiene HH:MM sin crear Date (evita desfases 23:00)
+const getEventTimeHHMM = (ev) => {
+  const plain = ev?.timeStart ?? ev?.time_start ?? null;
+  if (typeof plain === 'string' && /^\d{2}:\d{2}/.test(plain)) return plain.slice(0, 5);
+
+  const s = ev?.startsAt ?? ev?.starts_at ?? ev?.event_at ?? null;
+  if (typeof s === 'string') {
+    const m = s.match(/T(\d{2}):(\d{2})/);
+    if (m) return `${m[1]}:${m[2]}`;
+  }
+  return null;
+};
+
+const formatDateOnlyEs = (dateStr) => {
+  if (!dateStr) return '';
+  const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return String(dateStr);
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const meses = [
+    'enero','febrero','marzo','abril','mayo','junio',
+    'julio','agosto','septiembre','octubre','noviembre','diciembre'
+  ];
+  return `${d} de ${meses[mo - 1]} de ${y}`;
+};
+
+// Acepta evento o string ISO y devuelve HH:MM
+const formatTimeHHMM = (evOrStr) => {
+  if (!evOrStr) return '';
+  if (typeof evOrStr === 'string') {
+    const m = evOrStr.match(/T(\d{2}):(\d{2})/);
+    if (m) return `${m[1]}:${m[2]}`;
+    if (/^\d{2}:\d{2}/.test(evOrStr)) return evOrStr.slice(0, 5);
+    return '';
+  }
+  return getEventTimeHHMM(evOrStr) ?? '';
 };
 
 // ==============================================
@@ -180,7 +234,7 @@ export default function EventDetailScreen({ route, navigation }) {
     return getEventImageSource(finalImageUrl);
   }, [finalImageUrl, getEventImageSource]);
 
-  // ✅ URL de compra (prioriza lo que venga por params, luego current y matchedFromList)
+  // ✅ URL de compra
   const computedBuyUrl = useMemo(() => {
     const pick = (obj) => {
       if (!obj) return null;
@@ -205,28 +259,22 @@ export default function EventDetailScreen({ route, navigation }) {
       return null;
     };
 
-    // 1) lo que venga explícito desde Favoritos
     const fromParam = toHttps(sanitizeExternalUrl(route?.params?.buyUrl));
     if (isHttpUrl(fromParam)) return fromParam;
 
-    // 2) lo que venga en el objeto de la ruta
     const fromRouteEvent = pick(route?.params?.event);
     if (fromRouteEvent) return fromRouteEvent;
 
-    // 3) lo que ya tenga el current
     const fromCurrent = pick(current);
     if (fromCurrent) return fromCurrent;
 
-    // 4) ⭐ Fallback: construir URL de Ticketmaster por id
     const idCandidate = current?.externalId || current?.tm_id || current?.id;
     const tmFallback = buildTicketmasterUrl(idCandidate);
     return tmFallback || null;
   }, [route?.params?.buyUrl, route?.params?.event, current]);
 
-  // ✅ URL usada por el botón
   const buyUrl = computedBuyUrl;
 
-  // 🔎 Debug
   useEffect(() => {
     const idCandidate = current?.externalId || current?.tm_id || current?.id;
     console.log('=== [EventDetail] Debug ===');
@@ -347,11 +395,38 @@ export default function EventDetailScreen({ route, navigation }) {
 
   useEffect(() => { fetchComments(); }, [fetchComments]);
 
-  const formatDate = (d) => {
-    if (!d) return '';
-    const dateObj = typeof d === 'string' ? new Date(d) : d;
-    return dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-  };
+  // ===== NUEVO: fecha y hora mostrables a partir de startsAt/timeStart/etc. =====
+  const eventDateObj = useMemo(() => getEventDateFromEvent(current), [current]);
+  const dateLabel = useMemo(() => {
+    // Si no tenemos Date, caemos al formato antiguo con current.date
+    return formatDateOnlyEs(eventDateObj) || (current?.date
+      ? new Date(current.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+      : '');
+  }, [eventDateObj, current?.date]);
+
+  const startTimeLabel = useMemo(() => {
+    // 1) si viene timeStart / time_start "HH:MM"
+    const tStr = (current?.timeStart ?? current?.time_start);
+    if (typeof tStr === 'string' && /^\d{2}:\d{2}$/.test(tStr.trim())) {
+      return tStr.trim();
+    }
+    // 2) si viene startsAt / starts_at ISO
+    const startIso = current?.startsAt ?? current?.starts_at;
+    if (typeof startIso === 'string' && startIso.trim()) {
+      const dt = new Date(startIso);
+      if (!isNaN(dt.getTime())) {
+        return formatTimeHHMM(dt);
+      }
+    }
+    // 3) si date incluye hora (ISO completo)
+    if (typeof current?.date === 'string' && current.date.length > 10) {
+      const dt = new Date(current.date);
+      if (!isNaN(dt.getTime())) {
+        return formatTimeHHMM(dt);
+      }
+    }
+    return null;
+  }, [current?.timeStart, current?.time_start, current?.startsAt, current?.starts_at, current?.date]);
 
   return (
     <LinearGradient
@@ -403,10 +478,20 @@ export default function EventDetailScreen({ route, navigation }) {
           {/* Info principal */}
           <View style={styles.card}>
             <Text style={styles.title}>{current.title}</Text>
+
             <View style={styles.row}>
               <Ionicons name="calendar-outline" size={18} color={COLORS.secondary} style={{ marginRight: 6 }} />
-              <Text style={styles.date}>{formatDate(current.date)}</Text>
+              <Text style={styles.date}>{dateLabel}</Text>
             </View>
+
+            {/* NUEVO: Hora de inicio */}
+            {startTimeLabel && (
+              <View style={styles.row}>
+                <Ionicons name="time-outline" size={18} color={COLORS.secondary} style={{ marginRight: 6 }} />
+                <Text style={styles.date}>{startTimeLabel} h</Text>
+              </View>
+            )}
+
             <View style={styles.row}>
               <Ionicons name="location-outline" size={18} color={COLORS.secondary} style={{ marginRight: 6 }} />
               <Text style={styles.location}>{current.location}</Text>
@@ -446,7 +531,11 @@ export default function EventDetailScreen({ route, navigation }) {
                 <Marker
                   coordinate={{ latitude: Number(current.latitude), longitude: Number(current.longitude) }}
                   title={current.title}
-                  description={current.location}
+                  description={
+                    startTimeLabel
+                      ? `${current.location} • ${startTimeLabel} h`
+                      : current.location
+                  }
                   pinColor={COLORS.primary}
                 />
               </MapView>

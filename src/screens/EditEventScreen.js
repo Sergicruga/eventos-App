@@ -97,6 +97,28 @@ export default function EditEventScreen({ route, navigation }) {
   const [loadingPerm, setLoadingPerm] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // === Hora (HH:mm) ===
+  const [timeModalVisible, setTimeModalVisible] = useState(false);
+  const initialHHMM = useMemo(() => {
+    const t1 = currentEvent?.timeStart ?? currentEvent?.time_start;
+    if (typeof t1 === 'string' && /^\d{2}:\d{2}/.test(t1)) return t1.slice(0, 5);
+    const iso = currentEvent?.startsAt ?? currentEvent?.starts_at ?? currentEvent?.event_at;
+    if (typeof iso === 'string' && iso.length >= 16) return iso.slice(11, 16);
+    return null;
+  }, [currentEvent]);
+
+  const now = new Date();
+  const [hour, setHour] = useState(initialHHMM ? initialHHMM.split(':')[0] : String(now.getHours()).padStart(2, '0'));
+  const [minute, setMinute] = useState(initialHHMM ? initialHHMM.split(':')[1] : String(now.getMinutes()).padStart(2, '0'));
+
+  const pad = (v) => String(v ?? '').padStart(2, '0');
+  const clampNum = (v, max) => {
+    const n = parseInt(String(v).replace(/\D/g, ''), 10);
+    if (isNaN(n)) return '00';
+    return pad(Math.max(0, Math.min(max, n)));
+  };
+  const formattedTime = useMemo(() => `${pad(hour)}:${pad(minute)}`, [hour, minute]);
+
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -260,10 +282,15 @@ export default function EditEventScreen({ route, navigation }) {
 
     // Save event
     try {
+      const hhmm = formattedTime; // HH:mm
+      const startsAtIso = `${normalizeDate(date)}T${hhmm}:00`;
+
       await updateEvent({
         id: currentEvent.id,
         title,
         date: normalizeDate(date),
+        timeStart: hhmm,          // NUEVO
+        startsAt: startsAtIso,    // NUEVO
         location: resolvedAddress,
         description,
         type,
@@ -280,7 +307,7 @@ export default function EditEventScreen({ route, navigation }) {
     }
   }, [
     title, type, coords, locationName, imageUri, date, description,
-    updateEvent, navigation, currentEvent
+    updateEvent, navigation, currentEvent, formattedTime
   ]);
 
   if (loadingPerm || !currentEvent) {
@@ -374,6 +401,46 @@ export default function EditEventScreen({ route, navigation }) {
                   </TouchableOpacity>
                 </View>
               </View>
+            </Modal>
+          </View>
+
+          {/* Hora */}
+          <View style={{ marginBottom: 12 }}>
+            <Text style={styles.label}>Hora</Text>
+            <TouchableOpacity onPress={() => setTimeModalVisible(true)} style={styles.dateButton}>
+              <Ionicons name="time-outline" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+              <Text style={styles.dateText}>{formattedTime}</Text>
+            </TouchableOpacity>
+            <Modal visible={timeModalVisible} transparent animationType="fade" onRequestClose={() => setTimeModalVisible(false)}>
+              <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPressOut={() => setTimeModalVisible(false)}>
+                <View style={styles.timeModal}>
+                  <Text style={styles.timeModalTitle}>Seleccionar hora</Text>
+                  <View style={styles.timeInputsRow}>
+                    <TextInput
+                      value={hour}
+                      onChangeText={(v) => setHour(clampNum(v, 23))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      style={styles.timeInput}
+                      placeholder="HH"
+                      placeholderTextColor={COLORS.gray}
+                    />
+                    <Text style={styles.timeColon}>:</Text>
+                    <TextInput
+                      value={minute}
+                      onChangeText={(v) => setMinute(clampNum(v, 59))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      style={styles.timeInput}
+                      placeholder="MM"
+                      placeholderTextColor={COLORS.gray}
+                    />
+                  </View>
+                  <TouchableOpacity onPress={() => setTimeModalVisible(false)} style={[styles.primaryBtn, { marginTop: 8 }]}>
+                    <Text style={styles.primaryBtnText}>Usar esta hora</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
             </Modal>
           </View>
 
@@ -740,6 +807,50 @@ const styles = StyleSheet.create({
   },
   pickerOptionTextSelected: {
     fontWeight: 'bold',
+    color: COLORS.secondary,
+  },
+
+  // === Hora ===
+  timeModal: {
+    backgroundColor: COLORS.white,
+    width: '85%',
+    alignSelf: 'center',
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+    alignItems: 'center',
+  },
+  timeModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 6,
+  },
+  timeInputsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  timeInput: {
+    width: 70,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingVertical: 10,
+    backgroundColor: COLORS.inputBg,
+    color: COLORS.text,
+    fontSize: 18,
+  },
+  timeColon: {
+    marginHorizontal: 10,
+    fontSize: 22,
+    fontWeight: '700',
     color: COLORS.secondary,
   },
 });

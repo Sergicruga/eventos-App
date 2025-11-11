@@ -10,22 +10,21 @@ import { Calendar } from 'react-native-calendars';
 import MapView, { Marker } from 'react-native-maps';
 import { Picker } from '@react-native-picker/picker';
 import { API_URL } from '../api/config';
-// Optional: Uncomment if you have these installed
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { uploadEventImage } from '../api/upload'; // Add this import
+import { uploadEventImage } from '../api/upload';
 
 const COLORS = {
-  primary: '#3B5BA9', // Soft blue
-  secondary: '#6C757D', // Muted gray
-  accent: '#F5CBA7', // Soft peach
-  background: '#F8FAFC', // Very light gray/white
+  primary: '#3B5BA9',
+  secondary: '#6C757D',
+  accent: '#F5CBA7',
+  background: '#F8FAFC',
   white: '#fff',
-  gray: '#888',         // Placeholder gray
+  gray: '#888',
   inputBg: '#F1F5F9',
   border: '#D1D5DB',
   shadow: '#B0BEC5',
-  text: '#444',         // Main text color
+  text: '#444',
 };
 
 const EVENT_TYPES = [
@@ -38,7 +37,7 @@ const EVENT_TYPES = [
 export default function CreateEventScreen({ navigation }) {
   const { addEvent } = useContext(EventContext);
 
-  // Fields
+  // Campos existentes
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(new Date());
   const [showCal, setShowCal] = useState(false);
@@ -48,7 +47,6 @@ export default function CreateEventScreen({ navigation }) {
   const [hasLocPerm, setHasLocPerm] = useState(false);
   const [imageUri, setImageUri] = useState(null);
 
-  // Modal map
   const [mapVisible, setMapVisible] = useState(false);
   const [mapRegion, setMapRegion] = useState({
     latitude: 40.4168,
@@ -58,7 +56,17 @@ export default function CreateEventScreen({ navigation }) {
   });
 
   const [loadingPerm, setLoadingPerm] = useState(true);
-  const [saving, setSaving] = useState(false); // Prevent double event creation
+  const [saving, setSaving] = useState(false);
+
+  // ---- NUEVO: Hora de inicio ----
+  const now = new Date();
+  const [timeModalVisible, setTimeModalVisible] = useState(false);
+  const [hour, setHour] = useState(String(now.getHours()).padStart(2, '0'));
+  const [minute, setMinute] = useState(String(now.getMinutes()).padStart(2, '0'));
+
+  const formattedTime = useCallback(() => {
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  }, [hour, minute]);
 
   useEffect(() => {
     (async () => {
@@ -76,7 +84,7 @@ export default function CreateEventScreen({ navigation }) {
     })();
   }, []);
 
-  // ---------- Image ----------
+  // ---------- Imagen ----------
   const pickImage = useCallback(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (perm.status !== 'granted') {
@@ -94,7 +102,7 @@ export default function CreateEventScreen({ navigation }) {
     }
   }, []);
 
-  // ---------- Date ----------
+  // ---------- Fecha ----------
   const formattedDate = useCallback(() => {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -102,7 +110,7 @@ export default function CreateEventScreen({ navigation }) {
     return `${y}-${m}-${d}`;
   }, [date]);
 
-  // ---------- Map / Location ----------
+  // ---------- Mapa / Ubicación ----------
   const openMap = useCallback(async () => {
     if (!hasLocPerm) {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -112,8 +120,6 @@ export default function CreateEventScreen({ navigation }) {
       }
       setHasLocPerm(true);
     }
-    // Optionally clear previous location if you want to force new pick:
-    // setLocationName('');
     setMapVisible(true);
   }, [hasLocPerm]);
 
@@ -165,14 +171,16 @@ export default function CreateEventScreen({ navigation }) {
 
   const normalizeDate = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d));
 
-  // ---------- Save ----------
+  // ---------- Guardar ----------
   const [description, setDescription] = useState('');
   const [type, setType] = useState('');
   const [typeModalVisible, setTypeModalVisible] = useState(false);
+
   const handleCreateEvent = useCallback(async () => {
     if (!title.trim()) return Alert.alert('Falta título', 'Introduce un título para el evento.');
     if (!type) return Alert.alert('Falta tipo', 'Selecciona un tipo de evento.');
     if (!locationName) return Alert.alert('Falta ubicación', 'Selecciona la ubicación en el mapa.');
+    if (!hour || !minute) return Alert.alert('Falta hora', 'Selecciona la hora de inicio.');
 
     setSaving(true);
 
@@ -212,7 +220,7 @@ export default function CreateEventScreen({ navigation }) {
       }
     }
 
-    // --- Upload image if present ---
+    // Subida de imagen (si hay)
     let imageUrl = '';
     if (imageUri) {
       try {
@@ -224,24 +232,29 @@ export default function CreateEventScreen({ navigation }) {
       }
     }
 
-    // Save event
+    // Construcción de fecha-hora local SIN convertir a UTC
+    const timeStr = formattedTime();
+    const startsAtLocal = `${normalizeDate(date)}T${timeStr}:00`; // sin Z
+
+    // Guardar evento: event_at también con hora para evitar perderla
     addEvent({
       title,
       date: normalizeDate(date),
-      location:
-        resolvedAddress ||
-        `${baseCoords.latitude.toFixed(5)}, ${baseCoords.longitude.toFixed(5)}`,
+      location: resolvedAddress || `${baseCoords.latitude.toFixed(5)}, ${baseCoords.longitude.toFixed(5)}`,
       description,
       type,
-      image: imageUrl, // Use uploaded image path or empty string
+      image: imageUrl,
       latitude: baseCoords.latitude,
       longitude: baseCoords.longitude,
+      timeStart: timeStr,
+      startsAt: startsAtLocal,       // ISO local sin Z
+      eventAt: startsAtLocal,        // compat si backend solo mira event_at
     });
 
     setSaving(false);
     Alert.alert('Evento creado', '¡Tu evento se ha guardado!');
     navigation.goBack();
-  }, [title, type, coords, locationName, imageUri, date, description, addEvent, navigation]);
+  }, [title, type, coords, locationName, imageUri, date, description, addEvent, navigation, hour, minute, formattedTime]);
 
   if (loadingPerm) {
     return (
@@ -290,8 +303,7 @@ export default function CreateEventScreen({ navigation }) {
             onChangeText={setTitle}
             placeholderTextColor={COLORS.gray}
             selectionColor={COLORS.primary}
-            maxLength={60
-            }
+            maxLength={60}
             autoCapitalize="sentences"
           />
 
@@ -338,6 +350,70 @@ export default function CreateEventScreen({ navigation }) {
             </Modal>
           </View>
 
+          {/* NUEVO: Hora de inicio */}
+          <View style={{ marginBottom: 12 }}>
+            <Text style={styles.label}>Hora de inicio</Text>
+            <TouchableOpacity onPress={() => setTimeModalVisible(true)} style={styles.dateButton}>
+              <Ionicons name="time-outline" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+              <Text style={styles.dateText}>{formattedTime()}</Text>
+            </TouchableOpacity>
+
+            <Modal visible={timeModalVisible} transparent animationType="fade" onRequestClose={() => setTimeModalVisible(false)}>
+              <TouchableOpacity
+                activeOpacity={1}
+                style={styles.modalOverlay}
+                onPressOut={() => setTimeModalVisible(false)}
+              >
+                <View style={styles.timeModal}>
+                  <Text style={styles.timeModalTitle}>Selecciona la hora</Text>
+                  <View style={styles.timePickersRow}>
+                    <View style={styles.timePickerBox}>
+                      <Text style={styles.timePickerLabel}>Hora</Text>
+                      <Picker
+                        selectedValue={hour}
+                        onValueChange={(v) => setHour(String(v).padStart(2, '0'))}
+                        style={styles.picker}
+                      >
+                        {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).map(h => (
+                          <Picker.Item key={h} label={h} value={h} />
+                        ))}
+                      </Picker>
+                    </View>
+
+                    <Text style={styles.timeColon}>:</Text>
+
+                    <View style={styles.timePickerBox}>
+                      <Text style={styles.timePickerLabel}>Minuto</Text>
+                      <Picker
+                        selectedValue={minute}
+                        onValueChange={(v) => setMinute(String(v).padStart(2, '0'))}
+                        style={styles.picker}
+                      >
+                        {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')).map(m => (
+                          <Picker.Item key={m} label={m} value={m} />
+                        ))}
+                      </Picker>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => setTimeModalVisible(false)}
+                    style={[styles.primaryBtn, { marginTop: 12 }]}
+                  >
+                    <Text style={styles.primaryBtnText}>Establecer hora</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setTimeModalVisible(false)}
+                    style={[styles.secondaryBtn, { marginTop: 8 }]}
+                  >
+                    <Text style={styles.secondaryBtnText}>Cancelar</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            </Modal>
+          </View>
+
           {/* Ubicación */}
           <View style={{ marginBottom: 12 }}>
             <Text style={styles.label}>Ubicación</Text>
@@ -349,7 +425,7 @@ export default function CreateEventScreen({ navigation }) {
                     flex: 1,
                     marginBottom: 0,
                     backgroundColor: COLORS.inputBg,
-                    color: COLORS.text, // Use main text color
+                    color: COLORS.text,
                     opacity: 0.8,
                   },
                 ]}
@@ -511,7 +587,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 16,
     backgroundColor: COLORS.inputBg,
-    color: COLORS.text, // Use main text color
+    color: COLORS.text,
     shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -551,7 +627,6 @@ const styles = StyleSheet.create({
     width: '100%',
     ...Platform.select({
       ios: {
-        // Make iOS picker look more like a dropdown
         marginTop: -4,
         marginBottom: -4,
         backgroundColor: COLORS.inputBg,
@@ -600,7 +675,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 16,
-    color: COLORS.text, // Use main text color for date
+    color: COLORS.text,
     fontWeight: '500',
   },
   primaryBtn: {
@@ -624,7 +699,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   secondaryBtn: {
-    backgroundColor: COLORS.gray, // Changed from COLORS.accent to COLORS.gray
+    backgroundColor: COLORS.gray,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
@@ -636,7 +711,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   secondaryBtnText: {
-    color: COLORS.white, // White text for contrast on gray
+    color: COLORS.white,
     fontWeight: '600',
     fontSize: 16,
   },
@@ -655,7 +730,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(44, 34, 84, 0.18)', // Slightly lighter for less distraction
+    backgroundColor: 'rgba(44, 34, 84, 0.18)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -702,15 +777,11 @@ const styles = StyleSheet.create({
   },
   customPickerText: {
     fontSize: 16,
-    color: COLORS.text, // Use main text color for filled picker
+    color: COLORS.text,
     flex: 1,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(44, 34, 84, 0.18)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  // (El proyecto original tenía dos definiciones de modalOverlay;
+  // mantenemos esta para no tocar nada que ya funcione)
   pickerModal: {
     backgroundColor: COLORS.white,
     width: '85%',
@@ -723,7 +794,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 18,
     elevation: 10,
-    alignItems: 'center', // Center options horizontally
+    alignItems: 'center',
   },
   pickerOption: {
     width: '90%',
@@ -739,11 +810,60 @@ const styles = StyleSheet.create({
   },
   pickerOptionText: {
     fontSize: 18,
-    color: COLORS.text, // Use main text color for picker options
+    color: COLORS.text,
     textAlign: 'center',
   },
   pickerOptionTextSelected: {
     fontWeight: 'bold',
+    color: COLORS.secondary,
+  },
+
+  // ---- NUEVOS ESTILOS: Modal de hora ----
+  timeModal: {
+    backgroundColor: COLORS.white,
+    width: '90%',
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    shadowColor: COLORS.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+    alignItems: 'center',
+  },
+  timeModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 6,
+  },
+  timePickersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    marginVertical: 8,
+  },
+  timePickerBox: {
+    width: '40%',
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  timePickerLabel: {
+    textAlign: 'center',
+    paddingVertical: 6,
+    color: COLORS.secondary,
+    fontWeight: '600',
+  },
+  timeColon: {
+    marginHorizontal: 8,
+    fontSize: 22,
+    fontWeight: '700',
     color: COLORS.secondary,
   },
 });
