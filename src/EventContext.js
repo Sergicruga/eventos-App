@@ -1,4 +1,6 @@
 import React, { useContext, createContext, useState, useEffect, useMemo, useCallback } from 'react';
+// Proveer un valor por defecto mínimo para evitar errores si se consume fuera del Provider
+export const EventContext = createContext({ events: [] });
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -8,8 +10,6 @@ import { API_URL } from './api/config';
 import { getFavoriteIds } from './api/favorites';
 import { attend as apiAttend, unattend as apiUnattend } from './api/attendees';
 import { pickAndPersistImage } from './utils/pickAndPersistImage';
-
-export const EventContext = createContext();
 
 // ========= Utils =========
 const isNumericId = (v) =>
@@ -336,37 +336,81 @@ export function EventProvider({ children }) {
     AsyncStorage.setItem(storageKey(BASE_FAVORITES_MAP_KEY, uid), JSON.stringify(favoriteItems)).catch(() => {});
   }, [favoriteItems, uid]);
 
-  // ===== Cargar eventos al cambiar usuario (clave del bug) =====
+  // ---------- NUEVO: normalizar antes de guardar en AsyncStorage ----------
+  const normalizeForStorage = (arr = []) =>
+    (arr || []).map(ev => ({
+      ...ev,
+      id: String(ev.id),
+      timeStart: typeof ev.timeStart === 'string' && ev.timeStart ? ev.timeStart : (ev.timeStart ?? null),
+      startsAt: typeof ev.startsAt === 'string' && ev.startsAt ? ev.startsAt : (ev.startsAt ?? null),
+      date: ev.date ?? '',
+      latitude: ev.latitude != null ? Number(ev.latitude) : null,
+      longitude: ev.longitude != null ? Number(ev.longitude) : null,
+      image: ev.image ?? null,
+    }));
+
+  // ===== Cargar eventos al cambiar usuario (incluye HIDRATAR DESDE CACHÉ + MERGE) =====
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      // Limpiar para no ver datos del usuario anterior
-      setEvents([]);
+      // 1) HIDRATAR primero desde caché (para mostrar la hora guardada)
+      try {
+        const cachedRaw = await AsyncStorage.getItem(storageKey(BASE_EVENTS_KEY, uid));
+        const cached = cachedRaw ? JSON.parse(cachedRaw) : [];
+        if (!cancelled && cached?.length) {
+          // normaliza nºs y nulos
+          cached.forEach(ev => {
+            if (ev.latitude != null) ev.latitude = Number(ev.latitude);
+            if (ev.longitude != null) ev.longitude = Number(ev.longitude);
+            ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
+            ev.type = ev.type || 'local';
+          });
+          setEvents(cached);
+        }
+      } catch {}
 
-      // Backend del usuario actual
+      // 2) Después, pedir al servidor y MERGE sin pisar horas locales
       try {
         const url = `${API_URL}/events${uid ? `?userId=${uid}` : ''}`;
         const res = await safeFetch(url, {}, { timeoutMs: 12000 });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
 
-        const mapped = (data || []).map(ev => {
-          const rawEventAt = ev.event_at ?? null;
-          const rawStartsAt = ev.starts_at ?? ev.startsAt ?? rawEventAt ?? null;
+        console.log('=== API /events ===');
+
+        // Mapeo desde servidor (no usamos hora de event_at)
+        let mapped = (data || []).map(ev => {
+          const rawEventAt = ev.event_at ?? null; // "2025-11-10T23:00:00.000Z"
+          const yyyyMmDd  = rawEventAt ? String(rawEventAt).slice(0,10)
+                                       : (ev.date ? String(ev.date).slice(0,10) : '');
+
+          const rawTime   = ev.time_start ?? ev.timeStart ?? null; // "HH:MM" si existe
+          const rawStartsAtServer = ev.starts_at ?? ev.startsAt ?? null;
+
+          const derivedStartsAt =
+            rawStartsAtServer
+              ? rawStartsAtServer
+              : (yyyyMmDd && typeof rawTime === 'string' && /^\d{2}:\d{2}$/.test(rawTime)
+                  ? `${yyyyMmDd}T${rawTime}:00`
+                  : null);
+
           const inferredTime =
-            ev.time_start ??
-            ev.timeStart ??
-            (rawStartsAt && rawStartsAt.length >= 16 ? rawStartsAt.slice(11, 16) : null) ??
-            (rawEventAt && rawEventAt.length >= 16 ? rawEventAt.slice(11, 16) : null);
+            (typeof rawTime === 'string' && /^\d{2}:\d{2}$/.test(rawTime))
+              ? rawTime
+              : (derivedStartsAt && derivedStartsAt.length >= 16
+                  ? derivedStartsAt.slice(11,16)
+                  : null);
+
+          console.log('id:', ev.id, 'date:', yyyyMmDd, 'timeStart:', inferredTime, 'startsAt:', derivedStartsAt);
 
           return {
             id: String(ev.id),
             title: ev.title,
             description: ev.description ?? '',
-            date: rawEventAt?.slice(0, 10) ?? '',              // conservamos la fecha (YYYY-MM-DD)
-            timeStart: inferredTime || null,                    // NUEVO: hora HH:MM
-            startsAt: rawStartsAt || null,                      // NUEVO: ISO completo si existe
+            date: yyyyMmDd || '',
+            timeStart: inferredTime || null,
+            startsAt: derivedStartsAt || null,
             location: ev.location ?? '',
             type: ev.type || 'local',
             image: (ev.image && String(ev.image).trim() !== "") ? ev.image : null,
@@ -380,35 +424,87 @@ export function EventProvider({ children }) {
           };
         });
 
+        // MERGE con caché: si el server no manda hora, recuperamos la última guardada
+        try {
+          const prevRaw = await AsyncStorage.getItem(storageKey(BASE_EVENTS_KEY, uid));
+          const prevArr = prevRaw ? JSON.parse(prevRaw) : [];
+          const prevMap = Object.fromEntries(prevArr.map(p => [String(p.id), p]));
+
+          mapped = mapped.map(e => {
+            const prev = prevMap[e.id];
+            if (!prev) return e;
+
+            const serverHasTime =
+              (typeof e.timeStart === 'string' && e.timeStart.length >= 4) ||
+              (typeof e.startsAt === 'string' && e.startsAt.length >= 16);
+
+            let timeStart = e.timeStart || null;
+            let startsAt  = e.startsAt  || null;
+
+            if (!serverHasTime) {
+              if (!timeStart && prev.timeStart) timeStart = prev.timeStart;
+              if (!startsAt && prev.startsAt)   startsAt  = prev.startsAt;
+              if (!timeStart && typeof startsAt === 'string' && startsAt.length >= 16) {
+                timeStart = startsAt.slice(11, 16);
+              }
+            }
+
+            let date = e.date || '';
+            if (!serverHasTime && prev.date) {
+              date = prev.date;
+            } else if (!date && prev.date) {
+              date = prev.date;
+            }
+
+            return { ...e, timeStart, startsAt, date };
+          });
+        } catch {}
+
+        // Mantener locales que no están en el server
+        try {
+          const prevRawAll = await AsyncStorage.getItem(storageKey(BASE_EVENTS_KEY, uid));
+          const prevArrAll = prevRawAll ? JSON.parse(prevRawAll) : [];
+          const mappedIds = new Set(mapped.map(m => String(m.id)));
+          const localsToKeep = prevArrAll.filter(p => !mappedIds.has(String(p.id)));
+          if (localsToKeep.length > 0) {
+            const normalizedLocals = localsToKeep.map(p => ({
+              ...p,
+              id: String(p.id),
+              latitude: p.latitude != null ? Number(p.latitude) : null,
+              longitude: p.longitude != null ? Number(p.longitude) : null,
+              type: p.type || 'local',
+            }));
+            mapped = [...normalizedLocals, ...mapped];
+          }
+        } catch {}
+
         if (!cancelled) {
           setEvents(mapped);
-          AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(mapped)).catch(() => {});
+          // Guardar normalizado para preservar timeStart/startsAt como strings/null
+          try {
+            const normalized = normalizeForStorage(mapped);
+            // si hay uid, guarda en uid; evita sobreescribir clave "guest" si hay usuario
+            const key = storageKey(BASE_EVENTS_KEY, uid);
+            await AsyncStorage.setItem(key, JSON.stringify(normalized));
+            console.log('[EventProvider] saved to cache:', key, 'count:', normalized.length);
+          } catch {}
         }
         return;
-      } catch {}
-
-      // Fallback caché local por usuario
-      try {
-        const savedEvents = await AsyncStorage.getItem(storageKey(BASE_EVENTS_KEY, uid));
-        if (savedEvents && !cancelled) {
-          const arr = JSON.parse(savedEvents);
-          arr.forEach(ev => {
-            if (ev.latitude != null) ev.latitude = Number(ev.latitude);
-            if (ev.longitude != null) ev.longitude = Number(ev.longitude);
-            ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
-            ev.type = ev.type || 'local';
-          });
-          setEvents(arr);
-        }
-      } catch {}
+      } catch {
+        // si falla el servidor, ya mostramos lo de caché
+      }
     })();
 
     return () => { cancelled = true; };
   }, [uid, authToken]);
 
-  // Persistir eventos por-usuario
+  // Persistir eventos por-usuario ante cambios
   useEffect(() => {
-    AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(events)).catch(() => {});
+    try {
+      const sanitized = normalizeForStorage(events);
+      const key = storageKey(BASE_EVENTS_KEY, uid);
+      AsyncStorage.setItem(key, JSON.stringify(sanitized)).catch(() => {});
+    } catch { /* ignore */ }
   }, [events, uid]);
 
   // ===== Helpers =====
@@ -457,7 +553,7 @@ export function EventProvider({ children }) {
       latitude: ev.latitude ?? null,
       longitude: ev.longitude ?? null,
     };
-    // NUEVO: incluir hora y startsAt si están
+    // incluir hora y startsAt si están
     if (ev.timeStart) payload.time_start = ev.timeStart;
     if (ev.startsAt) payload.starts_at = ev.startsAt;
     if (ev.image && !isLocalUri(ev.image) && String(ev.image).trim() !== '') {
@@ -490,49 +586,77 @@ export function EventProvider({ children }) {
     }
   };
 
-  // ===== Crear =====
+  // ===== Crear (con logs) =====
   const addEvent = async (event) => {
-    const eventMs = Date.parse(event.date);
+    console.log('[addEvent] input:', {
+      title: event?.title,
+      date: event?.date,
+      timeStart: event?.timeStart,
+      startsAt: event?.startsAt,
+      location: event?.location,
+      latitude: event?.latitude,
+      longitude: event?.longitude,
+    });
+
+    const eventMs = Date.parse(event?.date);
     const now = new Date();
     const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    console.log('[addEvent] parsedDateMs:', eventMs, 'todayMid:', todayMid);
+
     if (Number.isNaN(eventMs) || eventMs < todayMid) {
+      console.warn('[addEvent] Fecha inválida → cancelado', { eventDate: event?.date });
       Alert.alert('Fecha inválida', 'No puedes crear un evento con una fecha pasada.');
-      return;
+      return null;
     }
 
     try {
       const payload = {
         title: event.title,
         description: event.description ?? '',
-        event_at: event.date,                  // compatibilidad existente
-        time_start: event.timeStart ?? '',      // NUEVO
-        starts_at: event.startsAt ?? null,      // NUEVO (ISO completo)
+        event_at: event.date,                       // fecha (día) que guardas en la BD
+        time_start: event.timeStart ?? '',          // "HH:MM"
+        starts_at: event.startsAt ?? null,          // "YYYY-MM-DDTHH:MM:SS" (sin Z)
         location: event.location ?? '',
         type: event.type || 'local',
-        image: (event.image && !isLocalUri(event.image) && event.image.trim() !== "") ? event.image : "",
+        image:
+          (event.image && !isLocalUri(event.image) && event.image.trim() !== "")
+            ? event.image
+            : "",
         latitude: event.latitude ?? null,
         longitude: event.longitude ?? null,
         created_by: effectiveUser?.id ?? null,
       };
 
-      const res = await safeFetch(`${API_URL}/events`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      console.log('[addEvent] POST →', `${API_URL}/events`, payload);
+
+      const res = await safeFetch(
+        `${API_URL}/events`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      }, { timeoutMs: 12000 });
+        { timeoutMs: 12000 }
+      );
 
       const raw = await res.text();
+      console.log('[addEvent] response status:', res.status, 'body:', raw?.slice(0, 400));
+
       let saved = null;
-      try { saved = raw ? JSON.parse(raw) : null; } catch {}
+      try { saved = raw ? JSON.parse(raw) : null; } catch (e) {
+        console.warn('[addEvent] JSON parse error:', e?.message);
+      }
 
       if (!res.ok) {
         const msg = (saved && (saved.error || saved.message)) || `HTTP ${res.status}`;
+        console.warn('[addEvent] server NOT OK:', msg);
         throw new Error(msg);
       }
       if (!saved || typeof saved !== 'object') {
+        console.warn('[addEvent] server empty / not JSON');
         throw new Error('Respuesta del backend vacía o no-JSON');
       }
 
@@ -540,13 +664,15 @@ export function EventProvider({ children }) {
         id: String(saved.id),
         title: saved.title,
         description: saved.description ?? '',
-        date: saved.event_at?.slice(0, 10) ?? event.date,
+        // Preferimos la fecha del formulario (día local)
+        date: event.date ?? saved.event_at?.slice(0, 10) ?? '',
+        // Hora: lo que devuelva el server o lo que enviaste
         timeStart:
           saved.time_start ??
           saved.timeStart ??
           (saved.starts_at ? saved.starts_at.slice(11,16) : null) ??
-          (saved.event_at && saved.event_at.length >=16 ? saved.event_at.slice(11,16) : (event.timeStart || null)),
-        startsAt: saved.starts_at ?? saved.startsAt ?? saved.event_at ?? event.startsAt ?? null,
+          (event.timeStart ?? null),
+        startsAt: saved.starts_at ?? saved.startsAt ?? event.startsAt ?? null,
         location: saved.location ?? '',
         type: saved.type || 'local',
         image:
@@ -559,458 +685,185 @@ export function EventProvider({ children }) {
         createdBy: saved?.created_by_name ?? effectiveUser?.name ?? user.name,
         asistentes: [],
         isAttending: false,
-        attendeesCount: Number(saved?.attendees_count ?? 0),
-      };
-
-      if (event.image && isLocalUri(event.image)) {
-        try {
-          const ext = event.image.split('.').pop()?.toLowerCase() || 'jpg';
-          const dir = FileSystem.documentDirectory + 'events/';
-          await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => {});
-          const dest = `${dir}event_${saved.id}.${ext}`;
-          await FileSystem.copyAsync({ from: event.image, to: dest });
-
-          setImageOverrides(prev => ({ ...prev, [String(saved.id)]: dest }));
-          const current = await AsyncStorage.getItem(EVENT_IMAGE_OVERRIDES_KEY).then(v => (v ? JSON.parse(v) : {})).catch(() => ({}));
-          current[String(saved.id)] = dest;
-          await AsyncStorage.setItem(EVENT_IMAGE_OVERRIDES_KEY, JSON.stringify(current));
-
-          mapped.image = dest;
-        } catch (err) {
-          console.warn('No se pudo copiar la imagen local del evento:', err?.message);
-        }
-      }
-
-      setEvents(prev => [mapped, ...prev]);
-      return mapped;
-
-    } catch (e) {
-      console.warn('Fallo backend, guardando localmente:', e.message);
-      const local = {
-        ...event,
-        id: Date.now().toString(),
-        type: event.type || 'local',
-        image: event.image || DEFAULT_EVENT_IMAGE,
-        createdBy: user.name,
-        asistentes: [],
-        isAttending: false,
         attendeesCount: 0,
       };
-      setEvents(prev => [local, ...prev]);
-      return local;
-    }
-  };
 
-  const createEvent = async () => {
-    const e = await addEvent(formEvent);
-    if (e) {
-      setFormEvent({
-        title: '',
-        date: '',
-        location: '',
-        description: '',
-        image: null,
-        type: 'local',
-        latitude: null,
-        longitude: null,
-      });
-    }
-    return e;
-  };
-
-  // ===== Editar =====
-  const updateEvent = async (updatedEvent) => {
-    const t = Date.parse(updatedEvent.date);
-    const now = new Date();
-    const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    if (Number.isNaN(t) || t < todayMid) {
-      Alert.alert('Fecha inválida', 'No puedes poner una fecha anterior a hoy.');
-      return null;
-    }
-
-    const u = normalizeEvent(updatedEvent);
-    // Aseguramos mantener los campos de hora si existen
-    if (!u.timeStart && u.startsAt && u.startsAt.length >= 16) {
-      u.timeStart = u.startsAt.slice(11,16);
-    }
-    const prevSnapshot = events;
-
-    const optimistic = (() => {
-      const existing = events.find(e => String(e.id) === String(u.id));
-      const merged = {
-        ...(existing || {}),
-        ...u,
-        createdBy: u.createdBy ?? existing?.createdBy ?? (user?.name ?? 'Usuario'),
-        createdById: u.createdById ?? existing?.createdById ?? (effectiveUser?.id ?? null),
-        type: u.type || existing?.type || 'local',
-        asistentes: u.asistentes ?? existing?.asistentes ?? [],
-      };
-      return merged;
-    })();
-
-    setEvents(prev => mergeEventById(prev, optimistic));
-    try {
-      await AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(mergeEventById(prevSnapshot, optimistic)));
-    } catch {}
-
-    const dbId = dbIdFrom(u.id);
-    if (dbId == null) {
-      return optimistic;
-    }
-
-    const basePayload = toPatchPayload(u);
-    const payloadWithId = { id: dbId, ...basePayload };
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    };
-
-    const base = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
-    const attempts = attemptsFor(base, dbId, basePayload, payloadWithId, headers);
-
-    const tryAll = async () => {
-      let lastRes = null;
-      for (const a of attempts) {
-        try {
-          const res = await safeFetch(a.url, { method: a.method, headers: a.headers, body: JSON.stringify(a.body) }, { timeoutMs: 12000 });
-          let snippet = '';
-          try { const txt = await res.text(); snippet = txt ? txt.slice(0, 120) : ''; } catch {}
-
-          if (res.ok || res.status === 204) {
-            if (snippet && !snippet.startsWith('<!DOCTYPE')) {
-              try {
-                const json = JSON.parse(snippet);
-                return { ok: true, status: res.status, _json: json };
-              } catch {}
-            }
-            return { ok: true, status: res.status, _json: null };
-          }
-
-          lastRes = { ok: false, status: res.status, snippet };
-          const cannotMethod = /Cannot\s+(PATCH|PUT|POST)/i.test(snippet);
-          if (!(res.status === 404 || res.status === 405 || cannotMethod)) {
-            return lastRes;
-          }
-        } catch {
-          lastRes = null;
-        }
-      }
-      return lastRes;
-    };
-
-    try {
-      const result = await tryAll();
-
-      if (!result) throw new Error('No se pudo contactar con el servidor para actualizar.');
-
-      if (result.status === 204 || (result.ok && !result._json)) {
-        const verified = await fetchEventById(dbId, authToken);
-        if (verified && typeof verified === 'object') {
-          const fromServer = {
-            id: String(verified.id ?? u.id),
-            title: verified.title ?? u.title,
-            description: verified.description ?? u.description ?? '',
-            date: verified.event_at?.slice(0, 10) ?? u.date,
-            location: verified.location ?? u.location ?? '',
-            type: verified.type || u.type || 'local',
-            image: (verified.image && String(verified.image).trim() !== '' ? verified.image : null)
-                    ?? (u.image && String(u.image).trim() !== '' ? u.image : null),
-            latitude: verified.latitude != null ? Number(verified.latitude) : (u.latitude ?? null),
-            longitude: verified.longitude != null ? Number(verified.longitude) : (u.longitude ?? null),
-            createdById: verified?.created_by != null ? Number(verified.created_by) : (optimistic.createdById ?? null),
-            createdBy: verified?.created_by_name ?? optimistic.createdBy ?? (user?.name ?? 'Usuario'),
-            isAttending: typeof verified?.is_attending === 'boolean' ? verified.is_attending : optimistic.isAttending,
-            attendeesCount: Number(verified?.attendees_count ?? optimistic.attendeesCount ?? 0),
-            asistentes: optimistic.asistentes ?? [],
-          };
-          setEvents(prev => mergeEventById(prev, fromServer));
-          try {
-            const latest = mergeEventById(prevSnapshot, fromServer);
-            await AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(latest));
-          } catch {}
-          return fromServer;
-        }
-        const serverMapped = { ...optimistic };
-        setEvents(prev => mergeEventById(prev, serverMapped));
-        try {
-          const latest = mergeEventById(prevSnapshot, serverMapped);
-          await AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(latest));
-        } catch {}
-        return serverMapped;
-      }
-
-      if (!result.ok) {
-        throw new Error(`HTTP ${result.status} ${result.snippet || ''}`.trim());
-      }
-
-      const saved = result._json;
-      const serverMapped = {
-        id: String(saved?.id ?? u.id),
-        title: saved?.title ?? u.title,
-        description: saved?.description ?? u.description ?? '',
-        date: saved?.event_at?.slice(0, 10) ?? u.date,
-        timeStart:
-          saved?.time_start ??
-          saved?.timeStart ??
-          (saved?.starts_at ? saved.starts_at.slice(11,16) : null) ??
-          u.timeStart ??
-          (saved?.event_at && saved.event_at.length >=16 ? saved.event_at.slice(11,16) : null),
-        startsAt: saved?.starts_at ?? saved?.startsAt ?? saved?.event_at ?? u.startsAt ?? null,
-        location: saved?.location ?? u.location ?? '',
-        type: saved?.type || u.type || 'local',
-        image:
-          (saved?.image && String(saved.image).trim() !== '' ? saved.image : null) ??
-          (u.image && String(u.image).trim() !== '' ? u.image : null),
-        latitude: saved?.latitude != null ? Number(saved.latitude) : (u.latitude ?? null),
-        longitude: saved?.longitude != null ? Number(saved.longitude) : (u.longitude ?? null),
-        createdById: saved?.created_by != null ? Number(saved.created_by) : (optimistic.createdById ?? null),
-        createdBy: saved?.created_by_name ?? optimistic.createdBy ?? (user?.name ?? 'Usuario'),
-        isAttending: typeof saved?.is_attending === 'boolean' ? saved.is_attending : optimistic.isAttending,
-        attendeesCount: Number(saved?.attendees_count ?? optimistic.attendeesCount ?? 0),
-        asistentes: optimistic.asistentes ?? [],
-      };
-
-      setEvents(prev => mergeEventById(prev, serverMapped));
+      // Guardar en caché local
       try {
-        const latest = mergeEventById(prevSnapshot, serverMapped);
-        await AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(latest));
+        const key = storageKey(BASE_EVENTS_KEY, uid);
+        const rawPrev = await AsyncStorage.getItem(key);
+        const prev = rawPrev ? JSON.parse(rawPrev) : [];
+        const next = mergeEventById(prev, mapped);
+        setEvents(next);
+        await AsyncStorage.setItem(key, JSON.stringify(normalizeForStorage(next)));
       } catch {}
 
-      return serverMapped;
+      return mapped;
     } catch (e) {
-      console.warn('updateEvent error:', e.message);
-      setEvents(prevSnapshot);
-      try { await AsyncStorage.setItem(storageKey(BASE_EVENTS_KEY, uid), JSON.stringify(prevSnapshot)); } catch {}
-      Alert.alert('Error', e.message || 'No se pudo actualizar el evento.');
+      console.warn('[addEvent] error:', e?.message);
+      Alert.alert('Error al crear evento', e?.message ?? 'Error desconocido');
       return null;
     }
   };
 
-  // ===== Borrar =====
-  const deleteEvent = async (eventId) => {
-    try {
-      const dbId = dbIdFrom(eventId);
-      if (dbId != null) {
-        const res = await safeFetch(`${API_URL}/events/${dbId}`, { method: 'DELETE', headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) } }, { timeoutMs: 12000 });
-        if (!res.ok) {
-          const txt = await res.text().catch(() => '');
-          console.warn('DELETE /events failed:', res.status, txt);
-        }
-      }
-    } catch (e) {
-      console.warn('deleteEvent API error:', e.message);
-    } finally {
-      setEvents(prev => prev.filter(ev => String(ev.id) !== String(eventId)));
-    }
+  // ===== Unir asistentes (merge) =====
+  const mergeAssistants = async (eventId, newAsistentes = []) => {
+    if (!eventId) return;
+    setEvents(prev => {
+      const idx = prev.findIndex(e => String(e.id) === String(eventId));
+      if (idx === -1) return prev;
+      const ev = prev[idx];
+      const merged = { ...ev, asistentes: newAsistentes };
+      const next = [...prev];
+      next[idx] = merged;
+      return next;
+    });
   };
 
-  // ===== Favoritos =====
-  const toggleFavorite = useCallback(
-    async (id, ev) => {
-      const key = String(id ?? ev?.id);
+  // ===== Asistir / no asistir =====
+  const attend = async (eventId, attending = true) => {
+    if (!eventId) return;
+    const url = `${API_URL}/attendees`;
+    const body = {
+      event_id: dbIdFrom(eventId),
+      user_id: effectiveUser?.id,
+      status: attending ? 'yes' : 'no',
+    };
 
-      setFavorites((prev) =>
-        prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
-      );
-      setFavoriteItems((prev) => {
-        const next = { ...prev };
-        if (prev[key]) delete next[key];
-        else next[key] = { ...ev };
-        return next;
+    console.log('[attend] →', body);
+
+    try {
+      const res = await safeFetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify(body),
       });
 
-      if (!uid) {
-        console.warn('[fav] sin usuario → solo local');
-        return;
+      const raw = await res.text();
+      console.log('[attend] response status:', res.status, 'body:', raw?.slice(0, 400));
+
+      if (!res.ok) {
+        const msg = `HTTP ${res.status}`;
+        console.warn('[attend] server NOT OK:', msg);
+        throw new Error(msg);
       }
 
+      // Actualizar evento en caché
       try {
-        const already = favorites.includes(key);
+        setEvents(prev => {
+          const idx = prev.findIndex(e => String(e.id) === String(eventId));
+          if (idx === -1) return prev;
+          const ev = prev[idx];
+          const next = [...prev];
+          next[idx] = { ...ev, isAttending: attending, attendeesCount: ev.attendeesCount + (attending ? 1 : -1) };
+          return next;
+        });
+      } catch {}
+    } catch (e) {
+      console.warn('[attend] error:', e?.message);
+      Alert.alert('Error al actualizar asistencia', e?.message ?? 'Error desconocido');
+    }
+  };
 
-        if (!already) {
-          let serverId = isNumericId(key) ? key : null;
-          if (!serverId) {
-            serverId = await ensureEventOnServer(ev, authToken);
-          }
-          if (serverId) {
-            await fetch(`${API_URL}/users/${uid}/favorites/events`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-              },
-              body: JSON.stringify({ eventId: serverId }),
-            });
-          } else {
-            console.warn('[fav] evento externo (no BD) → solo local');
-          }
-        } else {
-          const delHeaders = { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) };
-
-          if (isNumericId(key)) {
-            await fetch(`${API_URL}/users/${uid}/favorites/events/${key}`, {
-              method: 'DELETE',
-              headers: delHeaders,
-            });
-          } else {
-            await fetch(
-              `${API_URL}/users/${uid}/favorites/events/by-external/${encodeURIComponent(key)}`,
-              { method: 'DELETE', headers: delHeaders }
-            ).catch(() => {});
-          }
-
-          try {
-            if (ev && ev.type === 'api') {
-              if (isNumericId(key)) {
-                await safeFetch(`${API_URL}/events/${key}`, { method: 'DELETE', headers: delHeaders }, { timeoutMs: 12000 });
-              } else {
-                const src = ev.source || 'ticketmaster';
-                const ext = ev.externalId || key;
-                const url = `${API_URL}/events/${encodeURIComponent(key)}?source=${encodeURIComponent(src)}&externalId=${encodeURIComponent(ext)}`;
-                await safeFetch(url, { method: 'DELETE', headers: delHeaders }, { timeoutMs: 12000 });
-              }
-            }
-          } catch (e) {
-            console.warn('[fav] no se pudo borrar evento externo:', e?.message || e);
-          }
+  // ===== Forzar actualización de evento (re-fetch desde el servidor) =====
+  const forceRefreshEvent = async (eventId) => {
+    if (!eventId) return null;
+    const base = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
+    const urls = [
+      `${base}/events/${eventId}`, `${base}/event/${eventId}`,
+      `${base}/api/events/${eventId}`, `${base}/api/event/${eventId}`,
+      `${base}/v1/events/${eventId}`, `${base}/v1/event/${eventId}`,
+    ];
+    const headers = { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) };
+    for (const url of urls) {
+      try {
+        const res = await safeFetch(url, { headers }, { timeoutMs: 10000 });
+        if (!res.ok) continue;
+        const json = await parseJsonSafe(res);
+        if (json && typeof json === 'object') {
+          // Actualizar en caché
+          setEvents(prev => {
+            const idx = prev.findIndex(e => String(e.id) === String(eventId));
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...json };
+            return next;
+          });
+          return json;
         }
-      } catch (e) {
-        console.warn('[fav] sync con server falló:', e?.message || e);
+      } catch {}
+    }
+    return null;
+  };
+
+  // ===== Eliminar evento =====
+  const deleteEvent = async (eventId) => {
+    if (!eventId) return;
+    const prevSnapshot = events;
+    // Optimista: quitar localmente
+    setEvents(prev => prev.filter(e => String(e.id) !== String(eventId)));
+
+    try {
+      const dbId = dbIdFrom(eventId);
+      const headers = { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) };
+
+      if (dbId != null) {
+        await safeFetch(`${API_URL}/events/${dbId}`, { method: 'DELETE', headers }, { timeoutMs: 12000 });
+      } else {
+        const ev = prevSnapshot.find(e => String(e.id) === String(eventId)) || {};
+        const ext = externalIdFrom(ev) || String(eventId);
+        const src = ev.source || ev.type === 'api' ? 'ticketmaster' : 'unknown';
+        const url = `${API_URL}/events/${encodeURIComponent(ext)}?source=${encodeURIComponent(src)}&externalId=${encodeURIComponent(ext)}`;
+        await safeFetch(url, { method: 'DELETE', headers }, { timeoutMs: 12000 }).catch(() => {});
       }
-    },
-    [favorites, uid, authToken]
-  );
 
-  // ===== Asistir / Salir =====
-  const joinEvent = async (eventId) => {
-    const dbId = dbIdFrom(eventId);
-
-    setEvents(prev => prev.map(e =>
-      String(e.id) === String(eventId)
-        ? {
-            ...e,
-            isAttending: true,
-            attendeesCount: (e.attendeesCount ?? 0) + 1,
-            asistentes: e.asistentes?.includes(effectiveUser?.name ?? user.name)
-              ? e.asistentes
-              : [...(e.asistentes || []), (effectiveUser?.name ?? user.name)],
-          }
-        : e
-    ));
-
-    try {
-      if (!uid || dbId == null) return;
-      await apiAttend(uid, dbId);
-    } catch (err) {
-      console.warn('joinEvent persist error:', err?.message);
-      setEvents(prev => prev.map(e =>
-        String(e.id) === String(eventId)
-          ? {
-              ...e,
-              isAttending: false,
-              attendeesCount: Math.max(0, (e.attendeesCount ?? 1) - 1),
-              asistentes: (e.asistentes || []).filter(n => n !== (effectiveUser?.name ?? user.name)),
-            }
-          : e
-      ));
+      // persistir el nuevo estado
+      try {
+        const key = storageKey(BASE_EVENTS_KEY, uid);
+        const sanitized = normalizeForStorage(events.filter(e => String(e.id) !== String(eventId)));
+        AsyncStorage.setItem(key, JSON.stringify(sanitized)).catch(() => {});
+      } catch {}
+    } catch (e) {
+      console.warn('[deleteEvent] error:', e?.message || e);
+      // restaurar snapshot local si falla la eliminación remota
+      setEvents(prevSnapshot);
+      try {
+        const key = storageKey(BASE_EVENTS_KEY, uid);
+        AsyncStorage.setItem(key, JSON.stringify(normalizeForStorage(prevSnapshot))).catch(() => {});
+      } catch {}
     }
   };
 
-  const leaveEvent = async (eventId) => {
-    const dbId = dbIdFrom(eventId);
+  // ===== Valores expuestos =====
+  const value = useMemo(() => ({
+    events,
+    setEvents,
+    formEvent,
+    setFormEvent,
+    coords,
+    city,
+    locLoading,
+    favorites,
+    favoriteItems,
+    imageOverrides,
+    overridesReady,
+    isUpcoming,
+    normalizeEvent,
+    isMine,
+    getEventImageSource,
+    getEffectiveEventImage,
+    toPatchPayload,
+    addEvent,
+    deleteEvent,
+    mergeAssistants,
+    attend,
+    forceRefreshEvent,
+  }), [events, formEvent, coords, city, locLoading, favorites, favoriteItems, imageOverrides, overridesReady, authToken, uid]);
 
-    setEvents(prev => prev.map(e =>
-      String(e.id) === String(eventId)
-        ? {
-            ...e,
-            isAttending: false,
-            attendeesCount: Math.max(0, (e.attendeesCount ?? 1) - 1),
-            asistentes: (e.asistentes || []).filter(n => n !== (effectiveUser?.name ?? user.name)),
-          }
-        : e
-    ));
-
-    try {
-      if (!uid || dbId == null) return;
-      await apiUnattend(uid, dbId);
-    } catch (err) {
-      console.warn('leaveEvent persist error:', err?.message);
-      setEvents(prev => prev.map(e =>
-        String(e.id) === String(eventId)
-          ? {
-              ...e,
-              isAttending: true,
-              attendeesCount: (e.attendeesCount ?? 0) + 1,
-              asistentes: e.asistentes?.includes(effectiveUser?.name ?? user.name)
-                ? e.asistentes
-                : [...(e.asistentes || []), (effectiveUser?.name ?? user.name)],
-            }
-          : e
-      ));
-    }
-  };
-
-  const isAttending = (eventId) => {
-    const ev = events.find(e => String(e.id) === String(eventId));
-    return !!ev?.isAttending;
-  };
-
-  const toggleAttend = async (eventId) => {
-    const ev = events.find(e => String(e.id) === String(eventId));
-    if (!ev) return;
-    if (ev.isAttending) {
-      await leaveEvent(eventId);
-    } else {
-      await joinEvent(eventId);
-    }
-  };
-
-  // ===== Derivados =====
-  const myEvents = useMemo(() => events.filter(isMine), [events, user]);
-  const communityEvents = useMemo(() => events.filter(e => !isMine(e)), [events, user]);
-
-  // Solo de hoy y futuro (para Home)
-  const eventsUpcoming = useMemo(
-    () => events.filter(e => isUpcoming(e.date)),
-    [events]
-  );
-
-  const myUpcomingEvents = useMemo(
-    () => events.filter(e => isMine(e) && isUpcoming(e.date)),
-    [events, user]
-  );
-
-  const communityUpcomingEvents = useMemo(
-    () => events.filter(e => !isMine(e) && isUpcoming(e.date)),
-    [events, user]
-  );
-
-  return (
-    <EventContext.Provider
-      value={{
-        // datos
-        events, myEvents, communityEvents,
-        eventsUpcoming, myUpcomingEvents, communityUpcomingEvents,
-        // CRUD
-        addEvent, createEvent, updateEvent, deleteEvent,
-        // formulario
-        formEvent, setFormEvent, pickImageForForm,
-        // imagen
-        getEventImageSource,
-        getEffectiveEventImage,
-        overridesReady,
-        // usuario
-        user, updateUser: setUser,
-        // favoritos
-        favorites, favoriteItems, toggleFavorite,
-        // asistencia
-        joinEvent, leaveEvent,
-        isAttending, toggleAttend,
-        // ubicación
-        coords, city, locLoading,
-      }}
-    >
-      {children}
-    </EventContext.Provider>
-  );
+  return <EventContext.Provider value={value}>{children}</EventContext.Provider>;
 }
+
+export const useEvents = () => useContext(EventContext);

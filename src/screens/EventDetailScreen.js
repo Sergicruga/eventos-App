@@ -110,7 +110,6 @@ const getEventDateFromEvent = (ev) => {
     const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
     if (m) return m[1];
   }
-  // Si viniera como Date
   if (s instanceof Date) return s.toISOString().slice(0, 10);
   return null;
 };
@@ -404,29 +403,49 @@ export default function EventDetailScreen({ route, navigation }) {
       : '');
   }, [eventDateObj, current?.date]);
 
+  // === BLOQUE REEMPLAZADO: hora de inicio robusta sin crear Date y con respaldo en route.params.event
   const startTimeLabel = useMemo(() => {
-    // 1) si viene timeStart / time_start "HH:MM"
-    const tStr = (current?.timeStart ?? current?.time_start);
-    if (typeof tStr === 'string' && /^\d{2}:\d{2}$/.test(tStr.trim())) {
-      return tStr.trim();
+    // 1) Campo directo “bonito”
+    const t1 =
+      (typeof current?.timeStart === 'string' && current.timeStart.trim()) ||
+      (typeof current?.time_start === 'string' && current.time_start.trim()) ||
+      null;
+    if (t1 && /^\d{2}:\d{2}$/.test(t1)) return t1.slice(0, 5);
+
+    // 2) ISO de startsAt/starts_at → HH:MM por regex
+    const s1 =
+      (typeof current?.startsAt === 'string' && current.startsAt) ||
+      (typeof current?.starts_at === 'string' && current.starts_at) ||
+      null;
+    if (s1) {
+      const hhmm = formatTimeHHMM(s1);
+      if (hhmm) return hhmm;
     }
-    // 2) si viene startsAt / starts_at ISO
-    const startIso = current?.startsAt ?? current?.starts_at;
-    if (typeof startIso === 'string' && startIso.trim()) {
-      const dt = new Date(startIso);
-      if (!isNaN(dt.getTime())) {
-        return formatTimeHHMM(dt);
-      }
+
+    // 3) Respaldo: lo que venía en la ruta (por si aún no estaba sincronizado en lista)
+    const rp = route?.params?.event ?? {};
+    const t2 =
+      (typeof rp.timeStart === 'string' && rp.timeStart.trim()) ||
+      (typeof rp.time_start === 'string' && rp.time_start.trim()) ||
+      null;
+    if (t2 && /^\d{2}:\d{2}$/.test(t2)) return t2.slice(0, 5);
+
+    const s2 =
+      (typeof rp.startsAt === 'string' && rp.startsAt) ||
+      (typeof rp.starts_at === 'string' && rp.starts_at) ||
+      null;
+    if (s2) {
+      const hhmm = formatTimeHHMM(s2);
+      if (hhmm) return hhmm;
     }
-    // 3) si date incluye hora (ISO completo)
+
+    // 4) Último recurso: si current.date trae hora (ISO completo)
     if (typeof current?.date === 'string' && current.date.length > 10) {
-      const dt = new Date(current.date);
-      if (!isNaN(dt.getTime())) {
-        return formatTimeHHMM(dt);
-      }
+      const hhmm = formatTimeHHMM(current.date);
+      if (hhmm) return hhmm;
     }
     return null;
-  }, [current?.timeStart, current?.time_start, current?.startsAt, current?.starts_at, current?.date]);
+  }, [current?.timeStart, current?.time_start, current?.startsAt, current?.starts_at, current?.date, route?.params?.event]);
 
   return (
     <LinearGradient

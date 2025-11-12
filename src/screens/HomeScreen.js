@@ -169,7 +169,15 @@ function EventCard({ item, isFavorite, onToggleFavorite, onPress, getEventImageS
 }
 
 export default function HomeScreen() {
-  const { communityEvents, favorites, toggleFavorite, getEventImageSource, getEffectiveEventImage } = useContext(EventContext);
+  const eventCtx = useContext(EventContext) || {};
+  // communityEvents puede venir como communityEvents (antiguo) o como events (nuevo).
+  const communityEvents = eventCtx.communityEvents ?? eventCtx.events ?? [];
+  const {
+    favorites = [],
+    toggleFavorite = () => {},
+    getEventImageSource = () => ({ uri: DEFAULT_EVENT_IMAGE }),
+    getEffectiveEventImage = () => null,
+  } = eventCtx;
   const { user } = useContext(AuthContext);
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState(null);
