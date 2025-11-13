@@ -377,8 +377,6 @@ export function EventProvider({ children }) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
 
-        console.log('=== API /events ===');
-
         // Mapeo desde servidor (no usamos hora de event_at)
         let mapped = (data || []).map(ev => {
           const rawEventAt = ev.event_at ?? null; // "2025-11-10T23:00:00.000Z"
@@ -401,8 +399,6 @@ export function EventProvider({ children }) {
               : (derivedStartsAt && derivedStartsAt.length >= 16
                   ? derivedStartsAt.slice(11,16)
                   : null);
-
-          console.log('id:', ev.id, 'date:', yyyyMmDd, 'timeStart:', inferredTime, 'startsAt:', derivedStartsAt);
 
           return {
             id: String(ev.id),
@@ -486,7 +482,6 @@ export function EventProvider({ children }) {
             // si hay uid, guarda en uid; evita sobreescribir clave "guest" si hay usuario
             const key = storageKey(BASE_EVENTS_KEY, uid);
             await AsyncStorage.setItem(key, JSON.stringify(normalized));
-            console.log('[EventProvider] saved to cache:', key, 'count:', normalized.length);
           } catch {}
         }
         return;
@@ -705,6 +700,66 @@ export function EventProvider({ children }) {
       return null;
     }
   };
+  // ===== EDITAR EVENTO =====
+  const updateEvent = async (eventId, updated) => {
+    if (!eventId) return null;
+
+    try {
+      // Usamos toPatchPayload para no romper lo que ya tenías
+      const payload = toPatchPayload(updated);
+
+      const res = await safeFetch(
+        `${API_URL}/events/${eventId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        },
+        { timeoutMs: 12000 }
+      );
+
+      const text = await res.text();
+      let json = null;
+      try { json = text ? JSON.parse(text) : null; } catch {}
+
+      if (!res.ok) {
+        throw new Error(json?.message || `HTTP ${res.status}`);
+      }
+
+      // ---- Actualizar en estado local SIN perder info previa ----
+      setEvents(prev => {
+        const idx = prev.findIndex(e => String(e.id) === String(eventId));
+        if (idx === -1) return prev;
+
+        const prevEv = prev[idx];
+
+        const merged = {
+          ...prevEv,               // mantiene createdById, createdBy, isAttending, etc
+          ...updated,              // aplica cambios de la pantalla
+          id: String(eventId),
+          date: updated.date ?? prevEv.date ?? '',
+          timeStart: updated.timeStart ?? prevEv.timeStart ?? null,
+          startsAt: updated.startsAt ?? prevEv.startsAt ?? null,
+        };
+
+        const next = [...prev];
+        next[idx] = merged;
+        return next;
+      });
+
+      // No hace falta tocar AsyncStorage: ya tienes un useEffect que lo persiste al cambiar events
+      return true;
+    } catch (e) {
+      console.warn('[updateEvent] error:', e?.message);
+      Alert.alert('Error', e.message || 'No se pudo actualizar el evento');
+      return null;
+    }
+  };
+
+
 
   // ===== Unir asistentes (merge) =====
   const mergeAssistants = async (eventId, newAsistentes = []) => {
@@ -857,6 +912,7 @@ export function EventProvider({ children }) {
     getEffectiveEventImage,
     toPatchPayload,
     addEvent,
+    updateEvent,
     deleteEvent,
     mergeAssistants,
     attend,

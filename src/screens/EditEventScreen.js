@@ -52,6 +52,7 @@ export default function EditEventScreen({ route, navigation }) {
   const passedEvent = route.params?.event || null;
   const routeEventId = route.params?.eventId || passedEvent?.id;
   const { events, updateEvent } = useContext(EventContext);
+  
 
   const currentEvent = useMemo(
     () => passedEvent || events.find(e => String(e.id) === String(routeEventId)),
@@ -113,11 +114,18 @@ export default function EditEventScreen({ route, navigation }) {
 
   const pad = (v) => String(v ?? '').padStart(2, '0');
   const clampNum = (v, max) => {
-    const n = parseInt(String(v).replace(/\D/g, ''), 10);
-    if (isNaN(n)) return '00';
-    return pad(Math.max(0, Math.min(max, n)));
+    if (v == null) return '';
+    const digits = String(v).replace(/\D/g, '').slice(0, 2); // máximo 2 dígitos
+    if (digits === '') return ''; // permite estado intermedio vacío
+    const n = parseInt(digits, 10);
+    if (Number.isNaN(n)) return '';
+    const clamped = Math.max(0, Math.min(max, n));
+    return String(clamped);
   };
-  const formattedTime = useMemo(() => `${pad(hour)}:${pad(minute)}`, [hour, minute]);
+  const formattedTime = useMemo(
+    () => `${pad(hour === '' ? '0' : hour)}:${pad(minute === '' ? '0' : minute)}`,
+    [hour, minute]
+  );
 
   useEffect(() => {
     (async () => {
@@ -285,19 +293,22 @@ export default function EditEventScreen({ route, navigation }) {
       const hhmm = formattedTime; // HH:mm
       const startsAtIso = `${normalizeDate(date)}T${hhmm}:00`;
 
-      await updateEvent({
-        id: currentEvent.id,
-        title,
-        date: normalizeDate(date),
-        timeStart: hhmm,          // NUEVO
-        startsAt: startsAtIso,    // NUEVO
-        location: resolvedAddress,
-        description,
-        type,
-        image: imageUrl,
-        latitude: baseCoords.latitude,
-        longitude: baseCoords.longitude,
-      });
+      await updateEvent(
+        currentEvent.id,
+        {
+          id: currentEvent.id,
+          title,
+          date: normalizeDate(date),
+          timeStart: hhmm,          // NUEVO
+          startsAt: startsAtIso,    // NUEVO
+          location: resolvedAddress,
+          description,
+          type,
+          image: imageUrl,
+          latitude: baseCoords.latitude,
+          longitude: baseCoords.longitude,
+        }
+      );
       Alert.alert('Listo', 'Evento actualizado correctamente.');
       navigation.goBack();
     } catch (e) {
@@ -412,7 +423,8 @@ export default function EditEventScreen({ route, navigation }) {
               <Text style={styles.dateText}>{formattedTime}</Text>
             </TouchableOpacity>
             <Modal visible={timeModalVisible} transparent animationType="fade" onRequestClose={() => setTimeModalVisible(false)}>
-              <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPressOut={() => setTimeModalVisible(false)}>
+              {/* CAMBIO: View en lugar de TouchableOpacity para no bloquear los TextInput */}
+              <View style={styles.modalOverlay}>
                 <View style={styles.timeModal}>
                   <Text style={styles.timeModalTitle}>Seleccionar hora</Text>
                   <View style={styles.timeInputsRow}>
@@ -440,7 +452,7 @@ export default function EditEventScreen({ route, navigation }) {
                     <Text style={styles.primaryBtnText}>Usar esta hora</Text>
                   </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
             </Modal>
           </View>
 
