@@ -35,6 +35,28 @@ function isUpcoming(dateStr) {
 }
 
 /* -----------------------------------------------------------------------------
+  Helpers de formato para mostrar fecha y hora en miniaturas
+----------------------------------------------------------------------------- */
+function formatEventDate(dateStr) {
+  if (!dateStr) return "";
+  const parts = String(dateStr).split("-");
+  if (parts.length !== 3) return dateStr;
+  const [y, m, d] = parts;
+  return `${d}/${m}/${y}`; // 13/11/2025
+}
+
+function getEventTime(ev) {
+  if (ev?.timeStart && /^\d{2}:\d{2}/.test(ev.timeStart)) {
+    return ev.timeStart.slice(0, 5);
+  }
+  const iso = ev?.startsAt || ev?.starts_at || ev?.event_at;
+  if (typeof iso === "string" && iso.length >= 16) {
+    return iso.slice(11, 16); // HH:mm
+  }
+  return "";
+}
+
+/* -----------------------------------------------------------------------------
   Miniatura de evento con la cadena de fallbacks:
   override local (file://) > imagen servidor > backup web > asset local
 ----------------------------------------------------------------------------- */
@@ -113,6 +135,10 @@ export default function ProfileScreen() {
           latitude: e.latitude ?? null,
           longitude: e.longitude ?? null,
           type: e.type ?? "local",
+          // NUEVO: guardar hora también
+          timeStart: e.time_start ?? e.timeStart ?? null,
+          startsAt: e.starts_at ?? e.startsAt ?? null,
+          event_at: e.event_at ?? null,
         }))
         .filter(ev => isUpcoming(ev.date)) // ⬅️ oculta pasados
         .sort((a, b) => toLocalMidnightMs(a.date) - toLocalMidnightMs(b.date)); // opcional: orden asc
@@ -268,25 +294,39 @@ export default function ProfileScreen() {
         keyExtractor={(i) => i.id}
         contentContainerStyle={{ padding: 16, paddingTop: 8 }}
         ListEmptyComponent={<Text>No tienes eventos próximos.</Text>}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            onPress={() => navigation.navigate("EventDetail", { event: item })}
-            activeOpacity={0.85}
-            style={{ flexDirection: "row", padding: 12, borderWidth: 1, borderColor: "#eee", borderRadius: 12, marginBottom: 12 }}
-          >
-            <EventThumbImage
-              eventId={item.id}
-              serverImage={item.image}
-              style={{ width: 64, height: 64, borderRadius: 8, marginRight: 12 }}
-            />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontWeight: "600" }}>{item.title}</Text>
-              <Text style={{ color: "#555" }}>
-                {item.date} · {item.location}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
+        renderItem={({ item }) => {
+          const timeLabel = getEventTime(item);
+          return (
+            <TouchableOpacity
+              onPress={() => navigation.navigate("EventDetail", { event: item })}
+              activeOpacity={0.85}
+              style={{ flexDirection: "row", padding: 12, borderWidth: 1, borderColor: "#eee", borderRadius: 12, marginBottom: 12 }}
+            >
+              <EventThumbImage
+                eventId={item.id}
+                serverImage={item.image}
+                style={{ width: 64, height: 64, borderRadius: 8, marginRight: 12 }}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: "600" }}>{item.title}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2, flexWrap: "wrap" }}>
+                  <Ionicons name="calendar-outline" size={14} color="#555" style={{ marginRight: 4 }} />
+                  <Text style={{ color: "#555", fontSize: 13 }}>
+                    {formatEventDate(item.date)}
+                  </Text>
+                  {timeLabel ? (
+                    <>
+                      <Text style={{ color: "#555", fontSize: 13 }}> · </Text>
+                      <Ionicons name="time-outline" size={14} color="#555" style={{ marginRight: 4 }} />
+                      <Text style={{ color: "#555", fontSize: 13 }}>{timeLabel}</Text>
+                    </>
+                  ) : null}
+                  <Text style={{ color: "#555", fontSize: 13 }}> · {item.location}</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
       />
 
       {/* Logout flotante */}
