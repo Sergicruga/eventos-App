@@ -69,6 +69,29 @@ async function fetchTicketmasterEvents(city = 'Barcelona', monthsAhead = 6) {
 const CARD_MARGIN = 10;
 const CARD_WIDTH = (Dimensions.get('window').width - CARD_MARGIN * 3) / 2;
 
+// --- NUEVO: helpers de fecha para ocultar pasados ---
+function toLocalMidnightMs(dateStr) {
+  if (!dateStr) return NaN;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (m) {
+    const [_, y, mm, dd] = m;
+    return new Date(Number(y), Number(mm) - 1, Number(dd), 0, 0, 0, 0).getTime();
+  }
+  const t = new Date(dateStr).getTime();
+  if (Number.isNaN(t)) return NaN;
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+}
+function todayLocalMidnightMs() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+}
+function isUpcoming(dateStr) {
+  const e = toLocalMidnightMs(dateStr);
+  const t = todayLocalMidnightMs();
+  return !Number.isNaN(e) && e >= t;
+}
+
 // Formatea "YYYY-MM-DD" (u otras variantes) a "DD - MM - YYYY"
 function formatDateDMY(dateStr) {
   if (!dateStr) return '';
@@ -147,7 +170,15 @@ function EventCard({ item, isFavorite, onToggleFavorite, onPress, getEventImageS
 }
 
 export default function HomeScreen() {
-  const { communityEvents, favorites, toggleFavorite, getEventImageSource, getEffectiveEventImage } = useContext(EventContext);
+  const eventCtx = useContext(EventContext) || {};
+  // communityEvents puede venir como communityEvents (antiguo) o como events (nuevo).
+  const communityEvents = eventCtx.communityEvents ?? eventCtx.events ?? [];
+  const {
+    favorites = [],
+    toggleFavorite = () => {},
+    getEventImageSource = () => ({ uri: DEFAULT_EVENT_IMAGE }),
+    getEffectiveEventImage = () => null,
+  } = eventCtx;
   const { user } = useContext(AuthContext);
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState(null);
@@ -170,7 +201,7 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    fetchTicketmasterEvents('Barcelona', 6) // ahora 6 meses vista
+    fetchTicketmasterEvents('Barcelona', 6) // ahora 6 meses vista (ya viene futuro)
       .then(setApiEvents)
       .catch(() => setApiEvents([]))
       .finally(() => setLoadingApiEvents(false));
@@ -182,19 +213,20 @@ export default function HomeScreen() {
 
   const myUserId = user?.id != null ? String(user.id) : null;
 
-  // Show all events except those created by you
-  // + No mostrar eventos 'api' de la BD si no están en favoritos
+  // --- CAMBIO 1: filtrar SOLO eventos futuros (y seguir excluyendo los míos)
+  // También arreglamos el campo de autor (created_by vs createdById)
   const otherUserEvents = communityEvents
+    .filter(ev => isUpcoming(ev.date)) // 👈 oculta pasados de BD
     .filter(ev => (ev.type === 'api' ? favorites.includes(String(ev.id)) : true))
-    .filter(ev =>
-      myUserId
-        ? String(ev.created_by) !== myUserId
-        : true
-    );
+    .filter(ev => {
+      if (!myUserId) return true;
+      const createdByRaw = ev.created_by ?? ev.createdById ?? ev.createdBy ?? null;
+      return createdByRaw == null ? true : String(createdByRaw) !== myUserId;
+    });
 
-  const allEvents = [
-    ...otherUserEvents.map(ev => ({ ...ev, type: 'local' })),
-    ...apiEvents.map(ev => {
+  // TM ya viene acotado por startDateTime>=now, pero aplicamos isUpcoming por seguridad
+  const tmProjected = apiEvents
+    .map(ev => {
       const venue = ev._embedded?.venues?.[0];
       const lat = venue?.location?.latitude ? parseFloat(venue.location.latitude) : null;
       const lon = venue?.location?.longitude ? parseFloat(venue.location.longitude) : null;
@@ -211,7 +243,12 @@ export default function HomeScreen() {
         type: 'api',
         images: ev.images || [],
       };
-    }),
+    })
+    .filter(e => isUpcoming(e.date)); // 👈 oculta cualquiera que estuviera en el pasado por formato/huso
+
+  const allEvents = [
+    ...otherUserEvents.map(ev => ({ ...ev, type: 'local' })),
+    ...tmProjected,
   ];
 
   const filteredEvents = allEvents
@@ -236,16 +273,19 @@ export default function HomeScreen() {
     }
   }
 
-  const renderItem = ({ item }) => (
-    <EventCard
-      item={item}
-      isFavorite={favorites.includes(item.id)}
-      onToggleFavorite={toggleFavorite}
-      onPress={() => navigation.navigate('EventDetail', { event: item })}
-      getEventImageSource={getEventImageSource}
-      effectiveImage={getEffectiveEventImage(item.id, item.image)}
-    />
-  );
+  const renderItem = ({ item }) => {
+    const isFav = favorites.includes(String(item.id));
+    return (
+      <EventCard
+        item={item}
+        isFavorite={isFav}
+        onToggleFavorite={toggleFavorite}
+        onPress={() => navigation.navigate('EventDetail', { event: item })}
+        getEventImageSource={getEventImageSource}
+        effectiveImage={getEffectiveEventImage(item.id, item.image)}
+      />
+    );
+  };
 
   if (loadingLocation || loadingApiEvents) {
     return (
@@ -280,7 +320,7 @@ export default function HomeScreen() {
         ListEmptyComponent={
           <View style={styles.centered}>
             <Ionicons name="sad-outline" size={48} color="#1976d2" />
-            <Text style={{ color: '#1976d2', marginTop: 8 }}>No se encontraron eventos.</Text>
+            <Text style={{ color: '#1976d2', marginTop: 8 }}>No se encontraron eventos próximos.</Text>
           </View>
         }
       />
