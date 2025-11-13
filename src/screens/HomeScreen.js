@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, Image, TextInput, ActivityIndicator, Dimensions,
+  View, Text, FlatList, TouchableOpacity, Image, TextInput, ActivityIndicator, Dimensions, Button,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventContext } from '../EventContext';
@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
 import { AuthContext } from '../context/AuthContext';
 import { Image as ExpoImage } from 'expo-image';
+import { requestNotificationPermission, sendTestNotification } from '../utils/notifications';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
 
@@ -175,6 +176,10 @@ export default function HomeScreen() {
       .finally(() => setLoadingApiEvents(false));
   }, []);
 
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
+
   const myUserId = user?.id != null ? String(user.id) : null;
 
   // Show all events except those created by you
@@ -286,6 +291,10 @@ export default function HomeScreen() {
       >
         <Ionicons name="add" size={32} color="#fff" />
       </TouchableOpacity>
+      <Button
+        title="Send Test Notification"
+        onPress={sendTestNotification}
+      />
     </View>
   );
 }

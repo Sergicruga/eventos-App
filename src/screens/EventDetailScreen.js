@@ -11,6 +11,7 @@ import { API_URL } from '../api/config';
 import { AuthContext } from '../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { scheduleEventNotification } from '../utils/notifications';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -283,6 +284,8 @@ export default function EventDetailScreen({ route, navigation }) {
       setAttendees(prev => [...prev, { id: user.id, name: user.name }]);
       try {
         await joinEvent(current.id);
+        // Schedule notification for this event
+        await scheduleEventNotification(current);
       } catch (e) {
         setIsJoined(false);
         setAttendees(prev => prev.filter(a => String(a.id) !== uidStr));
@@ -293,6 +296,7 @@ export default function EventDetailScreen({ route, navigation }) {
       setAttendees(prev => prev.filter(a => String(a.id) !== uidStr));
       try {
         await leaveEvent(current.id);
+        // Optionally: cancel notification here if you implement cancellation
       } catch (e) {
         setIsJoined(true);
         setAttendees(prev => [...prev, { id: user.id, name: user.name }]);

@@ -226,6 +226,14 @@ export default function ProfileScreen() {
         >
           <Text style={{ color: "#fff", fontWeight: "600" }}>Editar perfil</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => navigation.navigate("NotificationSettings")}
+          style={{ marginTop: 12, backgroundColor: "#2563eb", paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 }}
+          activeOpacity={0.85}
+        >
+          <Text style={{ color: "#fff", fontWeight: "600" }}>Notificaciones</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Mis eventos */}
