@@ -201,15 +201,41 @@ app.get('/users/search', async (req, res) => {
   res.json(rows);
 });
 
-// Search users by name or email (second endpoint)
-app.get('/users/search', async (req, res) => {
-  const { q } = req.query;
-  if (!q) return res.json([]);
+// --- REMOVE ONE OF THESE DUPLICATE /users/:userId/events-attending ---
+/*
+app.get('/users/:userId/events-attending', async (req, res) => {
+  const { userId } = req.params;
   const result = await pool.query(
-    'SELECT id, name, email, photo FROM users WHERE name ILIKE $1 OR email ILIKE $1 LIMIT 20',
-    [`%${q}%`]
+    `SELECT e.id, e.title, e.description, e.event_at AS date, e.location, e.type, e.image,
+            e.latitude, e.longitude
+     FROM event_attendees ea
+     JOIN events e ON e.id = ea.event_id
+     WHERE ea.user_id = $1
+     ORDER BY e.event_at DESC`,
+    [userId]
   );
   res.json(result.rows);
+});
+*/
+
+// --- KEEP THIS ONE ---
+app.get('/users/:userId/events-attending', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+              e.latitude, e.longitude
+         FROM event_attendees ea
+         JOIN events e ON e.id = ea.event_id
+        WHERE ea.user_id = $1
+        ORDER BY e.event_at DESC`,
+      [userId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error cargando eventos a los que asiste el usuario:', err);
+    res.status(500).json({ error: 'Error cargando eventos a los que asistes' });
+  }
 });
 
 // Obtener amigos

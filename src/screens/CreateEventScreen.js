@@ -1,7 +1,7 @@
 import React, { useState, useContext, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, StyleSheet, Alert, Image, TouchableOpacity,
-  Platform, Modal, ScrollView, KeyboardAvoidingView, ActivityIndicator
+  Platform, Modal, ScrollView, KeyboardAvoidingView, ActivityIndicator, Keyboard
 } from 'react-native';
 import { EventContext } from '../EventContext';
 import * as Location from 'expo-location';
@@ -54,6 +54,34 @@ export default function CreateEventScreen({ navigation }) {
     latitudeDelta: 0.05,
     longitudeDelta: 0.05,
   });
+
+  // --- ADD THESE LINES ---
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+
+  const handleSearchLocation = useCallback(async () => {
+    if (!searchQuery.trim()) return;
+    setSearching(true);
+    try {
+      const results = await Location.geocodeAsync(searchQuery.trim());
+      if (results && results.length > 0) {
+        const { latitude, longitude } = results[0];
+        setCoords({ latitude, longitude });
+        setMapRegion(r => ({
+          ...r,
+          latitude,
+          longitude,
+        }));
+        Keyboard.dismiss();
+      } else {
+        Alert.alert('No encontrado', 'No se encontró esa dirección.');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo buscar la dirección.');
+    }
+    setSearching(false);
+  }, [searchQuery]);
+  // --- END ADD ---
 
   const [loadingPerm, setLoadingPerm] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -534,6 +562,7 @@ export default function CreateEventScreen({ navigation }) {
             <MapView
               style={{ flex: 1 }}
               initialRegion={mapRegion}
+              region={mapRegion}
               onRegionChangeComplete={setMapRegion}
               onLongPress={handleLongPress}
             >
@@ -548,6 +577,56 @@ export default function CreateEventScreen({ navigation }) {
                 />
               )}
             </MapView>
+            {/* --- Search bar BELOW the map --- */}
+            <View style={{
+              padding: 12,
+              backgroundColor: COLORS.white,
+              flexDirection: 'row',
+              alignItems: 'center',
+              zIndex: 2,
+              elevation: 2,
+              borderTopWidth: 1,
+              borderColor: COLORS.border,
+            }}>
+              <TextInput
+                style={{
+                  flex: 1,
+                  borderWidth: 1,
+                  borderColor: COLORS.border,
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  backgroundColor: COLORS.inputBg,
+                  color: COLORS.text,
+                  fontSize: 16,
+                }}
+                placeholder="Buscar dirección o lugar"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                returnKeyType="search"
+                onSubmitEditing={handleSearchLocation}
+                editable={!searching}
+              />
+              <TouchableOpacity
+                onPress={handleSearchLocation}
+                style={{
+                  marginLeft: 8,
+                  backgroundColor: COLORS.primary,
+                  borderRadius: 8,
+                  padding: 8,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: searching ? 0.6 : 1,
+                }}
+                disabled={searching}
+              >
+                {searching
+                  ? <ActivityIndicator color={COLORS.white} size={20} />
+                  : <Ionicons name="search" size={20} color={COLORS.white} />
+                }
+              </TouchableOpacity>
+            </View>
+            {/* --- END Search bar --- */}
             <View style={styles.mapModalFooter}>
               <Text style={{ fontWeight: '600', color: COLORS.primary }}>
                 Mantén pulsado para colocar el marcador. Luego pulsa “Usar ubicación”.
