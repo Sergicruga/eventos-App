@@ -291,10 +291,11 @@ app.get('/friends/:userId', async (req, res) => {
 });
 
 // Events a los que un usuario se ha apuntado
-app.get('/users/:userId/events', async (req, res) => {
+app.get('/users/:userId/events-attending', async (req, res) => {
   const { userId } = req.params;
   const result = await pool.query(
-    `SELECT e.id, e.title, e.description, e.event_at AS date, e.location
+    `SELECT e.id, e.title, e.description, e.event_at AS date, e.location, e.type, e.image,
+            e.latitude, e.longitude
      FROM event_attendees ea
      JOIN events e ON e.id = ea.event_id
      WHERE ea.user_id = $1
@@ -302,6 +303,28 @@ app.get('/users/:userId/events', async (req, res) => {
     [userId]
   );
   res.json(result.rows);
+});
+
+
+// 🔹 NUEVO: eventos a los que el usuario asiste (para el perfil)
+//     Devuelve el mismo shape que /users/:userId/events-created
+app.get('/users/:userId/events-attending', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+              e.latitude, e.longitude
+         FROM event_attendees ea
+         JOIN events e ON e.id = ea.event_id
+        WHERE ea.user_id = $1
+        ORDER BY e.event_at DESC`,
+      [userId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Error cargando eventos a los que asiste el usuario:', err);
+    res.status(500).json({ error: 'Error cargando eventos a los que asistes' });
+  }
 });
 
 // Configuración de multer para subir imágenes de perfil

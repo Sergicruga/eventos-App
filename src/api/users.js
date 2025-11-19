@@ -1,3 +1,4 @@
+// src/api/users.js
 import { API_URL } from './config';
 
 export async function getUser(userId) {
@@ -11,6 +12,17 @@ export async function getUserCreatedEvents(userId) {
   if (!r.ok) throw new Error('Error cargando mis eventos');
   return r.json();
 }
+
+// 🔹 Eventos a los que el usuario está apuntado
+export async function getUserAttendingEvents(userId) {
+  const r = await fetch(`${API_URL}/users/${userId}/events-attending`);
+  if (!r.ok) {
+    const txt = await r.text().catch(() => '');
+    throw new Error(txt || 'Error cargando eventos a los que asistes');
+  }
+  return r.json();
+}
+
 
 export async function updateProfile(userId, { name, email }) {
   const r = await fetch(`${API_URL}/users/${userId}/profile`, {

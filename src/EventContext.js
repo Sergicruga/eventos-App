@@ -1,4 +1,4 @@
-import React, { useContext, createContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useContext, createContext, useState, useEffect, useMemo } from 'react';
 // Proveer un valor por defecto mínimo para evitar errores si se consume fuera del Provider
 export const EventContext = createContext({ events: [] });
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -336,7 +336,7 @@ export function EventProvider({ children }) {
     AsyncStorage.setItem(storageKey(BASE_FAVORITES_MAP_KEY, uid), JSON.stringify(favoriteItems)).catch(() => {});
   }, [favoriteItems, uid]);
 
-  // ---------- NUEVO: normalizar antes de guardar en AsyncStorage ----------
+  // ---------- Normalizar antes de guardar en AsyncStorage ----------
   const normalizeForStorage = (arr = []) =>
     (arr || []).map(ev => ({
       ...ev,
@@ -349,17 +349,16 @@ export function EventProvider({ children }) {
       image: ev.image ?? null,
     }));
 
-  // ===== Cargar eventos al cambiar usuario (incluye HIDRATAR DESDE CACHÉ + MERGE) =====
+  // ===== Cargar eventos al cambiar usuario =====
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      // 1) HIDRATAR primero desde caché (para mostrar la hora guardada)
+      // 1) caché
       try {
         const cachedRaw = await AsyncStorage.getItem(storageKey(BASE_EVENTS_KEY, uid));
         const cached = cachedRaw ? JSON.parse(cachedRaw) : [];
         if (!cancelled && cached?.length) {
-          // normaliza nºs y nulos
           cached.forEach(ev => {
             if (ev.latitude != null) ev.latitude = Number(ev.latitude);
             if (ev.longitude != null) ev.longitude = Number(ev.longitude);
@@ -370,20 +369,19 @@ export function EventProvider({ children }) {
         }
       } catch {}
 
-      // 2) Después, pedir al servidor y MERGE sin pisar horas locales
+      // 2) server
       try {
         const url = `${API_URL}/events${uid ? `?userId=${uid}` : ''}`;
         const res = await safeFetch(url, {}, { timeoutMs: 12000 });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
 
-        // Mapeo desde servidor (no usamos hora de event_at)
         let mapped = (data || []).map(ev => {
-          const rawEventAt = ev.event_at ?? null; // "2025-11-10T23:00:00.000Z"
+          const rawEventAt = ev.event_at ?? null;
           const yyyyMmDd  = rawEventAt ? String(rawEventAt).slice(0,10)
                                        : (ev.date ? String(ev.date).slice(0,10) : '');
 
-          const rawTime   = ev.time_start ?? ev.timeStart ?? null; // "HH:MM" si existe
+          const rawTime   = ev.time_start ?? ev.timeStart ?? null;
           const rawStartsAtServer = ev.starts_at ?? ev.startsAt ?? null;
 
           const derivedStartsAt =
@@ -420,7 +418,7 @@ export function EventProvider({ children }) {
           };
         });
 
-        // MERGE con caché: si el server no manda hora, recuperamos la última guardada
+        // merge con caché para no perder hora
         try {
           const prevRaw = await AsyncStorage.getItem(storageKey(BASE_EVENTS_KEY, uid));
           const prevArr = prevRaw ? JSON.parse(prevRaw) : [];
@@ -456,7 +454,7 @@ export function EventProvider({ children }) {
           });
         } catch {}
 
-        // Mantener locales que no están en el server
+        // mantener locales no en server
         try {
           const prevRawAll = await AsyncStorage.getItem(storageKey(BASE_EVENTS_KEY, uid));
           const prevArrAll = prevRawAll ? JSON.parse(prevRawAll) : [];
@@ -476,17 +474,15 @@ export function EventProvider({ children }) {
 
         if (!cancelled) {
           setEvents(mapped);
-          // Guardar normalizado para preservar timeStart/startsAt como strings/null
           try {
             const normalized = normalizeForStorage(mapped);
-            // si hay uid, guarda en uid; evita sobreescribir clave "guest" si hay usuario
             const key = storageKey(BASE_EVENTS_KEY, uid);
             await AsyncStorage.setItem(key, JSON.stringify(normalized));
           } catch {}
         }
         return;
       } catch {
-        // si falla el servidor, ya mostramos lo de caché
+        // si falla server, se queda la caché
       }
     })();
 
@@ -548,7 +544,6 @@ export function EventProvider({ children }) {
       latitude: ev.latitude ?? null,
       longitude: ev.longitude ?? null,
     };
-    // incluir hora y startsAt si están
     if (ev.timeStart) payload.time_start = ev.timeStart;
     if (ev.startsAt) payload.starts_at = ev.startsAt;
     if (ev.image && !isLocalUri(ev.image) && String(ev.image).trim() !== '') {
@@ -581,7 +576,7 @@ export function EventProvider({ children }) {
     }
   };
 
-  // ===== Crear (con logs) =====
+  // ===== Crear evento =====
   const addEvent = async (event) => {
     console.log('[addEvent] input:', {
       title: event?.title,
@@ -608,9 +603,9 @@ export function EventProvider({ children }) {
       const payload = {
         title: event.title,
         description: event.description ?? '',
-        event_at: event.date,                       // fecha (día) que guardas en la BD
-        time_start: event.timeStart ?? '',          // "HH:MM"
-        starts_at: event.startsAt ?? null,          // "YYYY-MM-DDTHH:MM:SS" (sin Z)
+        event_at: event.date,
+        time_start: event.timeStart ?? '',
+        starts_at: event.startsAt ?? null,
         location: event.location ?? '',
         type: event.type || 'local',
         image:
@@ -659,9 +654,7 @@ export function EventProvider({ children }) {
         id: String(saved.id),
         title: saved.title,
         description: saved.description ?? '',
-        // Preferimos la fecha del formulario (día local)
         date: event.date ?? saved.event_at?.slice(0, 10) ?? '',
-        // Hora: lo que devuelva el server o lo que enviaste
         timeStart:
           saved.time_start ??
           saved.timeStart ??
@@ -683,7 +676,6 @@ export function EventProvider({ children }) {
         attendeesCount: 0,
       };
 
-      // Guardar en caché local
       try {
         const key = storageKey(BASE_EVENTS_KEY, uid);
         const rawPrev = await AsyncStorage.getItem(key);
@@ -700,12 +692,12 @@ export function EventProvider({ children }) {
       return null;
     }
   };
+
   // ===== EDITAR EVENTO =====
   const updateEvent = async (eventId, updated) => {
     if (!eventId) return null;
 
     try {
-      // Usamos toPatchPayload para no romper lo que ya tenías
       const payload = toPatchPayload(updated);
 
       const res = await safeFetch(
@@ -729,7 +721,6 @@ export function EventProvider({ children }) {
         throw new Error(json?.message || `HTTP ${res.status}`);
       }
 
-      // ---- Actualizar en estado local SIN perder info previa ----
       setEvents(prev => {
         const idx = prev.findIndex(e => String(e.id) === String(eventId));
         if (idx === -1) return prev;
@@ -737,8 +728,8 @@ export function EventProvider({ children }) {
         const prevEv = prev[idx];
 
         const merged = {
-          ...prevEv,               // mantiene createdById, createdBy, isAttending, etc
-          ...updated,              // aplica cambios de la pantalla
+          ...prevEv,
+          ...updated,
           id: String(eventId),
           date: updated.date ?? prevEv.date ?? '',
           timeStart: updated.timeStart ?? prevEv.timeStart ?? null,
@@ -750,7 +741,6 @@ export function EventProvider({ children }) {
         return next;
       });
 
-      // No hace falta tocar AsyncStorage: ya tienes un useEffect que lo persiste al cambiar events
       return true;
     } catch (e) {
       console.warn('[updateEvent] error:', e?.message);
@@ -758,8 +748,6 @@ export function EventProvider({ children }) {
       return null;
     }
   };
-
-
 
   // ===== Unir asistentes (merge) =====
   const mergeAssistants = async (eventId, newAsistentes = []) => {
@@ -775,55 +763,108 @@ export function EventProvider({ children }) {
     });
   };
 
-  // ===== Asistir / no asistir =====
+  // ===== Asistir / no asistir (núcleo) =====
   const attend = async (eventId, attending = true) => {
     if (!eventId) return;
-    const url = `${API_URL}/attendees`;
-    const body = {
-      event_id: dbIdFrom(eventId),
-      user_id: effectiveUser?.id,
-      status: attending ? 'yes' : 'no',
-    };
-
-    console.log('[attend] →', body);
+    if (!effectiveUser?.id) {
+      Alert.alert('Inicia sesión', 'Debes iniciar sesión para apuntarte a un evento.');
+      return;
+    }
 
     try {
-      const res = await safeFetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-        },
-        body: JSON.stringify(body),
-      });
+      // Asegurarnos de tener un ID válido para el servidor
+      let dbId = dbIdFrom(eventId);
+      let eventObj = events.find(e => String(e.id) === String(eventId));
 
-      const raw = await res.text();
-      console.log('[attend] response status:', res.status, 'body:', raw?.slice(0, 400));
-
-      if (!res.ok) {
-        const msg = `HTTP ${res.status}`;
-        console.warn('[attend] server NOT OK:', msg);
-        throw new Error(msg);
+      if (!dbId && eventObj) {
+        // Evento de API: intentamos crearlo/enlazarlo en el backend
+        const serverId = await ensureEventOnServer(eventObj, authToken);
+        if (serverId) {
+          dbId = Number(serverId);
+          // Opcionalmente actualizamos el id en memoria
+          setEvents(prev =>
+            prev.map(ev =>
+              String(ev.id) === String(eventId) ? { ...ev, id: String(serverId) } : ev
+            )
+          );
+        }
       }
 
-      // Actualizar evento en caché
-      try {
-        setEvents(prev => {
-          const idx = prev.findIndex(e => String(e.id) === String(eventId));
-          if (idx === -1) return prev;
-          const ev = prev[idx];
-          const next = [...prev];
-          next[idx] = { ...ev, isAttending: attending, attendeesCount: ev.attendeesCount + (attending ? 1 : -1) };
-          return next;
+      if (!dbId) {
+        Alert.alert('Error', 'No se ha podido enlazar este evento en el servidor.');
+        return;
+      }
+
+      const payload = { userId: effectiveUser.id, eventId: dbId };
+
+      const res = await safeFetch(
+        `${API_URL}/attendees`,
+        {
+          method: attending ? 'POST' : 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        },
+        { timeoutMs: 12000 }
+      );
+
+      const raw = await res.text();
+      console.log('[attend] status:', res.status, 'body:', raw?.slice(0, 400));
+
+      if (!res.ok) {
+        console.warn('[attend] server NOT OK:', res.status, raw);
+        throw new Error(raw || `HTTP ${res.status}`);
+      }
+
+      // Actualizar estado local
+      setEvents(prev => {
+        return prev.map(ev => {
+          if (
+            String(ev.id) === String(eventId) ||
+            (dbId && isNumericId(ev.id) && Number(ev.id) === dbId)
+          ) {
+            const prevCount = Number(ev.attendeesCount ?? 0);
+            const newCount = attending
+              ? prevCount + 1
+              : Math.max(prevCount - 1, 0);
+            return {
+              ...ev,
+              isAttending: attending,
+              attendeesCount: newCount,
+            };
+          }
+          return ev;
         });
-      } catch {}
+      });
     } catch (e) {
       console.warn('[attend] error:', e?.message);
-      Alert.alert('Error al actualizar asistencia', e?.message ?? 'Error desconocido');
+      Alert.alert(
+        'Error al actualizar asistencia',
+        e?.message ?? 'Error desconocido'
+      );
     }
   };
 
-  // ===== Forzar actualización de evento (re-fetch desde el servidor) =====
+  // ===== Wrappers que usa la UI: joinEvent / leaveEvent =====
+  const joinEvent = async (eventOrId) => {
+    const eventId =
+      typeof eventOrId === 'object' && eventOrId !== null
+        ? eventOrId.id
+        : eventOrId;
+    return attend(eventId, true);
+  };
+
+  const leaveEvent = async (eventOrId) => {
+    const eventId =
+      typeof eventOrId === 'object' && eventOrId !== null
+        ? eventOrId.id
+        : eventOrId;
+    return attend(eventId, false);
+  };
+
+  // ===== Forzar actualización de evento =====
   const forceRefreshEvent = async (eventId) => {
     if (!eventId) return null;
     const base = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
@@ -839,7 +880,6 @@ export function EventProvider({ children }) {
         if (!res.ok) continue;
         const json = await parseJsonSafe(res);
         if (json && typeof json === 'object') {
-          // Actualizar en caché
           setEvents(prev => {
             const idx = prev.findIndex(e => String(e.id) === String(eventId));
             if (idx === -1) return prev;
@@ -858,7 +898,6 @@ export function EventProvider({ children }) {
   const deleteEvent = async (eventId) => {
     if (!eventId) return;
     const prevSnapshot = events;
-    // Optimista: quitar localmente
     setEvents(prev => prev.filter(e => String(e.id) !== String(eventId)));
 
     try {
@@ -875,7 +914,6 @@ export function EventProvider({ children }) {
         await safeFetch(url, { method: 'DELETE', headers }, { timeoutMs: 12000 }).catch(() => {});
       }
 
-      // persistir el nuevo estado
       try {
         const key = storageKey(BASE_EVENTS_KEY, uid);
         const sanitized = normalizeForStorage(events.filter(e => String(e.id) !== String(eventId)));
@@ -883,7 +921,6 @@ export function EventProvider({ children }) {
       } catch {}
     } catch (e) {
       console.warn('[deleteEvent] error:', e?.message || e);
-      // restaurar snapshot local si falla la eliminación remota
       setEvents(prevSnapshot);
       try {
         const key = storageKey(BASE_EVENTS_KEY, uid);
@@ -916,8 +953,22 @@ export function EventProvider({ children }) {
     deleteEvent,
     mergeAssistants,
     attend,
+    joinEvent,     // 👈 ahora disponible
+    leaveEvent,    // 👈 ahora disponible
     forceRefreshEvent,
-  }), [events, formEvent, coords, city, locLoading, favorites, favoriteItems, imageOverrides, overridesReady, authToken, uid]);
+  }), [
+    events,
+    formEvent,
+    coords,
+    city,
+    locLoading,
+    favorites,
+    favoriteItems,
+    imageOverrides,
+    overridesReady,
+    authToken,
+    uid,
+  ]);
 
   return <EventContext.Provider value={value}>{children}</EventContext.Provider>;
 }
