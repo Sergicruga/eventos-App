@@ -1,6 +1,14 @@
 // src/screens/ProfileScreen.js
 import React, { useContext, useEffect, useState, useCallback } from "react";
-import { View, Text, Image, TouchableOpacity, ActivityIndicator, FlatList, Alert } from "react-native";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+  FlatList,
+  Alert,
+} from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -22,16 +30,40 @@ function toLocalMidnightMs(dateStr) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
   if (m) {
     const [, y, mm, dd] = m;
-    return new Date(Number(y), Number(mm) - 1, Number(dd), 0, 0, 0, 0).getTime();
+    return new Date(
+      Number(y),
+      Number(mm) - 1,
+      Number(dd),
+      0,
+      0,
+      0,
+      0
+    ).getTime();
   }
   const t = new Date(dateStr).getTime();
   if (Number.isNaN(t)) return NaN;
   const d = new Date(t);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+  return new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate(),
+    0,
+    0,
+    0,
+    0
+  ).getTime();
 }
 function todayLocalMidnightMs() {
   const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    0,
+    0,
+    0,
+    0
+  ).getTime();
 }
 function isUpcoming(dateStr) {
   const e = toLocalMidnightMs(dateStr);
@@ -65,10 +97,17 @@ function getEventTime(ev) {
   Imagen miniatura evento
 ----------------------------------------------------------------------------- */
 function EventThumbImage({ eventId, serverImage, style }) {
-  const { getEffectiveEventImage, getEventImageSource, overridesReady } = useContext(EventContext);
+  const {
+    getEffectiveEventImage,
+    getEventImageSource,
+    overridesReady,
+  } = useContext(EventContext);
   const [stage, setStage] = React.useState(0); // 0: efectiva, 1: backup web, 2: asset local
 
-  const effective = getEffectiveEventImage?.(eventId, serverImage) ?? serverImage ?? null;
+  const effective =
+    getEffectiveEventImage?.(eventId, serverImage) ??
+    serverImage ??
+    null;
 
   React.useEffect(() => {
     setStage(0);
@@ -87,14 +126,18 @@ function EventThumbImage({ eventId, serverImage, style }) {
   const src =
     stage === 1
       ? { uri: "https://picsum.photos/400/300" }
-      : getEventImageSource?.(effective) ?? { uri: "https://picsum.photos/400/300" };
+      : getEventImageSource?.(effective) ?? {
+          uri: "https://picsum.photos/400/300",
+        };
 
   return (
     <Image
       source={src}
       style={style}
       resizeMode="cover"
-      onError={() => setStage(prev => (prev < 2 ? prev + 1 : 2))}
+      onError={() =>
+        setStage((prev) => (prev < 2 ? prev + 1 : 2))
+      }
     />
   );
 }
@@ -102,14 +145,20 @@ function EventThumbImage({ eventId, serverImage, style }) {
 /* -----------------------------------------------------------------------------
   Normalizador de eventos (soporta distintas formas)
 ----------------------------------------------------------------------------- */
-function normalizeEvents(rawEvents, getEffectiveEventImage, { onlyUpcoming = true } = {}) {
-  const mapped = (rawEvents || []).map(e => {
+function normalizeEvents(
+  rawEvents,
+  getEffectiveEventImage,
+  { onlyUpcoming = true } = {}
+) {
+  const mapped = (rawEvents || []).map((e) => {
     // soportar event_at, date, starts_at...
     const rawDate =
       e.event_at ||
       e.date ||
       e.eventAt ||
-      (typeof e.starts_at === "string" ? e.starts_at.slice(0, 10) : null);
+      (typeof e.starts_at === "string"
+        ? e.starts_at.slice(0, 10)
+        : null);
 
     const date = rawDate ? String(rawDate).slice(0, 10) : "";
 
@@ -118,7 +167,10 @@ function normalizeEvents(rawEvents, getEffectiveEventImage, { onlyUpcoming = tru
       title: e.title,
       date,
       location: e.location ?? "",
-      image: getEffectiveEventImage?.(e.id, e.image) ?? e.image ?? null,
+      image:
+        getEffectiveEventImage?.(e.id, e.image) ??
+        e.image ??
+        null,
       description: e.description ?? "",
       latitude: e.latitude ?? null,
       longitude: e.longitude ?? null,
@@ -130,23 +182,69 @@ function normalizeEvents(rawEvents, getEffectiveEventImage, { onlyUpcoming = tru
   });
 
   const filtered = onlyUpcoming
-    ? mapped.filter(ev => isUpcoming(ev.date))
+    ? mapped.filter((ev) => isUpcoming(ev.date))
     : mapped;
 
-  return filtered.sort((a, b) => toLocalMidnightMs(a.date) - toLocalMidnightMs(b.date));
+  return filtered.sort(
+    (a, b) => toLocalMidnightMs(a.date) - toLocalMidnightMs(b.date)
+  );
+}
+
+/* -----------------------------------------------------------------------------
+  Merge con eventos del EventContext (para tener misma fecha/hora que detalle)
+----------------------------------------------------------------------------- */
+function mergeWithContextEvents(rawEvents, ctxEvents) {
+  const ctxMap = Object.fromEntries(
+    (ctxEvents || []).map((e) => [String(e.id), e])
+  );
+
+  return (rawEvents || []).map((ev) => {
+    const ctx = ctxMap[String(ev.id)];
+    if (!ctx) return ev;
+
+    return {
+      ...ev,
+      // Sobrescribimos datos de fecha/hora con lo que maneja el EventContext
+      date: ctx.date ?? ev.date,
+      time_start:
+        ctx.timeStart ?? ev.time_start ?? ev.timeStart ?? null,
+      timeStart: ctx.timeStart ?? ev.timeStart ?? null,
+      starts_at:
+        ctx.startsAt ??
+        ev.starts_at ??
+        ev.startsAt ??
+        null,
+      startsAt: ctx.startsAt ?? ev.startsAt ?? null,
+      event_at:
+        ctx.startsAt ??
+        ctx.event_at ??
+        ev.event_at ??
+        null,
+    };
+  });
 }
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
 
   // Contextos
-  const { logout, user: authUser, token, login } = useContext(AuthContext);
-  const { user: evCtxUser, updateUser, getEffectiveEventImage } = useContext(EventContext);
+  const {
+    logout,
+    user: authUser,
+    token,
+    login,
+  } = useContext(AuthContext);
+  const {
+    user: evCtxUser,
+    updateUser,
+    getEffectiveEventImage,
+    events, // 👈 eventos globales del contexto (tienen la hora correcta)
+  } = useContext(EventContext);
   const uid = authUser?.id;
 
   // Estado local
   const [me, setMe] = useState(null);
-  const [myEvents, setMyEvents] = useState([]);         // creados
+  const [myEvents, setMyEvents] = useState([]); // creados
   const [attendingEvents, setAttendingEvents] = useState([]); // a los que voy
   const [activeTab, setActiveTab] = useState("created"); // "created" | "attending"
   const [loading, setLoading] = useState(true);
@@ -155,55 +253,104 @@ export default function ProfileScreen() {
 
   // Helpers
   const absolutePhoto = (photoPath) =>
-    photoPath?.startsWith("http") ? photoPath : `${API_URL}${photoPath}`;
+    photoPath?.startsWith("http")
+      ? photoPath
+      : `${API_URL}${photoPath}`;
 
-  const hydrate = useCallback(async () => {
-    if (!uid) return;
-    try {
-      setLoading(true);
+  const hydrate = useCallback(
+    async () => {
+      if (!uid) return;
+      try {
+        setLoading(true);
 
-      const [u, evsCreated, evsAttending] = await Promise.all([
-        getUser(uid),
-        getUserCreatedEvents(uid),
-        getUserAttendingEvents(uid),
-      ]);
+        const [u, evsCreated, evsAttending] = await Promise.all([
+          getUser(uid),
+          getUserCreatedEvents(uid),
+          getUserAttendingEvents(uid),
+        ]);
 
-      // Datos de usuario
-      setMe(prev => (prev && prev.id === u.id ? { ...prev, ...u } : u));
+        // Datos de usuario
+        setMe((prev) =>
+          prev && prev.id === u.id ? { ...prev, ...u } : u
+        );
 
-      // 👇 CREADOS → TODOS (pasados y futuros)
-      setMyEvents(normalizeEvents(evsCreated, getEffectiveEventImage, { onlyUpcoming: true }));
+        // 👇 Unimos con los eventos del contexto para heredar fecha/hora correctas
+        const createdMerged = mergeWithContextEvents(
+          evsCreated,
+          events
+        );
+        const attendingMerged = mergeWithContextEvents(
+          evsAttending,
+          events
+        );
 
-      // 👇 A LOS QUE VOY → SOLO PRÓXIMOS
-      setAttendingEvents(normalizeEvents(evsAttending, getEffectiveEventImage, { onlyUpcoming: true }));
+        // CREADOS / A LOS QUE VOY → solo próximos (como ya hacías)
+        setMyEvents(
+          normalizeEvents(createdMerged, getEffectiveEventImage, {
+            onlyUpcoming: true,
+          })
+        );
+        setAttendingEvents(
+          normalizeEvents(
+            attendingMerged,
+            getEffectiveEventImage,
+            { onlyUpcoming: true }
+          )
+        );
 
-      // Sincroniza contextos
-      if (updateUser) {
-        const needEvCtx =
-          evCtxUser?.id !== u.id ||
-          evCtxUser?.name !== u.name ||
-          evCtxUser?.email !== u.email ||
-          evCtxUser?.photo !== u.photo;
-        if (needEvCtx) updateUser({ id: u.id, name: u.name, email: u.email, photo: u.photo });
+        // Sincroniza contextos
+        if (updateUser) {
+          const needEvCtx =
+            evCtxUser?.id !== u.id ||
+            evCtxUser?.name !== u.name ||
+            evCtxUser?.email !== u.email ||
+            evCtxUser?.photo !== u.photo;
+          if (needEvCtx)
+            updateUser({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              photo: u.photo,
+            });
+        }
+
+        const needAuth =
+          authUser?.id !== u.id ||
+          authUser?.name !== u.name ||
+          authUser?.email !== u.email ||
+          authUser?.photo !== u.photo;
+        if (needAuth)
+          await login({
+            user: {
+              ...(authUser || {}),
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              photo: u.photo,
+            },
+            token,
+          });
+      } catch (e) {
+        console.log("Error en hydrate profile:", e);
+        Alert.alert("Error", e.message);
+      } finally {
+        setLoading(false);
       }
-
-      const needAuth =
-        authUser?.id !== u.id ||
-        authUser?.name !== u.name ||
-        authUser?.email !== u.email ||
-        authUser?.photo !== u.photo;
-      if (needAuth)
-        await login({
-          user: { ...(authUser || {}), id: u.id, name: u.name, email: u.email, photo: u.photo },
-          token,
-        });
-    } catch (e) {
-      console.log("Error en hydrate profile:", e);
-      Alert.alert("Error", e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [uid, token, evCtxUser?.id, evCtxUser?.name, evCtxUser?.email, evCtxUser?.photo, updateUser, login, authUser, getEffectiveEventImage]);
+    },
+    [
+      uid,
+      token,
+      evCtxUser?.id,
+      evCtxUser?.name,
+      evCtxUser?.email,
+      evCtxUser?.photo,
+      updateUser,
+      login,
+      authUser,
+      getEffectiveEventImage,
+      events, // 👈 dependemos también de los eventos del contexto
+    ]
+  );
 
   // Carga inicial
   useEffect(() => {
@@ -221,7 +368,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!uid) return;
     if (evCtxUser?.id === uid) {
-      setMe(prev => {
+      setMe((prev) => {
         const next = {
           id: uid,
           name: evCtxUser.name ?? prev?.name,
@@ -237,13 +384,22 @@ export default function ProfileScreen() {
         return equal ? prev : { ...(prev || {}), ...next };
       });
     }
-  }, [evCtxUser?.name, evCtxUser?.email, evCtxUser?.photo, uid]);
+  }, [
+    evCtxUser?.name,
+    evCtxUser?.email,
+    evCtxUser?.photo,
+    uid,
+  ]);
 
   const onChangePhoto = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permiso requerido", "Se necesita permiso para acceder a tus fotos.");
+        Alert.alert(
+          "Permiso requerido",
+          "Se necesita permiso para acceder a tus fotos."
+        );
         return;
       }
 
@@ -259,9 +415,19 @@ export default function ProfileScreen() {
 
       const data = await uploadUserPhoto(uid, res.assets[0].uri);
 
-      setMe(prev => ({ ...(prev || {}), photo: data.photo }));
-      updateUser?.({ ...(evCtxUser || {}), id: uid, photo: data.photo });
-      await login({ user: { ...(authUser || {}), photo: data.photo }, token });
+      setMe((prev) => ({
+        ...(prev || {}),
+        photo: data.photo,
+      }));
+      updateUser?.({
+        ...(evCtxUser || {}),
+        id: uid,
+        photo: data.photo,
+      });
+      await login({
+        user: { ...(authUser || {}), photo: data.photo },
+        token,
+      });
 
       setPhotoBust(Date.now());
       Alert.alert("Foto actualizada");
@@ -274,7 +440,14 @@ export default function ProfileScreen() {
 
   if (!uid) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
         <Text>Inicia sesión para ver tu perfil.</Text>
       </View>
     );
@@ -282,7 +455,13 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
         <ActivityIndicator />
       </View>
     );
@@ -296,24 +475,60 @@ export default function ProfileScreen() {
     : authUser?.photo
     ? absolutePhoto(authUser.photo)
     : null;
-  const avatarUri = basePhoto ? `${basePhoto}?t=${photoBust}` : null;
+  const avatarUri = basePhoto
+    ? `${basePhoto}?t=${photoBust}`
+    : null;
 
-  const eventsData = activeTab === "created" ? myEvents : attendingEvents;
+  const eventsData =
+    activeTab === "created" ? myEvents : attendingEvents;
 
   return (
     <View style={{ flex: 1 }}>
       {/* Header perfil */}
-      <View style={{ padding: 24, alignItems: "center", backgroundColor: "#f5f7fb" }}>
-        <TouchableOpacity onPress={onChangePhoto} disabled={photoUploading} style={{ alignItems: "center" }}>
+      <View
+        style={{
+          padding: 24,
+          alignItems: "center",
+          backgroundColor: "#f5f7fb",
+        }}
+      >
+        <TouchableOpacity
+          onPress={onChangePhoto}
+          disabled={photoUploading}
+          style={{ alignItems: "center" }}
+        >
           <Image
-            source={avatarUri ? { uri: avatarUri } : require("../../assets/icon.png")}
-            style={{ width: 110, height: 110, borderRadius: 55, marginBottom: 8 }}
+            source={
+              avatarUri
+                ? { uri: avatarUri }
+                : require("../../assets/icon.png")
+            }
+            style={{
+              width: 110,
+              height: 110,
+              borderRadius: 55,
+              marginBottom: 8,
+            }}
           />
-          {photoUploading ? <ActivityIndicator style={{ position: "absolute", left: 45, top: 45 }} /> : null}
+          {photoUploading ? (
+            <ActivityIndicator
+              style={{
+                position: "absolute",
+                left: 45,
+                top: 45,
+              }}
+            />
+          ) : null}
         </TouchableOpacity>
 
-        <Text style={{ fontSize: 18, fontWeight: "700" }}>{displayName}</Text>
-        <Text style={{ color: "#6b7280", marginTop: 2 }}>{displayEmail}</Text>
+        <Text style={{ fontSize: 18, fontWeight: "700" }}>
+          {displayName}
+        </Text>
+        <Text
+          style={{ color: "#6b7280", marginTop: 2 }}
+        >
+          {displayEmail}
+        </Text>
 
         <TouchableOpacity
           onPress={() => navigation.navigate("EditProfile")}
@@ -326,11 +541,17 @@ export default function ProfileScreen() {
           }}
           activeOpacity={0.85}
         >
-          <Text style={{ color: "#fff", fontWeight: "600" }}>Editar perfil</Text>
+          <Text
+            style={{ color: "#fff", fontWeight: "600" }}
+          >
+            Editar perfil
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => navigation.navigate("NotificationSettings")}
+          onPress={() =>
+            navigation.navigate("NotificationSettings")
+          }
           style={{
             marginTop: 12,
             backgroundColor: "#2563eb",
@@ -340,13 +561,19 @@ export default function ProfileScreen() {
           }}
           activeOpacity={0.85}
         >
-          <Text style={{ color: "#fff", fontWeight: "600" }}>Notificaciones</Text>
+          <Text
+            style={{ color: "#fff", fontWeight: "600" }}
+          >
+            Notificaciones
+          </Text>
         </TouchableOpacity>
       </View>
 
       {/* Título + tabs */}
       <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
-        <Text style={{ fontSize: 16, fontWeight: "700" }}>Mis eventos</Text>
+        <Text style={{ fontSize: 16, fontWeight: "700" }}>
+          Mis eventos
+        </Text>
       </View>
 
       <View
@@ -365,7 +592,8 @@ export default function ProfileScreen() {
             paddingVertical: 8,
             borderRadius: 999,
             alignItems: "center",
-            backgroundColor: activeTab === "created" ? "#ffffff" : "transparent",
+            backgroundColor:
+              activeTab === "created" ? "#ffffff" : "transparent",
           }}
           onPress={() => setActiveTab("created")}
           activeOpacity={0.8}
@@ -373,8 +601,12 @@ export default function ProfileScreen() {
           <Text
             style={{
               fontSize: 14,
-              fontWeight: activeTab === "created" ? "700" : "500",
-              color: activeTab === "created" ? "#111827" : "#4b5563",
+              fontWeight:
+                activeTab === "created" ? "700" : "500",
+              color:
+                activeTab === "created"
+                  ? "#111827"
+                  : "#4b5563",
             }}
           >
             Creados
@@ -387,7 +619,10 @@ export default function ProfileScreen() {
             paddingVertical: 8,
             borderRadius: 999,
             alignItems: "center",
-            backgroundColor: activeTab === "attending" ? "#ffffff" : "transparent",
+            backgroundColor:
+              activeTab === "attending"
+                ? "#ffffff"
+                : "transparent",
           }}
           onPress={() => setActiveTab("attending")}
           activeOpacity={0.8}
@@ -395,8 +630,12 @@ export default function ProfileScreen() {
           <Text
             style={{
               fontSize: 14,
-              fontWeight: activeTab === "attending" ? "700" : "500",
-              color: activeTab === "attending" ? "#111827" : "#4b5563",
+              fontWeight:
+                activeTab === "attending" ? "700" : "500",
+              color:
+                activeTab === "attending"
+                  ? "#111827"
+                  : "#4b5563",
             }}
           >
             A los que voy
@@ -407,7 +646,10 @@ export default function ProfileScreen() {
       <FlatList
         data={eventsData}
         keyExtractor={(i) => i.id}
-        contentContainerStyle={{ padding: 16, paddingTop: 8 }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingTop: 8,
+        }}
         ListEmptyComponent={
           <Text>
             {activeTab === "created"
@@ -419,7 +661,11 @@ export default function ProfileScreen() {
           const timeLabel = getEventTime(item);
           return (
             <TouchableOpacity
-              onPress={() => navigation.navigate("EventDetail", { event: item })}
+              onPress={() =>
+                navigation.navigate("EventDetail", {
+                  event: item,
+                })
+              }
               activeOpacity={0.85}
               style={{
                 flexDirection: "row",
@@ -433,10 +679,20 @@ export default function ProfileScreen() {
               <EventThumbImage
                 eventId={item.id}
                 serverImage={item.image}
-                style={{ width: 64, height: 64, borderRadius: 8, marginRight: 12 }}
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 8,
+                  marginRight: 12,
+                }}
               />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontWeight: "600" }}>{item.title}</Text>
+                <Text
+                  style={{ fontWeight: "600" }}
+                  numberOfLines={1}
+                >
+                  {item.title}
+                </Text>
                 <View
                   style={{
                     flexDirection: "row",
@@ -451,22 +707,50 @@ export default function ProfileScreen() {
                     color="#555"
                     style={{ marginRight: 4 }}
                   />
-                  <Text style={{ color: "#555", fontSize: 13 }}>
+                  <Text
+                    style={{
+                      color: "#555",
+                      fontSize: 13,
+                    }}
+                  >
                     {formatEventDate(item.date)}
                   </Text>
                   {timeLabel ? (
                     <>
-                      <Text style={{ color: "#555", fontSize: 13 }}> · </Text>
+                      <Text
+                        style={{
+                          color: "#555",
+                          fontSize: 13,
+                        }}
+                      >
+                        {" "}
+                        ·{" "}
+                      </Text>
                       <Ionicons
                         name="time-outline"
                         size={14}
                         color="#555"
                         style={{ marginRight: 4 }}
                       />
-                      <Text style={{ color: "#555", fontSize: 13 }}>{timeLabel}</Text>
+                      <Text
+                        style={{
+                          color: "#555",
+                          fontSize: 13,
+                        }}
+                      >
+                        {timeLabel}
+                      </Text>
                     </>
                   ) : null}
-                  <Text style={{ color: "#555", fontSize: 13 }}> · {item.location}</Text>
+                  <Text
+                    style={{
+                      color: "#555",
+                      fontSize: 13,
+                    }}
+                  >
+                    {" "}
+                    · {item.location}
+                  </Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -491,7 +775,11 @@ export default function ProfileScreen() {
           elevation: 5,
         }}
       >
-        <Ionicons name="log-out-outline" size={26} color="#fff" />
+        <Ionicons
+          name="log-out-outline"
+          size={26}
+          color="#fff"
+        />
       </TouchableOpacity>
     </View>
   );
