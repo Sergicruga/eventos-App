@@ -41,22 +41,31 @@ const uploadEventImage = multer({ storage: eventStorage });
    DB POSTGRES
    ========================== */
 
-const pool = new Pool({
-  host: process.env.PGHOST || "localhost",
-  port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
-  user: process.env.PGUSER || "usuario_eventos",
-  password: process.env.PGPASSWORD || "NuevaPass123!",
-  database: process.env.PGDATABASE || "eventosdb",
-  // ssl: { rejectUnauthorized: false }
-});
+const isProd = process.env.NODE_ENV === "production";
 
-pool
-  .connect()
-  .then((c) => {
-    console.log("✅ Conectado a PostgreSQL");
-    c.release();
-  })
-  .catch((err) => console.error("❌ Error conectando a PostgreSQL:", err.message));
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }, // necesario en Render
+    })
+  : new Pool({
+      host: process.env.PGHOST || "localhost",
+      port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
+      user: process.env.PGUSER || "usuario_eventos",
+      password: process.env.PGPASSWORD || "NuevaPass123!",
+      database: process.env.PGDATABASE || "eventosdb",
+      ssl: false, // local sin SSL
+    });
+
+    pool
+    .connect()
+    .then((c) => {
+      console.log("✅ Conectado a PostgreSQL");
+      c.release();
+    })
+    .catch((err) =>
+      console.error("❌ Error conectando a PostgreSQL:", err.message)
+    );
 
 /* ==========================
    MIDDLEWARES
