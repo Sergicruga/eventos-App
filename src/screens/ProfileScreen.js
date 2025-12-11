@@ -21,6 +21,7 @@ import {
   getUserAttendingEvents,
   uploadUserPhoto,
 } from "../api/users";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 /* -----------------------------------------------------------------------------
   Helpers de fecha
@@ -440,30 +441,35 @@ export default function ProfileScreen() {
 
   if (!uid) {
     return (
-      <View
+      <SafeAreaView
         style={{
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
           padding: 24,
+          backgroundColor: "#F3F4F6",
         }}
       >
-        <Text>Inicia sesión para ver tu perfil.</Text>
-      </View>
+        <Ionicons name="person-circle-outline" size={64} color="#9CA3AF" />
+        <Text style={{ fontSize: 18, fontWeight: "600", marginTop: 12, color: "#374151" }}>
+          Inicia sesión para ver tu perfil.
+        </Text>
+      </SafeAreaView>
     );
   }
 
   if (loading) {
     return (
-      <View
+      <SafeAreaView
         style={{
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
+          backgroundColor: "#F3F4F6",
         }}
       >
-        <ActivityIndicator />
-      </View>
+        <ActivityIndicator size="large" color="#2563EB" />
+      </SafeAreaView>
     );
   }
 
@@ -483,13 +489,20 @@ export default function ProfileScreen() {
     activeTab === "created" ? myEvents : attendingEvents;
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Header perfil */}
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#F3F4F6" }}>
+      {/* Profile Card */}
       <View
         style={{
+          margin: 20,
           padding: 24,
+          borderRadius: 24,
+          backgroundColor: "#fff",
           alignItems: "center",
-          backgroundColor: "#f5f7fb",
+          shadowColor: "#000",
+          shadowOpacity: 0.08,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 6,
         }}
       >
         <TouchableOpacity
@@ -508,6 +521,8 @@ export default function ProfileScreen() {
               height: 110,
               borderRadius: 55,
               marginBottom: 8,
+              borderWidth: 3,
+              borderColor: "#2563EB",
             }}
           />
           {photoUploading ? (
@@ -517,96 +532,100 @@ export default function ProfileScreen() {
                 left: 45,
                 top: 45,
               }}
+              color="#2563EB"
             />
           ) : null}
         </TouchableOpacity>
 
-        <Text style={{ fontSize: 18, fontWeight: "700" }}>
+        <Text style={{ fontSize: 22, fontWeight: "700", color: "#1F2937", marginTop: 8 }}>
           {displayName}
         </Text>
-        <Text
-          style={{ color: "#6b7280", marginTop: 2 }}
-        >
+        <Text style={{ color: "#6B7280", marginTop: 2, fontSize: 15 }}>
           {displayEmail}
         </Text>
 
-        <TouchableOpacity
-          onPress={() => navigation.navigate("EditProfile")}
-          style={{
-            marginTop: 12,
-            backgroundColor: "#1f2937",
-            paddingVertical: 10,
-            paddingHorizontal: 16,
-            borderRadius: 10,
-          }}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={{ color: "#fff", fontWeight: "600" }}
+        <View style={{ flexDirection: "row", marginTop: 18 }}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("EditProfile")}
+            style={{
+              backgroundColor: "#2563EB",
+              paddingVertical: 10,
+              paddingHorizontal: 20,
+              borderRadius: 12,
+              marginRight: 10,
+              flexDirection: "row",
+              alignItems: "center",
+              shadowColor: "#2563EB",
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 2,
+            }}
+            activeOpacity={0.85}
           >
-            Editar perfil
-          </Text>
-        </TouchableOpacity>
+            <Ionicons name="create-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
+              Editar perfil
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={() =>
-            navigation.navigate("NotificationSettings")
-          }
-          style={{
-            marginTop: 12,
-            backgroundColor: "#2563eb",
-            paddingVertical: 10,
-            paddingHorizontal: 16,
-            borderRadius: 10,
-          }}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={{ color: "#fff", fontWeight: "600" }}
+          <TouchableOpacity
+            onPress={() => navigation.navigate("NotificationSettings")}
+            style={{
+              backgroundColor: "#F59E42",
+              paddingVertical: 10,
+              paddingHorizontal: 20,
+              borderRadius: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              shadowColor: "#F59E42",
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+              elevation: 2,
+            }}
+            activeOpacity={0.85}
           >
-            Notificaciones
-          </Text>
-        </TouchableOpacity>
+            <Ionicons name="notifications-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
+              Notificaciones
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Título + tabs */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
-        <Text style={{ fontSize: 16, fontWeight: "700" }}>
+      {/* Events Section */}
+      <View style={{ paddingHorizontal: 24, paddingTop: 4 }}>
+        <Text style={{ fontSize: 18, fontWeight: "700", color: "#1F2937" }}>
           Mis eventos
         </Text>
       </View>
 
+      {/* Tabs */}
       <View
         style={{
           flexDirection: "row",
-          marginTop: 8,
-          marginHorizontal: 16,
+          marginTop: 12,
+          marginHorizontal: 24,
           borderRadius: 999,
-          backgroundColor: "#e5e7eb",
-          padding: 2,
+          backgroundColor: "#E5E7EB",
+          padding: 3,
         }}
       >
         <TouchableOpacity
           style={{
             flex: 1,
-            paddingVertical: 8,
+            paddingVertical: 10,
             borderRadius: 999,
             alignItems: "center",
-            backgroundColor:
-              activeTab === "created" ? "#ffffff" : "transparent",
+            backgroundColor: activeTab === "created" ? "#2563EB" : "transparent",
           }}
           onPress={() => setActiveTab("created")}
           activeOpacity={0.8}
         >
           <Text
             style={{
-              fontSize: 14,
-              fontWeight:
-                activeTab === "created" ? "700" : "500",
-              color:
-                activeTab === "created"
-                  ? "#111827"
-                  : "#4b5563",
+              fontSize: 15,
+              fontWeight: "700",
+              color: activeTab === "created" ? "#fff" : "#374151",
             }}
           >
             Creados
@@ -616,26 +635,19 @@ export default function ProfileScreen() {
         <TouchableOpacity
           style={{
             flex: 1,
-            paddingVertical: 8,
+            paddingVertical: 10,
             borderRadius: 999,
             alignItems: "center",
-            backgroundColor:
-              activeTab === "attending"
-                ? "#ffffff"
-                : "transparent",
+            backgroundColor: activeTab === "attending" ? "#2563EB" : "transparent",
           }}
           onPress={() => setActiveTab("attending")}
           activeOpacity={0.8}
         >
           <Text
             style={{
-              fontSize: 14,
-              fontWeight:
-                activeTab === "attending" ? "700" : "500",
-              color:
-                activeTab === "attending"
-                  ? "#111827"
-                  : "#4b5563",
+              fontSize: 15,
+              fontWeight: "700",
+              color: activeTab === "attending" ? "#fff" : "#374151",
             }}
           >
             A los que voy
@@ -643,19 +655,26 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Event List */}
       <FlatList
         data={eventsData}
         keyExtractor={(i) => i.id}
         contentContainerStyle={{
-          padding: 16,
-          paddingTop: 8,
+          padding: 24,
+          paddingTop: 12,
         }}
         ListEmptyComponent={
-          <Text>
-            {activeTab === "created"
-              ? "No tienes eventos creados."
-              : "No estás apuntado a ningún evento próximo."}
-          </Text>
+          <View style={{
+            alignItems: "center",
+            marginTop: 32,
+          }}>
+            <Ionicons name="calendar-outline" size={40} color="#9CA3AF" />
+            <Text style={{ color: "#6B7280", fontSize: 16, marginTop: 8 }}>
+              {activeTab === "created"
+                ? "No tienes eventos creados."
+                : "No estás apuntado a ningún evento próximo."}
+            </Text>
+          </View>
         }
         renderItem={({ item }) => {
           const timeLabel = getEventTime(item);
@@ -669,26 +688,32 @@ export default function ProfileScreen() {
               activeOpacity={0.85}
               style={{
                 flexDirection: "row",
-                padding: 12,
-                borderWidth: 1,
-                borderColor: "#eee",
-                borderRadius: 12,
-                marginBottom: 12,
+                padding: 16,
+                borderRadius: 16,
+                backgroundColor: "#fff",
+                marginBottom: 16,
+                shadowColor: "#000",
+                shadowOpacity: 0.06,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 3,
+                alignItems: "center",
               }}
             >
               <EventThumbImage
                 eventId={item.id}
                 serverImage={item.image}
                 style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 8,
-                  marginRight: 12,
+                  width: 72,
+                  height: 72,
+                  borderRadius: 12,
+                  marginRight: 16,
+                  backgroundColor: "#E5E7EB",
                 }}
               />
               <View style={{ flex: 1 }}>
                 <Text
-                  style={{ fontWeight: "600" }}
+                  style={{ fontWeight: "700", fontSize: 16, color: "#1F2937" }}
                   numberOfLines={1}
                 >
                   {item.title}
@@ -697,90 +722,72 @@ export default function ProfileScreen() {
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    marginTop: 2,
+                    marginTop: 6,
                     flexWrap: "wrap",
                   }}
                 >
                   <Ionicons
                     name="calendar-outline"
-                    size={14}
-                    color="#555"
+                    size={15}
+                    color="#2563EB"
                     style={{ marginRight: 4 }}
                   />
-                  <Text
-                    style={{
-                      color: "#555",
-                      fontSize: 13,
-                    }}
-                  >
+                  <Text style={{ color: "#374151", fontSize: 14 }}>
                     {formatEventDate(item.date)}
                   </Text>
                   {timeLabel ? (
                     <>
-                      <Text
-                        style={{
-                          color: "#555",
-                          fontSize: 13,
-                        }}
-                      >
-                        {" "}
-                        ·{" "}
+                      <Text style={{ color: "#374151", fontSize: 14 }}>
+                        {" · "}
                       </Text>
                       <Ionicons
                         name="time-outline"
-                        size={14}
-                        color="#555"
+                        size={15}
+                        color="#F59E42"
                         style={{ marginRight: 4 }}
                       />
-                      <Text
-                        style={{
-                          color: "#555",
-                          fontSize: 13,
-                        }}
-                      >
+                      <Text style={{ color: "#374151", fontSize: 14 }}>
                         {timeLabel}
                       </Text>
                     </>
                   ) : null}
-                  <Text
-                    style={{
-                      color: "#555",
-                      fontSize: 13,
-                    }}
-                  >
-                    {" "}
-                    · {item.location}
+                  <Text style={{ color: "#374151", fontSize: 14 }}>
+                    {" · "}{item.location}
                   </Text>
                 </View>
               </View>
+              <Ionicons name="chevron-forward-outline" size={22} color="#9CA3AF" />
             </TouchableOpacity>
           );
         }}
       />
 
-      {/* Logout flotante */}
+      {/* Floating Logout Button */}
       <TouchableOpacity
         onPress={logout}
         activeOpacity={0.85}
         style={{
           position: "absolute",
           right: 24,
-          bottom: 24,
-          backgroundColor: "#4B5563",
+          bottom: 32,
+          backgroundColor: "#EF4444",
           width: 56,
           height: 56,
           borderRadius: 28,
           justifyContent: "center",
           alignItems: "center",
-          elevation: 5,
+          shadowColor: "#EF4444",
+          shadowOpacity: 0.18,
+          shadowRadius: 8,
+          elevation: 6,
         }}
       >
         <Ionicons
           name="log-out-outline"
-          size={26}
+          size={28}
           color="#fff"
         />
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
