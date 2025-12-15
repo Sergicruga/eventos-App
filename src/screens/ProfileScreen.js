@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import * as ImagePicker from "expo-image-picker";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation, useFocusEffect, useRoute } from "@react-navigation/native";
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
 import { API_URL } from "../api/config";
@@ -23,8 +23,8 @@ import {
 } from "../api/users";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-/* -----------------------------------------------------------------------------
-  Helpers de fecha
+/* -----------------------------------------------------------------------------  
+  Helpers de fecha  
 ----------------------------------------------------------------------------- */
 function toLocalMidnightMs(dateStr) {
   if (!dateStr) return NaN;
@@ -72,8 +72,8 @@ function isUpcoming(dateStr) {
   return !Number.isNaN(e) && e >= t;
 }
 
-/* -----------------------------------------------------------------------------
-  Formato fecha/hora
+/* -----------------------------------------------------------------------------  
+  Formato fecha/hora  
 ----------------------------------------------------------------------------- */
 function formatEventDate(dateStr) {
   if (!dateStr) return "";
@@ -94,8 +94,8 @@ function getEventTime(ev) {
   return "";
 }
 
-/* -----------------------------------------------------------------------------
-  Imagen miniatura evento
+/* -----------------------------------------------------------------------------  
+  Imagen miniatura evento  
 ----------------------------------------------------------------------------- */
 function EventThumbImage({ eventId, serverImage, style }) {
   const {
@@ -143,8 +143,8 @@ function EventThumbImage({ eventId, serverImage, style }) {
   );
 }
 
-/* -----------------------------------------------------------------------------
-  Normalizador de eventos (soporta distintas formas)
+/* -----------------------------------------------------------------------------  
+  Normalizador de eventos  
 ----------------------------------------------------------------------------- */
 function normalizeEvents(
   rawEvents,
@@ -152,7 +152,6 @@ function normalizeEvents(
   { onlyUpcoming = true } = {}
 ) {
   const mapped = (rawEvents || []).map((e) => {
-    // soportar event_at, date, starts_at...
     const rawDate =
       e.event_at ||
       e.date ||
@@ -191,8 +190,8 @@ function normalizeEvents(
   );
 }
 
-/* -----------------------------------------------------------------------------
-  Merge con eventos del EventContext (para tener misma fecha/hora que detalle)
+/* -----------------------------------------------------------------------------  
+  Merge con eventos del EventContext  
 ----------------------------------------------------------------------------- */
 function mergeWithContextEvents(rawEvents, ctxEvents) {
   const ctxMap = Object.fromEntries(
@@ -205,7 +204,6 @@ function mergeWithContextEvents(rawEvents, ctxEvents) {
 
     return {
       ...ev,
-      // Sobrescribimos datos de fecha/hora con lo que maneja el EventContext
       date: ctx.date ?? ev.date,
       time_start:
         ctx.timeStart ?? ev.time_start ?? ev.timeStart ?? null,
@@ -225,8 +223,12 @@ function mergeWithContextEvents(rawEvents, ctxEvents) {
   });
 }
 
+/* -----------------------------------------------------------------------------  
+  COMPONENTE  
+----------------------------------------------------------------------------- */
 export default function ProfileScreen() {
   const navigation = useNavigation();
+  const route = useRoute();
 
   // Contextos
   const {
@@ -239,14 +241,25 @@ export default function ProfileScreen() {
     user: evCtxUser,
     updateUser,
     getEffectiveEventImage,
-    events, // 👈 eventos globales del contexto (tienen la hora correcta)
+    events,
   } = useContext(EventContext);
-  const uid = authUser?.id;
+
+  // userId recibido por params (cuando vienes desde un asistente)
+  const routeUserIdRaw = route?.params?.userId;
+  const authUid = authUser?.id ?? null;
+  const viewedUserId =
+    routeUserIdRaw != null ? String(routeUserIdRaw) : authUid;
+
+  // ¿Estoy viendo mi propio perfil o el de otro usuario?
+  const isMe =
+    routeUserIdRaw == null ||
+    (authUid != null &&
+      String(authUid) === String(routeUserIdRaw));
 
   // Estado local
   const [me, setMe] = useState(null);
   const [myEvents, setMyEvents] = useState([]); // creados
-  const [attendingEvents, setAttendingEvents] = useState([]); // a los que voy
+  const [attendingEvents, setAttendingEvents] = useState([]); // a los que voy / va
   const [activeTab, setActiveTab] = useState("created"); // "created" | "attending"
   const [loading, setLoading] = useState(true);
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -260,14 +273,15 @@ export default function ProfileScreen() {
 
   const hydrate = useCallback(
     async () => {
-      if (!uid) return;
+      if (!viewedUserId) return;
       try {
         setLoading(true);
 
+        // 👇 Cargamos SIEMPRE el usuario que estamos viendo (propio u otro)
         const [u, evsCreated, evsAttending] = await Promise.all([
-          getUser(uid),
-          getUserCreatedEvents(uid),
-          getUserAttendingEvents(uid),
+          getUser(viewedUserId),
+          getUserCreatedEvents(viewedUserId),
+          getUserAttendingEvents(viewedUserId),
         ]);
 
         // Datos de usuario
@@ -275,7 +289,7 @@ export default function ProfileScreen() {
           prev && prev.id === u.id ? { ...prev, ...u } : u
         );
 
-        // 👇 Unimos con los eventos del contexto para heredar fecha/hora correctas
+        // Merge con eventos del contexto
         const createdMerged = mergeWithContextEvents(
           evsCreated,
           events
@@ -285,7 +299,6 @@ export default function ProfileScreen() {
           events
         );
 
-        // CREADOS / A LOS QUE VOY → solo próximos (como ya hacías)
         setMyEvents(
           normalizeEvents(createdMerged, getEffectiveEventImage, {
             onlyUpcoming: true,
@@ -299,8 +312,8 @@ export default function ProfileScreen() {
           )
         );
 
-        // Sincroniza contextos
-        if (updateUser) {
+        // 🔒 Solo sincronizamos con contextos si es MI perfil
+        if (isMe && updateUser) {
           const needEvCtx =
             evCtxUser?.id !== u.id ||
             evCtxUser?.name !== u.name ||
@@ -315,22 +328,24 @@ export default function ProfileScreen() {
             });
         }
 
-        const needAuth =
-          authUser?.id !== u.id ||
-          authUser?.name !== u.name ||
-          authUser?.email !== u.email ||
-          authUser?.photo !== u.photo;
-        if (needAuth)
-          await login({
-            user: {
-              ...(authUser || {}),
-              id: u.id,
-              name: u.name,
-              email: u.email,
-              photo: u.photo,
-            },
-            token,
-          });
+        if (isMe) {
+          const needAuth =
+            authUser?.id !== u.id ||
+            authUser?.name !== u.name ||
+            authUser?.email !== u.email ||
+            authUser?.photo !== u.photo;
+          if (needAuth)
+            await login({
+              user: {
+                ...(authUser || {}),
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                photo: u.photo,
+              },
+              token,
+            });
+        }
       } catch (e) {
         console.log("Error en hydrate profile:", e);
         Alert.alert("Error", e.message);
@@ -339,7 +354,7 @@ export default function ProfileScreen() {
       }
     },
     [
-      uid,
+      viewedUserId,
       token,
       evCtxUser?.id,
       evCtxUser?.name,
@@ -349,7 +364,8 @@ export default function ProfileScreen() {
       login,
       authUser,
       getEffectiveEventImage,
-      events, // 👈 dependemos también de los eventos del contexto
+      events,
+      isMe,
     ]
   );
 
@@ -358,20 +374,20 @@ export default function ProfileScreen() {
     hydrate();
   }, [hydrate]);
 
-  // Recarga al volver al perfil
+  // Recarga al enfocar la pantalla
   useFocusEffect(
     useCallback(() => {
       hydrate();
-    }, [uid, hydrate])
+    }, [hydrate])
   );
 
-  // Refleja cambios del EventContext
+  // Refleja cambios del EventContext SOLO si es mi propio perfil
   useEffect(() => {
-    if (!uid) return;
-    if (evCtxUser?.id === uid) {
+    if (!authUid || !isMe) return;
+    if (evCtxUser?.id === authUid) {
       setMe((prev) => {
         const next = {
-          id: uid,
+          id: authUid,
           name: evCtxUser.name ?? prev?.name,
           email: evCtxUser.email ?? prev?.email,
           photo: evCtxUser.photo ?? prev?.photo,
@@ -389,10 +405,14 @@ export default function ProfileScreen() {
     evCtxUser?.name,
     evCtxUser?.email,
     evCtxUser?.photo,
-    uid,
+    authUid,
+    isMe,
   ]);
 
+  // Cambiar foto (solo si es mi perfil)
   const onChangePhoto = async () => {
+    if (!isMe || !authUid) return;
+
     try {
       const { status } =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -414,7 +434,7 @@ export default function ProfileScreen() {
 
       setPhotoUploading(true);
 
-      const data = await uploadUserPhoto(uid, res.assets[0].uri);
+      const data = await uploadUserPhoto(authUid, res.assets[0].uri);
 
       setMe((prev) => ({
         ...(prev || {}),
@@ -422,7 +442,7 @@ export default function ProfileScreen() {
       }));
       updateUser?.({
         ...(evCtxUser || {}),
-        id: uid,
+        id: authUid,
         photo: data.photo,
       });
       await login({
@@ -439,7 +459,8 @@ export default function ProfileScreen() {
     }
   };
 
-  if (!uid) {
+  // Si no hay usuario logueado
+  if (!authUid) {
     return (
       <SafeAreaView
         style={{
@@ -490,10 +511,40 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F3F4F6" }}>
+      {/* Barra superior: volver a mi perfil cuando estoy viendo a otro */}
+      {!isMe && authUid && (
+        <View
+          style={{
+            paddingHorizontal: 16,
+            paddingTop: 8,
+            paddingBottom: 2,
+          }}
+        >
+          <TouchableOpacity
+            onPress={() => navigation.setParams({ userId: authUid })}
+            style={{ flexDirection: "row", alignItems: "center" }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="arrow-back-circle-outline" size={22} color="#2563EB" />
+            <Text
+              style={{
+                marginLeft: 6,
+                color: "#2563EB",
+                fontWeight: "600",
+                fontSize: 14,
+              }}
+            >
+              Volver a mi perfil
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Profile Card */}
       <View
         style={{
           margin: 20,
+          marginTop: isMe ? 20 : 10,
           padding: 24,
           borderRadius: 24,
           backgroundColor: "#fff",
@@ -507,7 +558,7 @@ export default function ProfileScreen() {
       >
         <TouchableOpacity
           onPress={onChangePhoto}
-          disabled={photoUploading}
+          disabled={photoUploading || !isMe}
           style={{ alignItems: "center" }}
         >
           <Image
@@ -523,6 +574,7 @@ export default function ProfileScreen() {
               marginBottom: 8,
               borderWidth: 3,
               borderColor: "#2563EB",
+              opacity: isMe ? 1 : 0.9,
             }}
           />
           {photoUploading ? (
@@ -544,58 +596,61 @@ export default function ProfileScreen() {
           {displayEmail}
         </Text>
 
-        <View style={{ flexDirection: "row", marginTop: 18 }}>
-          <TouchableOpacity
-            onPress={() => navigation.navigate("EditProfile")}
-            style={{
-              backgroundColor: "#2563EB",
-              paddingVertical: 10,
-              paddingHorizontal: 20,
-              borderRadius: 12,
-              marginRight: 10,
-              flexDirection: "row",
-              alignItems: "center",
-              shadowColor: "#2563EB",
-              shadowOpacity: 0.15,
-              shadowRadius: 4,
-              elevation: 2,
-            }}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="create-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
-              Editar perfil
-            </Text>
-          </TouchableOpacity>
+        {/* Botones solo para MI perfil */}
+        {isMe && (
+          <View style={{ flexDirection: "row", marginTop: 18 }}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("EditProfile")}
+              style={{
+                backgroundColor: "#2563EB",
+                paddingVertical: 10,
+                paddingHorizontal: 20,
+                borderRadius: 12,
+                marginRight: 10,
+                flexDirection: "row",
+                alignItems: "center",
+                shadowColor: "#2563EB",
+                shadowOpacity: 0.15,
+                shadowRadius: 4,
+                elevation: 2,
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="create-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
+                Editar perfil
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => navigation.navigate("NotificationSettings")}
-            style={{
-              backgroundColor: "#F59E42",
-              paddingVertical: 10,
-              paddingHorizontal: 20,
-              borderRadius: 12,
-              flexDirection: "row",
-              alignItems: "center",
-              shadowColor: "#F59E42",
-              shadowOpacity: 0.15,
-              shadowRadius: 4,
-              elevation: 2,
-            }}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="notifications-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
-              Notificaciones
-            </Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("NotificationSettings")}
+              style={{
+                backgroundColor: "#F59E42",
+                paddingVertical: 10,
+                paddingHorizontal: 20,
+                borderRadius: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                shadowColor: "#F59E42",
+                shadowOpacity: 0.15,
+                shadowRadius: 4,
+                elevation: 2,
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="notifications-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
+                Notificaciones
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Events Section */}
       <View style={{ paddingHorizontal: 24, paddingTop: 4 }}>
         <Text style={{ fontSize: 18, fontWeight: "700", color: "#1F2937" }}>
-          Mis eventos
+          {isMe ? "Mis eventos" : "Eventos"}
         </Text>
       </View>
 
@@ -650,7 +705,7 @@ export default function ProfileScreen() {
               color: activeTab === "attending" ? "#fff" : "#374151",
             }}
           >
-            A los que voy
+            A los que va
           </Text>
         </TouchableOpacity>
       </View>
@@ -671,8 +726,12 @@ export default function ProfileScreen() {
             <Ionicons name="calendar-outline" size={40} color="#9CA3AF" />
             <Text style={{ color: "#6B7280", fontSize: 16, marginTop: 8 }}>
               {activeTab === "created"
-                ? "No tienes eventos creados."
-                : "No estás apuntado a ningún evento próximo."}
+                ? (isMe
+                  ? "No tienes eventos creados."
+                  : "No tiene eventos creados.")
+                : (isMe
+                  ? "No estás apuntado a ningún evento próximo."
+                  : "No está apuntado a ningún evento próximo.")}
             </Text>
           </View>
         }

@@ -554,6 +554,122 @@ app.delete("/friends", async (req, res) => {
   }
 });
 
+/* ==========================
+   FRIEND REQUESTS (SOLICITUDES DE AMISTAD)
+   ========================== */
+
+// Enviar solicitud de amistad
+app.post("/friend-requests", async (req, res) => {
+  try {
+    const { senderId, receiverId } = req.body;
+
+    if (!senderId || !receiverId || senderId === receiverId) {
+      return res.status(400).json({ error: "senderId/receiverId inválidos" });
+    }
+
+    await pool.query(
+      `INSERT INTO friend_requests (sender_id, receiver_id)
+       VALUES ($1, $2)
+       ON CONFLICT (sender_id, receiver_id) DO NOTHING`,
+      [senderId, receiverId]
+    );
+
+    console.log("[friend-requests] solicitud creada", { senderId, receiverId });
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("POST /friend-requests ERROR:", e);
+    return res.status(500).json({ error: "Error creando solicitud" });
+  }
+});
+
+// Listar solicitudes recibidas por un usuario
+app.get("/users/:userId/friend-requests", async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT fr.id,
+              fr.sender_id,
+              fr.receiver_id,
+              fr.created_at,
+              u.name,
+              u.email,
+              u.photo
+         FROM friend_requests fr
+         JOIN users u ON u.id = fr.sender_id
+        WHERE fr.receiver_id = $1
+        ORDER BY fr.created_at DESC`,
+      [userId]
+    );
+    return res.json(rows);
+  } catch (e) {
+    console.error("GET /users/:userId/friend-requests ERROR:", e);
+    return res.status(500).json({ error: "Error listando solicitudes" });
+  }
+});
+
+// Aceptar solicitud (crea amistad en ambos sentidos y borra la solicitud)
+app.post("/friend-requests/:requestId/accept", async (req, res) => {
+  const { requestId } = req.params;
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { rows } = await client.query(
+      `SELECT sender_id, receiver_id
+         FROM friend_requests
+        WHERE id = $1`,
+      [requestId]
+    );
+
+    if (!rows.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Solicitud no encontrada" });
+    }
+
+    const { sender_id, receiver_id } = rows[0];
+
+    await client.query(
+      `INSERT INTO friends (user_id, friend_id)
+       VALUES ($1, $2), ($2, $1)
+       ON CONFLICT DO NOTHING`,
+      [sender_id, receiver_id]
+    );
+
+    await client.query(
+      `DELETE FROM friend_requests WHERE id = $1`,
+      [requestId]
+    );
+
+    await client.query("COMMIT");
+    console.log("[friend-requests] aceptada", { requestId, sender_id, receiver_id });
+    return res.json({ success: true });
+  } catch (e) {
+    await client.query("ROLLBACK");
+    console.error("POST /friend-requests/:requestId/accept ERROR:", e);
+    return res.status(500).json({ error: "Error aceptando solicitud" });
+  } finally {
+    client.release();
+  }
+});
+
+// Rechazar / eliminar solicitud
+app.delete("/friend-requests/:requestId", async (req, res) => {
+  const { requestId } = req.params;
+  try {
+    await pool.query(
+      `DELETE FROM friend_requests WHERE id = $1`,
+      [requestId]
+    );
+    console.log("[friend-requests] eliminada", { requestId });
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("DELETE /friend-requests/:requestId ERROR:", e);
+    return res.status(500).json({ error: "Error borrando solicitud" });
+  }
+});
+
+
 /* ==== EVENTOS CREADOS / ASISTIDOS / FAVORITOS POR USUARIO ==== */
 
 // Eventos creados por el usuario (perfil pestaña "Creados")
@@ -754,13 +870,17 @@ app.delete("/attendees", async (req, res) => {
 
 // Obtener asistentes de un evento
 app.get("/events/:eventId/attendees", async (req, res) => {
-  const eventId = req.eventId;
+  const { eventId } = req.params;   // ✅ CORREGIDO
+
   try {
     const { rows } = await pool.query(
-      `SELECT u.id, u.name
-         FROM event_attendees a
-         JOIN users u ON u.id = a.user_id
-        WHERE a.event_id = $1`,
+      `SELECT 
+         u.id,
+         u.name,
+         u.photo              -- ✅ añadimos la foto
+       FROM event_attendees a
+       JOIN users u ON u.id = a.user_id
+      WHERE a.event_id = $1`,
       [eventId]
     );
     res.json(rows);
@@ -772,13 +892,21 @@ app.get("/events/:eventId/attendees", async (req, res) => {
 
 // Comprobar si un usuario asiste
 app.get("/events/:eventId/attendees/:userId", async (req, res) => {
-  const eventId = req.eventId;
+  const { eventId } = req.params;   // ✅ CORREGIDO
   const { userId } = req.params;
-  const r = await pool.query(
-    `SELECT 1 FROM event_attendees WHERE event_id = $1 AND user_id = $2`,
-    [eventId, userId]
-  );
-  res.json({ attending: r.rowCount > 0 });
+
+  try {
+    const r = await pool.query(
+      `SELECT 1
+         FROM event_attendees
+        WHERE event_id = $1 AND user_id = $2`,
+      [eventId, userId]
+    );
+    res.json({ attending: r.rowCount > 0 });
+  } catch (e) {
+    console.error("Error checking attending:", e);
+    res.status(500).json({ error: "Error checking attending" });
+  }
 });
 
 /* ==========================

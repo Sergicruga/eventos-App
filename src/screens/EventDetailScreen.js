@@ -6,7 +6,6 @@ import {
 import { EventContext } from '../EventContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
-// import { API_URL, TICKETMASTER_API_KEY } from '../api/config';
 import { API_URL } from '../api/config';
 import { AuthContext } from '../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -94,7 +93,6 @@ const withCacheBust = (url, updatedAt) => {
 const isHttpUrl = (s) => typeof s === 'string' && /^https?:\/\//i.test(String(s).trim());
 const looksLikeTicketmasterId = (id) => typeof id === 'string' && !/^\d+$/.test(id) && id.length >= 10;
 
-// 🔹 NUEVO: construir URL directa de TM como último recurso
 const buildTicketmasterUrl = (id) => {
   if (!looksLikeTicketmasterId(id)) return null;
   return `https://www.ticketmaster.es/event/${encodeURIComponent(id)}`;
@@ -102,7 +100,6 @@ const buildTicketmasterUrl = (id) => {
 
 // ====== NUEVO: utilidades de fecha/hora ======
 const getEventDateFromEvent = (ev) => {
-  // Prioriza starts_at/event_at/startsAt/date y devuelve YYYY-MM-DD
   const s =
     ev?.startsAt ?? ev?.starts_at ??
     ev?.event_at ?? ev?.date ?? null;
@@ -115,7 +112,6 @@ const getEventDateFromEvent = (ev) => {
   return null;
 };
 
-// Obtiene HH:MM sin crear Date (evita desfases 23:00)
 const getEventTimeHHMM = (ev) => {
   const plain = ev?.timeStart ?? ev?.time_start ?? null;
   if (typeof plain === 'string' && /^\d{2}:\d{2}/.test(plain)) return plain.slice(0, 5);
@@ -142,7 +138,6 @@ const formatDateOnlyEs = (dateStr) => {
   return `${d} de ${meses[mo - 1]} de ${y}`;
 };
 
-// Acepta evento o string ISO y devuelve HH:MM
 const formatTimeHHMM = (evOrStr) => {
   if (!evOrStr) return '';
   if (typeof evOrStr === 'string') {
@@ -152,6 +147,84 @@ const formatTimeHHMM = (evOrStr) => {
     return '';
   }
   return getEventTimeHHMM(evOrStr) ?? '';
+};
+
+// ===== NUEVO: helpers asistentes =====
+const buildAbsolutePhoto = (photoPath) => {
+  if (!photoPath || typeof photoPath !== 'string') return null;
+  const trimmed = photoPath.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return toHttps(trimmed);
+  }
+  return `${API_URL}${trimmed}`;
+};
+
+const getAttendeeAvatar = (att) => {
+  if (!att) return null;
+
+  // 1) Campo "photo" (como en usuarios)
+  if (att.photo) {
+    const abs = buildAbsolutePhoto(att.photo);
+    if (abs && isHttpUrl(abs)) return abs;
+  }
+
+  // 2) Otros campos típicos
+  const possibleKeys = [
+    'avatar',
+    'avatarUrl',
+    'avatar_url',
+    'profileImage',
+    'profile_image',
+    'photo_url',
+    'image',
+    'image_url',
+  ];
+
+  for (const key of possibleKeys) {
+    const v = att[key];
+    if (typeof v === 'string' && v.trim()) {
+      const candidate = buildAbsolutePhoto(v.trim()) || v.trim();
+      const clean = toHttps(candidate);
+      if (isHttpUrl(clean)) return clean;
+    }
+  }
+
+  return null;
+};
+
+const getAttendeeName = (att) => {
+  if (!att) return '';
+  return (
+    att.name ||
+    att.fullName ||
+    att.username ||
+    att.displayName ||
+    att.email ||
+    ''
+  );
+};
+
+const getInitials = (raw) => {
+  if (!raw || typeof raw !== 'string') return '?';
+  const s = raw.trim();
+  if (!s) return '?';
+
+  const base = s.includes('@') ? s.split('@')[0] : s;
+  const parts = base.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+};
+
+const getAttendeeUserId = (att) => {
+  if (!att) return null;
+  if (att.userId != null) return att.userId;
+  if (att.user_id != null) return att.user_id;
+  if (att.uid != null) return att.uid;
+  if (att.id != null) return att.id;
+  return null;
 };
 
 // ==============================================
@@ -166,7 +239,6 @@ export default function EventDetailScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const [imgFallbackLocal, setImgFallbackLocal] = useState(false);
 
-  // 🔎 Buscar el evento “equivalente” en la lista (id, externalId, título+fecha)
   const matchedFromList = useMemo(() => {
     if (!Array.isArray(events) || !event) return null;
 
@@ -177,19 +249,16 @@ export default function EventDetailScreen({ route, navigation }) {
       (event?.sourceId != null && String(event.sourceId)) ||
       null;
 
-    // 1) por id exacto
     if (id) {
       const byId = events.find(e => String(e.id) === id);
       if (byId) return byId;
     }
-    // 2) por externalId
     if (ext) {
       const byExt = events.find(e =>
         String(e.externalId ?? e.tm_id ?? e.sourceId ?? '') === ext
       );
       if (byExt) return byExt;
     }
-    // 3) por título + fecha (normalizado)
     const norm = (s) => (typeof s === 'string' ? s.trim().toLowerCase() : '');
     const title = norm(event.title);
     const date = (event.date || '').slice(0, 10);
@@ -202,7 +271,6 @@ export default function EventDetailScreen({ route, navigation }) {
     return null;
   }, [events, event]);
 
-  // El "current" preferirá el emparejado; si no, usa lo que vino por la ruta
   const current = useMemo(
     () => matchedFromList ?? event,
     [matchedFromList, event]
@@ -234,7 +302,6 @@ export default function EventDetailScreen({ route, navigation }) {
     return getEventImageSource(finalImageUrl);
   }, [finalImageUrl, getEventImageSource]);
 
-  // ✅ URL de compra
   const computedBuyUrl = useMemo(() => {
     const pick = (obj) => {
       if (!obj) return null;
@@ -300,7 +367,7 @@ export default function EventDetailScreen({ route, navigation }) {
           if (cancelled) return;
           setAttendees(Array.isArray(data) ? data : []);
           const uid = user?.id != null ? String(user.id) : null;
-          setIsJoined(uid ? data.some(a => String(a.id) === uid) : false);
+          setIsJoined(uid ? data.some(a => String(getAttendeeUserId(a)) === uid) : false);
         } else {
           if (cancelled) return;
           setAttendees([]);
@@ -328,25 +395,23 @@ export default function EventDetailScreen({ route, navigation }) {
 
     if (!isJoined) {
       setIsJoined(true);
-      setAttendees(prev => [...prev, { id: user.id, name: user.name }]);
+      setAttendees(prev => [...prev, { id: user.id, name: user.name, photo: user.photo }]);
       try {
         await joinEvent(current.id);
-        // Schedule notification for this event
         await scheduleEventNotification(current);
       } catch (e) {
         setIsJoined(false);
-        setAttendees(prev => prev.filter(a => String(a.id) !== uidStr));
+        setAttendees(prev => prev.filter(a => String(getAttendeeUserId(a)) !== uidStr));
         Alert.alert('Error', e?.message || 'No se pudo apuntar. Inténtalo de nuevo.');
       }
     } else {
       setIsJoined(false);
-      setAttendees(prev => prev.filter(a => String(a.id) !== uidStr));
+      setAttendees(prev => prev.filter(a => String(getAttendeeUserId(a)) !== uidStr));
       try {
         await leaveEvent(current.id);
-        // Optionally: cancel notification here if you implement cancellation
       } catch (e) {
         setIsJoined(true);
-        setAttendees(prev => [...prev, { id: user.id, name: user.name }]);
+        setAttendees(prev => [...prev, { id: user.id, name: user.name, photo: user.photo }]);
         Alert.alert('Error', e?.message || 'No se pudo cancelar. Inténtalo de nuevo.');
       }
     }
@@ -357,7 +422,7 @@ export default function EventDetailScreen({ route, navigation }) {
         const data = await res.json();
         setAttendees(Array.isArray(data) ? data : []);
         const uid = String(user.id);
-        setIsJoined(data.some(a => String(a.id) === uid));
+        setIsJoined(data.some(a => String(getAttendeeUserId(a)) === uid));
       }
     } catch {}
 
@@ -398,25 +463,20 @@ export default function EventDetailScreen({ route, navigation }) {
 
   useEffect(() => { fetchComments(); }, [fetchComments]);
 
-  // ===== NUEVO: fecha y hora mostrables a partir de startsAt/timeStart/etc. =====
   const eventDateObj = useMemo(() => getEventDateFromEvent(current), [current]);
   const dateLabel = useMemo(() => {
-    // Si no tenemos Date, caemos al formato antiguo con current.date
     return formatDateOnlyEs(eventDateObj) || (current?.date
       ? new Date(current.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
       : '');
   }, [eventDateObj, current?.date]);
 
-  // === BLOQUE REEMPLAZADO: hora de inicio robusta sin crear Date y con respaldo en route.params.event
   const startTimeLabel = useMemo(() => {
-    // 1) Campo directo “bonito”
     const t1 =
       (typeof current?.timeStart === 'string' && current.timeStart.trim()) ||
       (typeof current?.time_start === 'string' && current.time_start.trim()) ||
       null;
     if (t1 && /^\d{2}:\d{2}$/.test(t1)) return t1.slice(0, 5);
 
-    // 2) ISO de startsAt/starts_at → HH:MM por regex
     const s1 =
       (typeof current?.startsAt === 'string' && current.startsAt) ||
       (typeof current?.starts_at === 'string' && current.starts_at) ||
@@ -426,7 +486,6 @@ export default function EventDetailScreen({ route, navigation }) {
       if (hhmm) return hhmm;
     }
 
-    // 3) Respaldo: lo que venía en la ruta (por si aún no estaba sincronizado en lista)
     const rp = route?.params?.event ?? {};
     const t2 =
       (typeof rp.timeStart === 'string' && rp.timeStart.trim()) ||
@@ -443,7 +502,6 @@ export default function EventDetailScreen({ route, navigation }) {
       if (hhmm) return hhmm;
     }
 
-    // 4) Último recurso: si current.date trae hora (ISO completo)
     if (typeof current?.date === 'string' && current.date.length > 10) {
       const hhmm = formatTimeHHMM(current.date);
       if (hhmm) return hhmm;
@@ -507,7 +565,6 @@ export default function EventDetailScreen({ route, navigation }) {
               <Text style={styles.date}>{dateLabel}</Text>
             </View>
 
-            {/* NUEVO: Hora de inicio */}
             {startTimeLabel && (
               <View style={styles.row}>
                 <Ionicons name="time-outline" size={18} color={COLORS.secondary} style={{ marginRight: 6 }} />
@@ -570,12 +627,53 @@ export default function EventDetailScreen({ route, navigation }) {
             <Text style={styles.sectionTitle}>
               <Ionicons name="people-outline" size={18} color={COLORS.primary} /> Asistentes ({attendees.length})
             </Text>
+
             {attendees.length > 0 ? (
-              <View style={{ marginTop: 6 }}>
-                {attendees.map(a => (
-                  <Text key={a.id} style={styles.attendeeText}>• {a.name}</Text>
-                ))}
-              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.attendeeAvatarList}
+                style={{ marginTop: 6 }}
+              >
+                {attendees.map((a) => {
+                  const avatar = getAttendeeAvatar(a);
+                  const name = getAttendeeName(a);
+                  const initials = getInitials(name);
+                  const targetUserId = getAttendeeUserId(a);
+
+                  return (
+                    <TouchableOpacity
+                      key={a.id}
+                      style={styles.attendeeAvatarWrap}
+                      activeOpacity={0.8}
+                      onPress={() =>
+                        targetUserId &&
+                        navigation.navigate('Tabs', {
+                          screen: 'Profile',
+                          params: { userId: String(targetUserId) },
+                        })
+                      }
+                    >
+                      {avatar ? (
+                        <Image
+                          source={{ uri: avatar }}
+                          style={styles.attendeeAvatarImg}
+                        />
+                      ) : (
+                        <View style={styles.attendeeAvatarFallback}>
+                          <Text style={styles.attendeeAvatarInitials}>{initials}</Text>
+                        </View>
+                      )}
+                      <Text
+                        style={styles.attendeeAvatarName}
+                        numberOfLines={1}
+                      >
+                        {name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             ) : (
               <Text style={{ color: COLORS.gray, marginTop: 4 }}>Sé el primero en apuntarte</Text>
             )}
@@ -603,7 +701,6 @@ export default function EventDetailScreen({ route, navigation }) {
               <Text style={styles.primaryBtnText}>{isJoined ? 'Ya no voy' : '¡Ya voy!'}</Text>
             </TouchableOpacity>
 
-            {/* ✅ Botón de comprar entradas */}
             {buyUrl && (
               <TouchableOpacity
                 onPress={async () => {
@@ -627,7 +724,6 @@ export default function EventDetailScreen({ route, navigation }) {
               </TouchableOpacity>
             )}
 
-            {/* Botones de propietario */}
             {amOwner && (
               <>
                 <TouchableOpacity
@@ -801,6 +897,38 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontWeight: 'bold', fontSize: 18, color: COLORS.primary, marginBottom: 6 },
   attendeeText: { color: COLORS.text, fontSize: 15, marginVertical: 1, marginLeft: 2 },
+  attendeeAvatarList: {
+    paddingVertical: 4,
+  },
+  attendeeAvatarWrap: {
+    width: 64,
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  attendeeAvatarImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.inputBg,
+  },
+  attendeeAvatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.inputBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attendeeAvatarInitials: {
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  attendeeAvatarName: {
+    marginTop: 4,
+    fontSize: 11,
+    color: COLORS.text,
+    textAlign: 'center',
+  },
   actionBtnContainer: {
     width: '92%',
     alignSelf: 'center',
