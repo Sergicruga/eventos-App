@@ -331,10 +331,6 @@ export default function HomeScreen() {
       >
         <Ionicons name="add" size={32} color="#fff" />
       </TouchableOpacity>
-      <Button
-        title="Send Test Notification"
-        onPress={sendTestNotification}
-      />
     </View>
   );
 }
