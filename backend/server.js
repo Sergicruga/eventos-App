@@ -956,39 +956,50 @@ function signToken(payload) {
 
 app.post("/auth/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, privacyAccepted } = req.body;
+
     if (!name || !email || !password)
-      return res
-        .status(400)
-        .json({ message: "Campos obligatorios" });
+      return res.status(400).json({ message: "Campos obligatorios" });
+
+    // ✅ Consentimiento obligatorio
+    if (privacyAccepted !== true) {
+      return res.status(400).json({
+        message: "Debes aceptar la política de privacidad",
+      });
+    }
 
     const exists = await pool.query(
       "SELECT id FROM users WHERE email = $1",
       [email]
     );
     if (exists.rowCount > 0)
-      return res
-        .status(409)
-        .json({ message: "El email ya está registrado" });
+      return res.status(409).json({ message: "El email ya está registrado" });
 
     const hash = await bcrypt.hash(password, 10);
+
+    // ✅ Guardamos versión + fecha de aceptación
+    const PRIVACY_VERSION = "1.0";
+
     const result = await pool.query(
-      `INSERT INTO users (name, email, password)
-       VALUES ($1, $2, $3)
-       RETURNING id, name, email`,
-      [name, email, hash]
+      `INSERT INTO users (
+         name, email, password,
+         privacy_accepted_at, privacy_version
+       )
+       VALUES ($1, $2, $3, NOW(), $4)
+       RETURNING id, name, email, privacy_accepted_at, privacy_version`,
+      [name, email, hash, PRIVACY_VERSION]
     );
 
     const user = result.rows[0];
     const token = signToken({ id: user.id, email: user.email });
+
     res.json({ user, token });
   } catch (e) {
     console.error("REGISTER ERROR:", e);
-    res
-      .status(500)
-      .json({ message: "Error registrando usuario" });
+    res.status(500).json({ message: "Error registrando usuario" });
   }
 });
+
 
 app.post("/auth/login", async (req, res) => {
   try {

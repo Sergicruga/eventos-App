@@ -820,7 +820,11 @@ export default function ProfileScreen() {
           );
         }}
       />
-
+      <TouchableOpacity onPress={() => navigation.navigate("PrivacyPolicy")}>
+        <Text style={{ paddingVertical: 12 }}>
+          Política de privacidad
+        </Text>
+      </TouchableOpacity>
       {/* Floating Logout Button */}
       <TouchableOpacity
         onPress={logout}
@@ -847,6 +851,7 @@ export default function ProfileScreen() {
           color="#fff"
         />
       </TouchableOpacity>
+      
     </SafeAreaView>
   );
 }
