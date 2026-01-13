@@ -5,6 +5,7 @@ const SEARCH_BAR_MARGIN = 20;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_WIDTH = (SCREEN_WIDTH - SEARCH_BAR_MARGIN * 2 - CARD_MARGIN) / 2;
 const CARD_HEIGHT = 235; // 135 image + 100 overlay
+const CATEGORY_CARD_SIZE = (SCREEN_WIDTH - 48) / 2; // 2 columns with padding
 
 export default StyleSheet.create({
   container: {
@@ -16,9 +17,58 @@ export default StyleSheet.create({
     fontSize: 30,
     fontWeight: 'bold',
     color: '#234567',
-    marginBottom: 12,
+    marginBottom: 8,
     marginLeft: SEARCH_BAR_MARGIN,
     letterSpacing: 0.5,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#7a9bc4',
+    marginBottom: 20,
+    marginLeft: SEARCH_BAR_MARGIN,
+    fontWeight: '400',
+  },
+  categoriesGridContent: {
+    paddingBottom: 100,
+    paddingHorizontal: 8,
+  },
+  categoryCard: {
+    width: CATEGORY_CARD_SIZE,
+    height: CATEGORY_CARD_SIZE,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 16,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  categoryGradient: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  categoryIconWrapper: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  categoryName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  categoryCount: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
+    fontWeight: '500',
   },
   searchBarWrapper: {
     flexDirection: 'row',
@@ -81,8 +131,8 @@ export default StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 60,
-    borderBottomLeftRadius: 0, // changed from 20 to 0
-    borderBottomRightRadius: 0, // changed from 20 to 0
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
   },
   overlay: {
     backgroundColor: '#f7f9fc',
@@ -90,7 +140,7 @@ export default StyleSheet.create({
     paddingHorizontal: 12,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    height: 100, // enough for 2 lines of title + date + location
+    height: 100,
     justifyContent: 'center',
   },
   cardTitle: {
@@ -101,7 +151,7 @@ export default StyleSheet.create({
     letterSpacing: 0.2,
     textAlignVertical: 'center',
     lineHeight: 22,
-    height: 44, // always reserve space for 2 lines
+    height: 44,
   },
   cardDate: {
     color: '#5a7bb6',

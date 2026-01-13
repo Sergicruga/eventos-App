@@ -17,6 +17,7 @@ import EditProfileScreen from "../screens/EditProfileScreen";
 import EditEventScreen from "../screens/EditEventScreen";
 import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import PrivacyPolicyScreen from "../screens/PrivacyPolicyScreen";
+import CategoryEventsScreen from "../screens/CategoryEventsScreen";
 
 // importa aquí cualquier otra pantalla "modal" o de detalle que abras desde tabs
 
@@ -46,6 +47,11 @@ function PrivateStack() {
         name="EventDetail"
         component={EventDetail}
         options={{ title: "Detalle" }}
+      />
+      <Stack.Screen
+        name="CategoryEvents"
+        component={CategoryEventsScreen}
+        options={{ title: "Eventos" }}
       />
       <Stack.Screen
         name="CreateEventScreen"

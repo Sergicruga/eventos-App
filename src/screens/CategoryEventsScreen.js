@@ -1,0 +1,226 @@
+import React, { useContext, useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
+  Dimensions,
+} from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { EventContext } from '../EventContext';
+import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import styles from './HomeScreen.styles';
+import { AuthContext } from '../context/AuthContext';
+import { Image as ExpoImage } from 'expo-image';
+
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+  if (lat1 == null || lat2 == null) return null;
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function toLocalMidnightMs(dateStr) {
+  if (!dateStr) return NaN;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (m) {
+    const [_, y, mm, dd] = m;
+    return new Date(Number(y), Number(mm) - 1, Number(dd), 0, 0, 0, 0).getTime();
+  }
+  const t = new Date(dateStr).getTime();
+  if (Number.isNaN(t)) return NaN;
+  const d = new Date(t);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+}
+
+function todayLocalMidnightMs() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+}
+
+function isUpcoming(dateStr) {
+  const e = toLocalMidnightMs(dateStr);
+  const t = todayLocalMidnightMs();
+  return !Number.isNaN(e) && e >= t;
+}
+
+function formatDateDMY(dateStr) {
+  if (!dateStr) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  const m2 = /^(\d{4})\/(\d{2})\/(\d{2})/.exec(dateStr);
+  if (m2) return `${m2[3]}-${m2[2]}-${m2[1]}`;
+  const d = new Date(dateStr);
+  if (!isNaN(d)) {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  }
+  return dateStr;
+}
+
+function EventCard({ item, isFavorite, onToggleFavorite, onPress, getEventImageSource, effectiveImage }) {
+  const [thumbFallback, setThumbFallback] = React.useState(false);
+
+  return (
+    <TouchableOpacity style={styles.card} activeOpacity={0.88} onPress={onPress}>
+      <View style={styles.imageWrapper}>
+        <ExpoImage
+          source={
+            effectiveImage
+              ? getEventImageSource(effectiveImage)
+              : require('../../assets/iconoApp.png')
+          }
+          style={styles.cardImage}
+          contentFit="cover"
+          transition={200}
+          cachePolicy="memory-disk"
+          onError={() => setThumbFallback(true)}
+        />
+        {thumbFallback && (
+          <ExpoImage
+            source={require('../../assets/iconoApp.png')}
+            style={[styles.cardImage, { position: 'absolute', top: 0, left: 0 }]}
+            contentFit="cover"
+            transition={200}
+          />
+        )}
+
+        <LinearGradient
+          colors={['transparent', 'rgba(35,69,103,0.45)', 'rgba(35,69,103,0.7)']}
+          style={styles.gradientOverlay}
+        />
+
+        <TouchableOpacity style={styles.favoriteIcon} onPress={() => onToggleFavorite(item.id, item)}>
+          <Ionicons
+            name={isFavorite ? 'star' : 'star-outline'}
+            size={24}
+            color={isFavorite ? '#FFD700' : '#5a7bb6'}
+          />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.overlay}>
+        <Text style={styles.cardTitle} numberOfLines={2} ellipsizeMode="tail">
+          {item.title}
+        </Text>
+        <Text style={styles.cardDate} numberOfLines={1} ellipsizeMode="tail">
+          {formatDateDMY(item.date)}
+        </Text>
+        <Text style={styles.cardLocation} numberOfLines={1} ellipsizeMode="tail">
+          <Ionicons name="location-outline" size={14} color="#5a7bb6" /> {item.location}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+export default function CategoryEventsScreen({ route }) {
+  const { category } = route.params;
+  const eventCtx = useContext(EventContext) || {};
+  const communityEvents = eventCtx.communityEvents ?? eventCtx.events ?? [];
+  const {
+    favorites = [],
+    toggleFavorite = () => {},
+    getEventImageSource = () => ({ uri: 'https://via.placeholder.com/800x450.png?text=Evento' }),
+    getEffectiveEventImage = () => null,
+  } = eventCtx;
+  const { user } = useContext(AuthContext);
+  const [search, setSearch] = useState('');
+  const [location, setLocation] = useState(null);
+  const navigation = useNavigation();
+  const myUserId = user?.id != null ? String(user.id) : null;
+
+  // Filter events by category
+  const categoryEvents = useMemo(() => {
+    return communityEvents
+      .filter(ev => isUpcoming(ev.date))
+      .filter(ev => (ev.type === 'api' ? favorites.includes(String(ev.id)) : true))
+      .filter(ev => {
+        if (!myUserId) return true;
+        const createdByRaw = ev.created_by ?? ev.createdById ?? ev.createdBy ?? null;
+        return createdByRaw == null ? true : String(createdByRaw) !== myUserId;
+      })
+      .filter(ev => {
+        const eventType = (ev.type_evento || ev.category || ev.type || '').toLowerCase().trim();
+        return eventType === category.toLowerCase() || !eventType && category === 'Otro';
+      });
+  }, [communityEvents, category, myUserId, favorites]);
+
+  // Filter by search
+  const filteredEvents = useMemo(() => {
+    return categoryEvents.filter(e =>
+      (e.title || '').toLowerCase().includes(search.toLowerCase()) ||
+      (e.location || '').toLowerCase().includes(search.toLowerCase())
+    );
+  }, [categoryEvents, search]);
+
+  // Remove duplicates
+  const deduped = [];
+  const seen = new Set();
+  for (const ev of filteredEvents) {
+    const key = `${ev.type}-${ev.id}`;
+    if (!seen.has(key)) {
+      deduped.push(ev);
+      seen.add(key);
+    }
+  }
+
+  const renderItem = ({ item }) => {
+    const isFav = favorites.includes(String(item.id));
+    return (
+      <EventCard
+        item={item}
+        isFavorite={isFav}
+        onToggleFavorite={toggleFavorite}
+        onPress={() => navigation.navigate('EventDetail', { event: item })}
+        getEventImageSource={getEventImageSource}
+        effectiveImage={getEffectiveEventImage(item.id, item.image)}
+      />
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.header}>{category}</Text>
+      <View style={styles.searchBarWrapper}>
+        <Ionicons name="search" size={20} color="#1976d2" style={{ marginRight: 8 }} />
+        <TextInput
+          style={styles.searchBar}
+          placeholder="Buscar eventos..."
+          placeholderTextColor="#1976d2"
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
+      <FlatList
+        data={deduped}
+        keyExtractor={item => String(item.id)}
+        renderItem={renderItem}
+        numColumns={2}
+        contentContainerStyle={[styles.listContent, { alignItems: 'center' }]}
+        columnWrapperStyle={{ justifyContent: 'center' }}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.centered}>
+            <Ionicons name="sad-outline" size={48} color="#1976d2" />
+            <Text style={{ color: '#1976d2', marginTop: 8 }}>
+              No hay eventos en {category}.
+            </Text>
+          </View>
+        }
+      />
+    </View>
+  );
+}
