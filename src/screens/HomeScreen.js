@@ -11,6 +11,7 @@ import styles from './HomeScreen.styles';
 import { AuthContext } from '../context/AuthContext';
 import { Image as ExpoImage } from 'expo-image';
 import { requestNotificationPermission, sendTestNotification } from '../utils/notifications';
+import mobileAds, { BannerAd, BannerAdSize, TestIds } from "react-native-google-mobile-ads";
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
 
@@ -215,4 +216,17 @@ function isUpcoming(dateStr) {
   const e = toLocalMidnightMs(dateStr);
   const t = todayLocalMidnightMs();
   return !Number.isNaN(e) && e >= t;
+}
+export default function AdBanner() {
+  useEffect(() => {
+    mobileAds().initialize();
+  }, []);
+
+  return (
+    <BannerAd
+      unitId={TestIds.BANNER}
+      size={BannerAdSize.ADAPTIVE_BANNER}
+      requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+    />
+  );
 }

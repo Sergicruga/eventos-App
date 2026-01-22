@@ -9,6 +9,8 @@ import fs from "fs";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+
+
 dotenv.config();
 const { Pool } = pkg;
 
@@ -953,6 +955,24 @@ const JWT_SECRET =
 function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
 }
+function authMiddleware(req, res, next) {
+  const header = req.headers.authorization || "";
+  const [type, token] = header.split(" ");
+
+  if (type !== "Bearer" || !token) {
+    return res.status(401).json({ message: "No autorizado" });
+  }
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    // payload tiene lo que tú firmas: { id, email, iat, exp }
+    req.user = payload;
+    return next();
+  } catch (e) {
+    return res.status(401).json({ message: "Token inválido" });
+  }
+}
+
 
 app.post("/auth/register", async (req, res) => {
   try {
@@ -999,6 +1019,7 @@ app.post("/auth/register", async (req, res) => {
     res.status(500).json({ message: "Error registrando usuario" });
   }
 });
+
 
 
 app.post("/auth/login", async (req, res) => {
