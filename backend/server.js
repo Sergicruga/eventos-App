@@ -1042,6 +1042,16 @@ app.post("/auth/login", async (req, res) => {
       .json({ message: "Error al iniciar sesión" });
   }
 });
+app.delete("/users/me", authMiddleware, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM users WHERE id = $1", [req.user.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE USER ERROR:", e);
+    res.status(500).json({ message: "Error eliminando la cuenta" });
+  }
+});
+
 
 /* ==========================
    START SERVER

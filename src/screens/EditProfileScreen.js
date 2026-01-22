@@ -1,9 +1,19 @@
 // src/screens/EditProfileScreen.js
 import React, { useContext, useEffect, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+} from "react-native";
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
 import { updateProfile, changePassword } from "../api/users";
+import { API_URL } from "../api/config"; // ✅ añadido
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -69,7 +79,8 @@ export default function EditProfileScreen({ navigation }) {
   const savePassword = async () => {
     if (!uid) return;
     if (!currentPassword || !newPassword) return Alert.alert("Campos requeridos", "Rellena ambas contraseñas.");
-    if (newPassword.length < 6) return Alert.alert("Contraseña débil", "La nueva contraseña debe tener al menos 6 caracteres.");
+    if (newPassword.length < 6)
+      return Alert.alert("Contraseña débil", "La nueva contraseña debe tener al menos 6 caracteres.");
 
     setChangingPwd(true);
     try {
@@ -86,6 +97,37 @@ export default function EditProfileScreen({ navigation }) {
       }
     } finally {
       setChangingPwd(false);
+    }
+  };
+
+  // ✅ Eliminar cuenta (mínimo, sin romper nada)
+  const handleDeleteAccount = async () => {
+    try {
+      if (!auth?.token) {
+        return Alert.alert("Error", "Sesión inválida. Vuelve a iniciar sesión.");
+      }
+
+      const res = await fetch(`${API_URL}/users/me`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${auth.token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        let msg = "No se pudo eliminar la cuenta";
+        try {
+          msg = JSON.parse(txt)?.message || msg;
+        } catch {}
+        return Alert.alert("Error", msg);
+      }
+
+      // Cerrar sesión y volver a login
+      await auth.logout?.();
+    } catch (e) {
+      Alert.alert("Error", "No se pudo eliminar la cuenta");
     }
   };
 
@@ -143,8 +185,44 @@ export default function EditProfileScreen({ navigation }) {
         style={{ backgroundColor: "#2563eb", padding: 14, borderRadius: 12, alignItems: "center" }}
         activeOpacity={0.85}
       >
-        {changingPwd ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontWeight: "600" }}>Actualizar contraseña</Text>}
+        {changingPwd ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={{ color: "#fff", fontWeight: "600" }}>Actualizar contraseña</Text>
+        )}
+      </TouchableOpacity>
+
+      {/* ✅ Botón eliminar cuenta */}
+      <TouchableOpacity
+        style={styles.deleteBtn}
+        onPress={() =>
+          Alert.alert(
+            "Eliminar cuenta",
+            "Esta acción no se puede deshacer. ¿Seguro que quieres eliminar tu cuenta?",
+            [
+              { text: "Cancelar", style: "cancel" },
+              { text: "Eliminar", style: "destructive", onPress: handleDeleteAccount },
+            ]
+          )
+        }
+      >
+        <Text style={styles.deleteBtnText}>Eliminar mi cuenta</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  deleteBtn: {
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: "#ef4444",
+    padding: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  deleteBtnText: {
+    color: "#ef4444",
+    fontWeight: "600",
+  },
+});
