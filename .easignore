@@ -1,0 +1,2 @@
+# No ignores nada crítico
+!src/api/config.js
