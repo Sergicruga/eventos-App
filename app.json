@@ -13,13 +13,14 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Necesitamos acceder a tus fotos para elegir la imagen del evento",
         "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para elegir el lugar del evento."
       }
     },
     "android": {
+      "supportsTablet": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
