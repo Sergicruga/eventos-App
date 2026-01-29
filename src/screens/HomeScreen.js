@@ -79,54 +79,26 @@ const CATEGORIES = [
 
 // ✅ Banner component (aislado para no tocar tu lógica)
 function HomeBannerAd() {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
 
-  const unitId = TestIds.BANNER; // ✅ TEST mientras pruebas
+  const adUnitId = __DEV__
+    ? TestIds.BANNER
+    : "ca-app-pub-9396892293971176/3865947873";
 
   return (
-    <View style={{ alignItems: "center", marginTop: 10, marginBottom: 8 }}>
-      {/* ✅ Fallback si no carga / no hay fill */}
-      {(!loaded || failed) && (
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={{
-            width: 320,
-            height: 50,
-            borderRadius: 10,
-            justifyContent: "center",
-            alignItems: "center",
-            paddingHorizontal: 12,
-          }}
-          onPress={() => {
-            // aquí puedes navegar a tu pantalla premium, o abrir un link, etc.
-            // navigation.navigate("CreateEventScreen");
-          }}
-        >
-          <Text style={{ fontWeight: "700" }}>🎉 Descubre eventos cerca de ti</Text>
-          <Text style={{ fontSize: 12, opacity: 0.8 }}>Publicidad / Promoción</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* ✅ AdMob */}
+    <View style={{ alignItems: "center", marginVertical: 10 }}>
       <BannerAd
-        unitId={unitId}
+        unitId={adUnitId}
         size={BannerAdSize.BANNER}
-        requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-        onAdLoaded={() => {
-          setLoaded(true);
-          setFailed(false);
+        requestOptions={{
+          requestNonPersonalizedAdsOnly: true,
         }}
-        onAdFailedToLoad={(err) => {
-          setFailed(true);
-          setLoaded(false);
-          // si quieres ver el error:
-          // console.log("Banner error:", err);
-        }}
+        onAdLoaded={() => console.log("✅ Banner cargado")}
+        onAdFailedToLoad={(err) => console.log("❌ Error banner:", err)}
       />
     </View>
   );
 }
+
 
 // Category Card Component
 function CategoryCard({ category, onPress, eventCount }) {
