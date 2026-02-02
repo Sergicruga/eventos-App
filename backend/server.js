@@ -889,32 +889,64 @@ app.get("/events/:eventId/attendees/:userId", async (req, res) => {
    ========================== */
 
 app.get("/events/:eventId/comments", async (req, res) => {
-  const eventId = req.eventId;
-  const { rows } = await pool.query(
-    `SELECT ec.id, ec.comment, ec.created_at, u.name
+  const eventId = req.params.eventId; // ✅ CORRECTO
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         ec.id,
+         ec.comment,
+         ec.created_at,
+         ec.user_id,     -- ✅ para que el frontend pueda navegar
+         u.name,
+         u.photo        -- ✅ para sacar la foto de perfil
        FROM event_comments ec
        JOIN users u ON ec.user_id = u.id
-      WHERE ec.event_id = $1
-      ORDER BY ec.created_at DESC`,
-    [eventId]
-  );
-  res.json(rows);
+       WHERE ec.event_id = $1
+       ORDER BY ec.created_at DESC`,
+      [eventId]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error("GET comments error:", e);
+    res.status(500).json({ error: "Error cargando comentarios" });
+  }
 });
 
 app.post("/events/:eventId/comments", async (req, res) => {
-  const eventId = req.eventId;
+  const eventId = req.params.eventId; // ✅ CORRECTO
   const { userId, comment } = req.body;
-  if (!userId || !comment)
-    return res.status(400).json({ error: "userId y comment requeridos" });
 
-  const { rows } = await pool.query(
-    `INSERT INTO event_comments (event_id, user_id, comment)
-     VALUES ($1, $2, $3)
-     RETURNING id, comment, created_at`,
-    [eventId, userId, comment]
-  );
-  res.status(201).json(rows[0]);
+  if (!userId || !comment) {
+    return res.status(400).json({ error: "userId y comment requeridos" });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO event_comments (event_id, user_id, comment)
+       VALUES ($1, $2, $3)
+       RETURNING id, comment, created_at, user_id`,
+      [eventId, userId, comment]
+    );
+
+    // ✅ opcional: devolver también name/photo inmediatamente
+    const inserted = rows[0];
+    const { rows: urows } = await pool.query(
+      `SELECT id, name, photo FROM users WHERE id = $1`,
+      [inserted.user_id]
+    );
+
+    res.status(201).json({
+      ...inserted,
+      name: urows?.[0]?.name ?? null,
+      photo: urows?.[0]?.photo ?? null,
+    });
+  } catch (e) {
+    console.error("POST comments error:", e);
+    res.status(500).json({ error: "Error creando comentario" });
+  }
 });
+
 
 /* ==========================
    AUTH (registro / login)
