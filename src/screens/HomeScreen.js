@@ -79,21 +79,21 @@ const CATEGORIES = [
 
 // ✅ Banner component (aislado para no tocar tu lógica)
 function HomeBannerAd() {
-
-  const adUnitId = __DEV__
-    ? TestIds.BANNER
-    : "ca-app-pub-9396892293971176/3865947873";
+  const unitId = "ca-app-pub-9396892293971176/3865947873"; // ✅ primero test sí o sí
 
   return (
     <View style={{ alignItems: "center", marginVertical: 10 }}>
       <BannerAd
-        unitId={adUnitId}
+        unitId={unitId}
         size={BannerAdSize.BANNER}
-        requestOptions={{
-          requestNonPersonalizedAdsOnly: true,
+        requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+        onAdLoaded={() => console.log("✅ Banner loaded")}
+        onAdFailedToLoad={(err) => {
+          console.log("❌ Banner failed");
+          console.log("code:", err?.code);
+          console.log("message:", err?.message);
+          console.log("full:", JSON.stringify(err, null, 2));
         }}
-        onAdLoaded={() => console.log("✅ Banner cargado")}
-        onAdFailedToLoad={(err) => console.log("❌ Error banner:", err)}
       />
     </View>
   );
