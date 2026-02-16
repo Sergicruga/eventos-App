@@ -14,6 +14,7 @@ import { uploadEventImage } from '../api/upload';
 import { Calendar } from 'react-native-calendars'; // Add this import at the top
 import { API_URL } from '../api/config'; // <-- necesario para resolver rutas relativas
 import { EVENT_CATEGORIES } from '../constants/categories';
+import { formatAddress, normalizeDate } from '../utils/eventFormHelpers';
 
 const COLORS = {
   primary: '#3B5BA9',
@@ -202,31 +203,6 @@ export default function EditEventScreen({ route, navigation }) {
     }
     setMapVisible(false);
   }, [coords]);
-
-  // ---------- Utils ----------
-  const formatAddress = (a) => {
-    const line1Parts = [];
-    if (a.street) line1Parts.push(a.street);
-    if (a.streetNumber) line1Parts.push(String(a.streetNumber));
-    if (!a.street && a.name) line1Parts.push(String(a.name));
-    const line1 = line1Parts.join(' ').trim();
-
-    const city = a.city || a.subregion;
-    const line2Parts = [city, a.region].filter(Boolean);
-
-    const parts = [line1, ...line2Parts, a.postalCode, a.country].filter(Boolean);
-    const seen = new Set();
-    const dedup = parts.filter(p => {
-      const key = p.trim().toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    return dedup.join(', ').trim() || [a.name, a.country].filter(Boolean).join(', ');
-  };
-
-  const normalizeDate = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d));
 
   // ---------- Save ----------
   const [description, setDescription] = useState(currentEvent?.description || '');

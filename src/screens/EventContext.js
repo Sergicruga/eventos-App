@@ -156,9 +156,6 @@ export function EventProvider({ children }) {
       });
 
       const raw = await res.text();
-      console.log('POST /events status:', res.status);
-      console.log('POST /events raw body:', raw);
-
       let saved = null;
       try { saved = raw ? JSON.parse(raw) : null; } catch {}
 
@@ -188,7 +185,6 @@ export function EventProvider({ children }) {
       return mapped;
 
     } catch (e) {
-      console.warn('Fallo backend, guardando localmente:', e.message);
       setEvents(prev => [
         {
           ...event,

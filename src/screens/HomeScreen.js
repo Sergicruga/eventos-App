@@ -12,6 +12,7 @@ import { AuthContext } from '../context/AuthContext';
 import { Image as ExpoImage } from 'expo-image';
 import { requestNotificationPermission, sendTestNotification } from '../utils/notifications';
 import { EVENT_CATEGORIES, eventMatchesCategory } from '../constants/categories';
+import { isUpcoming } from '../utils/dateHelpers';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
 
@@ -48,14 +49,6 @@ export default function HomeScreen() {
   const myUserId = user?.id != null ? String(user.id) : null;
 
   useEffect(() => {
-    console.log('🏠 HomeScreen events:', communityEvents.length);
-    console.log('🏠 HomeScreen myUserId:', myUserId);
-    communityEvents.slice(0, 3).forEach(ev => {
-      console.log('  Event:', ev.title, 'type:', ev.type, 'category_slug:', ev.category_slug);
-    });
-  }, [communityEvents, myUserId]);
-
-  useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -86,13 +79,8 @@ export default function HomeScreen() {
   const categoryCounts = useMemo(() => {
     const counts = {};
     EVENT_CATEGORIES.forEach(cat => {
-      const eventsInCategory = upcomingEvents.filter(ev => eventMatchesCategory(ev, cat.slug));
-      counts[cat.slug] = eventsInCategory.length;
-      if (eventsInCategory.length > 0) {
-        console.log(`✓ ${cat.name}: ${eventsInCategory.length} events`);
-      }
+      counts[cat.slug] = upcomingEvents.filter(ev => eventMatchesCategory(ev, cat.slug)).length;
     });
-    console.log('📊 Category counts:', counts);
     return counts;
   }, [upcomingEvents]);
 
@@ -142,28 +130,4 @@ export default function HomeScreen() {
       </TouchableOpacity>
     </View>
   );
-}
-
-function toLocalMidnightMs(dateStr) {
-  if (!dateStr) return NaN;
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
-  if (m) {
-    const [_, y, mm, dd] = m;
-    return new Date(Number(y), Number(mm) - 1, Number(dd), 0, 0, 0, 0).getTime();
-  }
-  const t = new Date(dateStr).getTime();
-  if (Number.isNaN(t)) return NaN;
-  const d = new Date(t);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
-}
-
-function todayLocalMidnightMs() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
-}
-
-function isUpcoming(dateStr) {
-  const e = toLocalMidnightMs(dateStr);
-  const t = todayLocalMidnightMs();
-  return !Number.isNaN(e) && e >= t;
 }

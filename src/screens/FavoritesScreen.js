@@ -78,7 +78,7 @@ export default function FavoritesScreen({ navigation }) {
       try {
         await fetchServerFavs(controller.signal);
       } catch (e) {
-        if (mounted) console.warn('Error cargando favoritos de BD:', e.message);
+        // Silently fail if favorites can't be loaded from server
       } finally {
         clearTimeout(timeout);
         if (mounted) setLoading(false);

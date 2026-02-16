@@ -16,6 +16,7 @@ import styles from './HomeScreen.styles';
 import { AuthContext } from '../context/AuthContext';
 import { Image as ExpoImage } from 'expo-image';
 import { EVENT_CATEGORIES, eventMatchesCategory, findCategoryBySlug } from '../constants/categories';
+import { isUpcoming, formatDateDMY } from '../utils/dateHelpers';
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   if (lat1 == null || lat2 == null) return null;
@@ -29,46 +30,6 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
       Math.sin(dLon / 2) ** 2;
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
-}
-
-function toLocalMidnightMs(dateStr) {
-  if (!dateStr) return NaN;
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
-  if (m) {
-    const [_, y, mm, dd] = m;
-    return new Date(Number(y), Number(mm) - 1, Number(dd), 0, 0, 0, 0).getTime();
-  }
-  const t = new Date(dateStr).getTime();
-  if (Number.isNaN(t)) return NaN;
-  const d = new Date(t);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
-}
-
-function todayLocalMidnightMs() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
-}
-
-function isUpcoming(dateStr) {
-  const e = toLocalMidnightMs(dateStr);
-  const t = todayLocalMidnightMs();
-  return !Number.isNaN(e) && e >= t;
-}
-
-function formatDateDMY(dateStr) {
-  if (!dateStr) return '';
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
-  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-  const m2 = /^(\d{4})\/(\d{2})\/(\d{2})/.exec(dateStr);
-  if (m2) return `${m2[3]}-${m2[2]}-${m2[1]}`;
-  const d = new Date(dateStr);
-  if (!isNaN(d)) {
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yyyy = d.getFullYear();
-    return `${dd}-${mm}-${yyyy}`;
-  }
-  return dateStr;
 }
 
 function EventCard({ item, isFavorite, onToggleFavorite, onPress, getEventImageSource, effectiveImage }) {

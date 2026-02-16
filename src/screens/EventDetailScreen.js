@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { scheduleEventNotification } from '../utils/notifications';
 import { EVENT_CATEGORIES, normalizeEventCategory } from '../constants/categories';
+import { formatDateOnlyEs, getEventDateFromEvent, getEventTimeHHMM, formatTimeHHMM } from '../utils/dateHelpers';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -97,57 +98,6 @@ const looksLikeTicketmasterId = (id) => typeof id === 'string' && !/^\d+$/.test(
 const buildTicketmasterUrl = (id) => {
   if (!looksLikeTicketmasterId(id)) return null;
   return `https://www.ticketmaster.es/event/${encodeURIComponent(id)}`;
-};
-
-// ====== NUEVO: utilidades de fecha/hora ======
-const getEventDateFromEvent = (ev) => {
-  const s =
-    ev?.startsAt ?? ev?.starts_at ??
-    ev?.event_at ?? ev?.date ?? null;
-
-  if (typeof s === 'string') {
-    const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (m) return m[1];
-  }
-  if (s instanceof Date) return s.toISOString().slice(0, 10);
-  return null;
-};
-
-const getEventTimeHHMM = (ev) => {
-  const plain = ev?.timeStart ?? ev?.time_start ?? null;
-  if (typeof plain === 'string' && /^\d{2}:\d{2}/.test(plain)) return plain.slice(0, 5);
-
-  const s = ev?.startsAt ?? ev?.starts_at ?? ev?.event_at ?? null;
-  if (typeof s === 'string') {
-    const m = s.match(/T(\d{2}):(\d{2})/);
-    if (m) return `${m[1]}:${m[2]}`;
-  }
-  return null;
-};
-
-const formatDateOnlyEs = (dateStr) => {
-  if (!dateStr) return '';
-  const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return String(dateStr);
-  const y = Number(m[1]);
-  const mo = Number(m[2]);
-  const d = Number(m[3]);
-  const meses = [
-    'enero','febrero','marzo','abril','mayo','junio',
-    'julio','agosto','septiembre','octubre','noviembre','diciembre'
-  ];
-  return `${d} de ${meses[mo - 1]} de ${y}`;
-};
-
-const formatTimeHHMM = (evOrStr) => {
-  if (!evOrStr) return '';
-  if (typeof evOrStr === 'string') {
-    const m = evOrStr.match(/T(\d{2}):(\d{2})/);
-    if (m) return `${m[1]}:${m[2]}`;
-    if (/^\d{2}:\d{2}/.test(evOrStr)) return evOrStr.slice(0, 5);
-    return '';
-  }
-  return getEventTimeHHMM(evOrStr) ?? '';
 };
 
 // ===== NUEVO: helpers asistentes =====
@@ -354,11 +304,7 @@ export default function EventDetailScreen({ route, navigation }) {
 
   useEffect(() => {
     const idCandidate = current?.externalId || current?.tm_id || current?.id;
-    console.log('=== [EventDetail] Debug ===');
-    console.log('route.params.buyUrl:', route?.params?.buyUrl);
-    console.log('current.id/title:', current?.id, current?.title);
-    console.log('idCandidate (TM fallback):', idCandidate);
-    console.log('=> buyUrl:', buyUrl);
+    // buyUrl is already resolved above
   }, [route?.params?.buyUrl, current?.id, buyUrl]);
 
   // ----- Asistentes -----

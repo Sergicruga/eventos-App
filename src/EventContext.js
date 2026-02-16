@@ -738,16 +738,6 @@ export function EventProvider({ children }) {
 
   // ===== Crear evento =====
   const addEvent = async (event) => {
-    console.log('[addEvent] input:', {
-      title: event?.title,
-      date: event?.date,
-      timeStart: event?.timeStart,
-      startsAt: event?.startsAt,
-      location: event?.location,
-      latitude: event?.latitude,
-      longitude: event?.longitude,
-    });
-
     const eventMs = Date.parse(event?.date);
     const now = new Date();
     const todayMid = new Date(
@@ -755,17 +745,8 @@ export function EventProvider({ children }) {
       now.getMonth(),
       now.getDate()
     ).getTime();
-    console.log(
-      '[addEvent] parsedDateMs:',
-      eventMs,
-      'todayMid:',
-      todayMid
-    );
 
     if (Number.isNaN(eventMs) || eventMs < todayMid) {
-      console.warn('[addEvent] Fecha inválida → cancelado', {
-        eventDate: event?.date,
-      });
       Alert.alert(
         'Fecha inválida',
         'No puedes crear un evento con una fecha pasada.'
@@ -796,8 +777,6 @@ export function EventProvider({ children }) {
         created_by: effectiveUser?.id ?? null,
       };
 
-      console.log('[addEvent] POST →', `${API_URL}/events`, payload);
-
       const res = await safeFetch(
         `${API_URL}/events`,
         {
@@ -814,18 +793,12 @@ export function EventProvider({ children }) {
       );
 
       const raw = await res.text();
-      console.log(
-        '[addEvent] response status:',
-        res.status,
-        'body:',
-        raw?.slice(0, 400)
-      );
 
       let saved = null;
       try {
         saved = raw ? JSON.parse(raw) : null;
       } catch (e) {
-        console.warn('[addEvent] JSON parse error:', e?.message);
+        /* parse error */
       }
 
       if (!res.ok) {
@@ -836,7 +809,6 @@ export function EventProvider({ children }) {
         throw new Error(msg);
       }
       if (!saved || typeof saved !== 'object') {
-        console.warn('[addEvent] server empty / not JSON');
         throw new Error('Respuesta del backend vacía o no-JSON');
       }
 
@@ -913,7 +885,6 @@ export function EventProvider({ children }) {
 
       return mapped;
     } catch (e) {
-      console.warn('[addEvent] error:', e?.message);
       Alert.alert(
         'Error al crear evento',
         e?.message ?? 'Error desconocido'
@@ -1077,19 +1048,8 @@ export function EventProvider({ children }) {
       );
 
       const raw = await res.text();
-      console.log(
-        '[attend] status:',
-        res.status,
-        'body:',
-        raw?.slice(0, 400)
-      );
 
       if (!res.ok) {
-        console.warn(
-          '[attend] server NOT OK:',
-          res.status,
-          raw
-        );
         throw new Error(raw || `HTTP ${res.status}`);
       }
 

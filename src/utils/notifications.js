@@ -3,10 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export async function requestNotificationPermission() {
   const { status, canAskAgain } = await Notifications.getPermissionsAsync();
-  console.log('Current notification permission:', status, 'Can ask again:', canAskAgain);
   if (status !== 'granted' && canAskAgain) {
     const { status: newStatus } = await Notifications.requestPermissionsAsync();
-    console.log('Requested permission, new status:', newStatus);
     return newStatus === 'granted';
   }
   return status === 'granted';

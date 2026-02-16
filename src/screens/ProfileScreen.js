@@ -347,7 +347,6 @@ export default function ProfileScreen() {
             });
         }
       } catch (e) {
-        console.log("Error en hydrate profile:", e);
         Alert.alert("Error", e.message);
       } finally {
         setLoading(false);
