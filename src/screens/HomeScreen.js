@@ -71,10 +71,16 @@ export default function HomeScreen() {
     requestNotificationPermission();
   }, []);
 
-  // Get upcoming events - INCLUDE all events for counting (even user's own)
+  // Get upcoming events and filter out own events
   const upcomingEvents = useMemo(() => {
-    return communityEvents.filter(ev => isUpcoming(ev.date));
-  }, [communityEvents]);
+    return communityEvents
+      .filter(ev => isUpcoming(ev.date))
+      .filter(ev => {
+        if (!myUserId) return true;
+        const createdByRaw = ev.created_by ?? ev.createdById ?? ev.createdBy ?? null;
+        return createdByRaw == null ? true : String(createdByRaw) !== myUserId;
+      });
+  }, [communityEvents, myUserId]);
 
   // Count events by category
   const categoryCounts = useMemo(() => {
