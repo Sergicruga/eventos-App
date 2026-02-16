@@ -1,3 +1,4 @@
+// src/screens/EventDetailScreen.js
 import React, { useContext, useMemo, useState, useEffect, useCallback } from 'react';
 import {
   View, Text, Image, StyleSheet, Alert, Linking, ScrollView, TouchableOpacity,
@@ -11,8 +12,8 @@ import { AuthContext } from '../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { scheduleEventNotification } from '../utils/notifications';
-import { EVENT_CATEGORIES, normalizeEventCategory } from '../constants/categories';
-import { formatDateOnlyEs, getEventDateFromEvent, getEventTimeHHMM, formatTimeHHMM } from '../utils/dateHelpers';
+import { normalizeEventCategory } from '../constants/categories';
+import { formatDateOnlyEs, getEventDateFromEvent, formatTimeHHMM } from '../utils/dateHelpers';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -187,7 +188,33 @@ const getCategoryDisplayName = (event) => {
   return category?.name || 'Otro';
 };
 
-// ==============================================
+// ===== NUEVO: helpers comentarios =====
+const getCommentUserId = (c) => {
+  if (!c) return null;
+  return c.userId ?? c.user_id ?? c.uid ?? c.id_user ?? c.authorId ?? c.author_id ?? null;
+};
+
+const getCommentName = (c) => {
+  if (!c) return '';
+  return c.name || c.userName || c.username || c.authorName || c.author_name || c.email || '';
+};
+
+const getCommentAvatar = (c) => {
+  if (!c) return null;
+
+  // 1) photo (mismo campo que users)
+  if (c.photo) return buildAbsolutePhoto(c.photo);
+
+  // 2) típicos
+  const keys = ['avatar', 'avatarUrl', 'avatar_url', 'profileImage', 'profile_image', 'image', 'image_url'];
+  for (const k of keys) {
+    const v = c[k];
+    if (typeof v === 'string' && v.trim()) return buildAbsolutePhoto(v.trim()) || v.trim();
+  }
+
+  return null;
+};
+// ======================================
 
 export default function EventDetailScreen({ route, navigation }) {
   const { event } = route.params;
@@ -302,11 +329,6 @@ export default function EventDetailScreen({ route, navigation }) {
 
   const buyUrl = computedBuyUrl;
 
-  useEffect(() => {
-    const idCandidate = current?.externalId || current?.tm_id || current?.id;
-    // buyUrl is already resolved above
-  }, [route?.params?.buyUrl, current?.id, buyUrl]);
-
   // ----- Asistentes -----
   const [attendees, setAttendees] = useState([]);
   const [isJoined, setIsJoined] = useState(false);
@@ -395,7 +417,8 @@ export default function EventDetailScreen({ route, navigation }) {
     setLoadingComments(true);
     try {
       const res = await fetch(`${API_URL}/events/${current.id}/comments`);
-      setComments(await res.json());
+      const data = await res.json();
+      setComments(Array.isArray(data) ? data : []);
     } catch {
       setComments([]);
     }
@@ -720,19 +743,60 @@ export default function EventDetailScreen({ route, navigation }) {
             <Text style={styles.sectionTitle}>
               <Ionicons name="chatbubble-ellipses-outline" size={18} color={COLORS.primary} /> Comentarios
             </Text>
+
             {loadingComments ? (
               <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 12 }} />
             ) : comments.length > 0 ? (
-              comments.map(item => (
-                <View key={item.id} style={styles.commentContainer}>
-                  <Text style={styles.commentName}>{item.name}</Text>
-                  <Text style={styles.commentText}>{item.comment}</Text>
-                  <Text style={styles.commentDate}>{new Date(item.created_at).toLocaleString()}</Text>
-                </View>
-              ))
+              comments.map((item, idx) => {
+                const name = getCommentName(item);
+                const avatar = getCommentAvatar(item);
+                const initials = getInitials(name);
+                const targetUserId = getCommentUserId(item);
+
+                const canNavigate = targetUserId != null && String(targetUserId).trim() !== '';
+
+                return (
+                  <View key={item.id ?? `${idx}`} style={styles.commentContainer}>
+                    <View style={styles.commentHeaderRow}>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        disabled={!canNavigate}
+                        onPress={() =>
+                          canNavigate &&
+                          navigation.navigate('Tabs', {
+                            screen: 'Profile',
+                            params: { userId: String(targetUserId) },
+                          })
+                        }
+                        style={styles.commentAvatarWrap}
+                      >
+                        {avatar ? (
+                          <Image source={{ uri: avatar }} style={styles.commentAvatarImg} />
+                        ) : (
+                          <View style={styles.commentAvatarFallback}>
+                            <Text style={styles.commentAvatarInitials}>{initials}</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.commentName}>
+                          {name || 'Usuario'}
+                        </Text>
+                        <Text style={styles.commentText}>{item.comment}</Text>
+                      </View>
+                    </View>
+
+                    <Text style={styles.commentDate}>
+                      {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
+                    </Text>
+                  </View>
+                );
+              })
             ) : (
               <Text style={{ color: COLORS.gray, marginVertical: 8 }}>No hay comentarios.</Text>
             )}
+
             <View style={styles.commentInputRow}>
               <TextInput
                 value={newComment}
@@ -853,38 +917,17 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontWeight: 'bold', fontSize: 18, color: COLORS.primary, marginBottom: 6 },
   attendeeText: { color: COLORS.text, fontSize: 15, marginVertical: 1, marginLeft: 2 },
-  attendeeAvatarList: {
-    paddingVertical: 4,
-  },
-  attendeeAvatarWrap: {
-    width: 64,
-    marginRight: 10,
-    alignItems: 'center',
-  },
-  attendeeAvatarImg: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.inputBg,
-  },
+  attendeeAvatarList: { paddingVertical: 4 },
+  attendeeAvatarWrap: { width: 64, marginRight: 10, alignItems: 'center' },
+  attendeeAvatarImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.inputBg },
   attendeeAvatarFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 48, height: 48, borderRadius: 24,
     backgroundColor: COLORS.inputBg,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-  attendeeAvatarInitials: {
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-  attendeeAvatarName: {
-    marginTop: 4,
-    fontSize: 11,
-    color: COLORS.text,
-    textAlign: 'center',
-  },
+  attendeeAvatarInitials: { fontWeight: '700', color: COLORS.primary },
+  attendeeAvatarName: { marginTop: 4, fontSize: 11, color: COLORS.text, textAlign: 'center' },
+
   actionBtnContainer: {
     width: '92%',
     alignSelf: 'center',
@@ -907,6 +950,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   primaryBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 16 },
+
   commentContainer: {
     marginVertical: 6,
     backgroundColor: COLORS.inputBg,
@@ -920,7 +964,41 @@ const styles = StyleSheet.create({
   },
   commentName: { fontWeight: 'bold', color: COLORS.primary, marginBottom: 2 },
   commentText: { color: COLORS.text, fontSize: 15 },
-  commentDate: { fontSize: 10, color: COLORS.gray, marginTop: 2, alignSelf: 'flex-end' },
+  commentDate: { fontSize: 10, color: COLORS.gray, marginTop: 6, alignSelf: 'flex-end' },
+
+  // ===== NUEVO: layout avatar comentarios =====
+  commentHeaderRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  commentAvatarWrap: {
+    width: 40,
+    alignItems: 'center',
+  },
+  commentAvatarImg: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.inputBg,
+  },
+  commentAvatarFallback: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commentAvatarInitials: {
+    fontWeight: '800',
+    color: COLORS.primary,
+    fontSize: 12,
+  },
+  // ==========================================
+
   commentInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
