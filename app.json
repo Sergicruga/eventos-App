@@ -49,14 +49,7 @@
       }
     },
     "plugins": [
-      "expo-font",
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": "ca-app-pub-9396892293971176~4708610502",
-          "iosAppId": "ca-app-pub-TU_IOS_APP_ID~TU_ID"
-        }
-      ]
+      "expo-font"
     ]
 
   }
