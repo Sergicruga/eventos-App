@@ -67,7 +67,6 @@ pool
     console.error("❌ Error conectando a PostgreSQL:", err.message)
   );
 
-
 /* ==========================
    MIDDLEWARES
    ========================== */
@@ -161,8 +160,10 @@ app.get("/events", async (req, res) => {
     if (!userId) {
       const { rows } = await pool.query(
         `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
-                e.latitude, e.longitude, e.created_by
+                e.latitude, e.longitude, e.created_by, e.category_id,
+                ec.slug as category_slug, ec.name as category_name
            FROM events e
+           LEFT JOIN event_categories ec ON e.category_id = ec.id
           ORDER BY e.event_at DESC`
       );
       return res.json(rows);
@@ -171,6 +172,8 @@ app.get("/events", async (req, res) => {
     const { rows } = await pool.query(
       `SELECT 
           e.*,
+          ec.slug as category_slug,
+          ec.name as category_name,
           EXISTS (
             SELECT 1 FROM event_favorites f
             WHERE f.event_id = e.id AND f.user_id = $1
@@ -184,6 +187,7 @@ app.get("/events", async (req, res) => {
             0
           ) AS attendees_count
        FROM events e
+       LEFT JOIN event_categories ec ON e.category_id = ec.id
        ORDER BY e.event_at DESC`,
       [userId]
     );
@@ -221,15 +225,50 @@ app.post("/events", async (req, res) => {
     }
 
     const createdByInt = created_by ? Number(created_by) : null;
+    
+    // Look up category_id from type slug
+    let categoryId = null;
+    if (type) {
+      const catResult = await pool.query(
+        `SELECT id FROM event_categories WHERE slug = $1`,
+        [String(type).toLowerCase()]
+      );
+      if (catResult.rows.length > 0) {
+        categoryId = catResult.rows[0].id;
+      }
+    }
 
     const { rows } = await pool.query(
-      `INSERT INTO events (title, description, event_at, location, type, image, latitude, longitude, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       RETURNING id, title, description, event_at, location, type, image, latitude, longitude, created_by`,
-      [title, description, event_at, location, type, image, latitude, longitude, createdByInt]
+      `INSERT INTO events (title, description, event_at, location, type, category_id, image, latitude, longitude, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING id, title, description, event_at, location, type, category_id, image, latitude, longitude, created_by`,
+      [
+        title,
+        description,
+        event_at,
+        location,
+        type,
+        categoryId,
+        image,
+        latitude,
+        longitude,
+        createdByInt,
+      ]
     );
 
     const row = rows[0];
+
+    // Join with event_categories to get category info
+    if (row && row.category_id) {
+      const catResult = await pool.query(
+        `SELECT slug, name FROM event_categories WHERE id = $1`,
+        [row.category_id]
+      );
+      if (catResult.rows.length > 0) {
+        row.category_slug = catResult.rows[0].slug;
+        row.category_name = catResult.rows[0].name;
+      }
+    }
 
     if (row?.created_by) {
       const u = await pool.query(`SELECT name FROM users WHERE id=$1`, [
@@ -285,9 +324,7 @@ app.delete("/events/:eventId", async (req, res) => {
   } catch (e) {
     await client.query("ROLLBACK");
     console.error("DELETE /events/:eventId error:", e);
-    return res
-      .status(500)
-      .json({ error: "Error eliminando el evento" });
+    return res.status(500).json({ error: "Error eliminando el evento" });
   } finally {
     client.release();
   }
@@ -335,9 +372,21 @@ app.patch("/events/:eventId", async (req, res) => {
   pushIfDefined("longitude", longitude);
 
   if (set.length === 0) {
-    return res
-      .status(400)
-      .json({ error: "No hay campos para actualizar" });
+    return res.status(400).json({ error: "No hay campos para actualizar" });
+  }
+
+  // If type is being updated, also look up and update category_id
+  let categoryId = null;
+  if (typeof type !== "undefined" && type) {
+    const catResult = await pool.query(
+      `SELECT id FROM event_categories WHERE slug = $1`,
+      [String(type).toLowerCase()]
+    );
+    if (catResult.rows.length > 0) {
+      categoryId = catResult.rows[0].id;
+      set.push(`category_id = $${i++}`);
+      values.push(categoryId);
+    }
   }
 
   values.push(eventId);
@@ -348,7 +397,7 @@ app.patch("/events/:eventId", async (req, res) => {
       UPDATE events
          SET ${set.join(", ")}
        WHERE id = $${i}
-       RETURNING id, title, description, event_at, location, type, image, latitude, longitude, created_by
+       RETURNING id, title, description, event_at, location, type, category_id, image, latitude, longitude, created_by
       `,
       values
     );
@@ -357,7 +406,21 @@ app.patch("/events/:eventId", async (req, res) => {
       return res.status(404).json({ error: "Evento no encontrado" });
     }
 
-    res.json(rows[0]);
+    const row = rows[0];
+
+    // Join with event_categories to get category info
+    if (row && row.category_id) {
+      const catResult = await pool.query(
+        `SELECT slug, name FROM event_categories WHERE id = $1`,
+        [row.category_id]
+      );
+      if (catResult.rows.length > 0) {
+        row.category_slug = catResult.rows[0].slug;
+        row.category_name = catResult.rows[0].name;
+      }
+    }
+
+    res.json(row);
   } catch (e) {
     console.error("PATCH /events error:", e);
     res.status(500).json({ error: "Error actualizando evento" });
@@ -433,10 +496,7 @@ app.put("/users/:userId", async (req, res) => {
   const { userId } = req.params;
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: "Nombre requerido" });
-  await pool.query("UPDATE users SET name = $1 WHERE id = $2", [
-    name,
-    userId,
-  ]);
+  await pool.query("UPDATE users SET name = $1 WHERE id = $2", [name, userId]);
   res.json({ success: true });
 });
 
@@ -453,19 +513,12 @@ const profileStorage = multer.diskStorage({
 const uploadProfile = multer({ storage: profileStorage });
 
 // Subir foto de perfil
-app.post(
-  "/users/:userId/photo",
-  uploadProfile.single("photo"),
-  async (req, res) => {
-    const { userId } = req.params;
-    const photoUrl = `/uploads/${req.file.filename}`;
-    await pool.query("UPDATE users SET photo = $1 WHERE id = $2", [
-      photoUrl,
-      userId,
-    ]);
-    res.json({ photo: photoUrl });
-  }
-);
+app.post("/users/:userId/photo", uploadProfile.single("photo"), async (req, res) => {
+  const { userId } = req.params;
+  const photoUrl = `/uploads/${req.file.filename}`;
+  await pool.query("UPDATE users SET photo = $1 WHERE id = $2", [photoUrl, userId]);
+  res.json({ photo: photoUrl });
+});
 
 /* ==== AMIGOS ==== */
 
@@ -541,9 +594,7 @@ app.get("/friends/:userId", async (req, res) => {
 app.delete("/friends", async (req, res) => {
   const { userId, friendId } = req.body;
   if (!userId || !friendId) {
-    return res
-      .status(400)
-      .json({ error: "userId and friendId required" });
+    return res.status(400).json({ error: "userId and friendId required" });
   }
   try {
     await pool.query(
@@ -638,10 +689,7 @@ app.post("/friend-requests/:requestId/accept", async (req, res) => {
       [sender_id, receiver_id]
     );
 
-    await client.query(
-      `DELETE FROM friend_requests WHERE id = $1`,
-      [requestId]
-    );
+    await client.query(`DELETE FROM friend_requests WHERE id = $1`, [requestId]);
 
     await client.query("COMMIT");
     console.log("[friend-requests] aceptada", { requestId, sender_id, receiver_id });
@@ -659,10 +707,7 @@ app.post("/friend-requests/:requestId/accept", async (req, res) => {
 app.delete("/friend-requests/:requestId", async (req, res) => {
   const { requestId } = req.params;
   try {
-    await pool.query(
-      `DELETE FROM friend_requests WHERE id = $1`,
-      [requestId]
-    );
+    await pool.query(`DELETE FROM friend_requests WHERE id = $1`, [requestId]);
     console.log("[friend-requests] eliminada", { requestId });
     return res.json({ success: true });
   } catch (e) {
@@ -670,7 +715,6 @@ app.delete("/friend-requests/:requestId", async (req, res) => {
     return res.status(500).json({ error: "Error borrando solicitud" });
   }
 });
-
 
 /* ==== EVENTOS CREADOS / ASISTIDOS / FAVORITOS POR USUARIO ==== */
 
@@ -715,13 +759,8 @@ app.get("/users/:userId/events-attending", async (req, res) => {
     );
     res.json(rows);
   } catch (err) {
-    console.error(
-      "Error cargando eventos a los que asiste el usuario:",
-      err
-    );
-    res.status(500).json({
-      error: "Error cargando eventos a los que asistes",
-    });
+    console.error("Error cargando eventos a los que asiste el usuario:", err);
+    res.status(500).json({ error: "Error cargando eventos a los que asistes" });
   }
 });
 
@@ -821,12 +860,10 @@ app.delete("/favorites", async (req, res) => {
 app.get("/api/favorites/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { rows } = await pool.query(
-      "SELECT * FROM favorites WHERE event_id = $1",
-      [id]
-    );
-    if (!rows.length)
-      return res.status(404).json({ message: "No encontrado" });
+    const { rows } = await pool.query("SELECT * FROM favorites WHERE event_id = $1", [
+      id,
+    ]);
+    if (!rows.length) return res.status(404).json({ message: "No encontrado" });
     res.json(rows[0]);
   } catch (err) {
     console.error(err);
@@ -842,9 +879,7 @@ app.get("/api/favorites/:id", async (req, res) => {
 app.post("/attendees", async (req, res) => {
   const { userId, eventId } = req.body;
   if (!userId || !eventId)
-    return res
-      .status(400)
-      .json({ error: "userId y eventId requeridos" });
+    return res.status(400).json({ error: "userId y eventId requeridos" });
 
   await pool.query(
     `INSERT INTO event_attendees (user_id, event_id)
@@ -859,9 +894,7 @@ app.post("/attendees", async (req, res) => {
 app.delete("/attendees", async (req, res) => {
   const { userId, eventId } = req.body;
   if (!userId || !eventId)
-    return res
-      .status(400)
-      .json({ error: "userId y eventId requeridos" });
+    return res.status(400).json({ error: "userId y eventId requeridos" });
 
   await pool.query(
     `DELETE FROM event_attendees WHERE user_id = $1 AND event_id = $2`,
@@ -872,14 +905,14 @@ app.delete("/attendees", async (req, res) => {
 
 // Obtener asistentes de un evento
 app.get("/events/:eventId/attendees", async (req, res) => {
-  const { eventId } = req.params;   // ✅ CORREGIDO
+  const { eventId } = req.params; // ✅ CORREGIDO
 
   try {
     const { rows } = await pool.query(
       `SELECT 
          u.id,
          u.name,
-         u.photo              -- ✅ añadimos la foto
+         u.photo
        FROM event_attendees a
        JOIN users u ON u.id = a.user_id
       WHERE a.event_id = $1`,
@@ -894,7 +927,7 @@ app.get("/events/:eventId/attendees", async (req, res) => {
 
 // Comprobar si un usuario asiste
 app.get("/events/:eventId/attendees/:userId", async (req, res) => {
-  const { eventId } = req.params;   // ✅ CORREGIDO
+  const { eventId } = req.params; // ✅ CORREGIDO
   const { userId } = req.params;
 
   try {
@@ -932,9 +965,7 @@ app.post("/events/:eventId/comments", async (req, res) => {
   const eventId = req.eventId;
   const { userId, comment } = req.body;
   if (!userId || !comment)
-    return res
-      .status(400)
-      .json({ error: "userId y comment requeridos" });
+    return res.status(400).json({ error: "userId y comment requeridos" });
 
   const { rows } = await pool.query(
     `INSERT INTO event_comments (event_id, user_id, comment)
@@ -949,30 +980,27 @@ app.post("/events/:eventId/comments", async (req, res) => {
    AUTH (registro / login)
    ========================== */
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || "dev_secret_super_largo_cámbialo";
+const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_super_largo_cámbialo";
 
 function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
 }
+
+/** ✅ FIX: Middleware JWT para rutas protegidas (mínimo, no toca nada más) */
 function authMiddleware(req, res, next) {
-  const header = req.headers.authorization || "";
-  const [type, token] = header.split(" ");
-
-  if (type !== "Bearer" || !token) {
-    return res.status(401).json({ message: "No autorizado" });
-  }
-
   try {
+    const auth = req.headers.authorization || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+
+    if (!token) return res.status(401).json({ message: "No token provided" });
+
     const payload = jwt.verify(token, JWT_SECRET);
-    // payload tiene lo que tú firmas: { id, email, iat, exp }
-    req.user = payload;
+    req.user = payload; // { id, email, iat, exp }
     return next();
-  } catch (e) {
-    return res.status(401).json({ message: "Token inválido" });
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid/expired token" });
   }
 }
-
 
 app.post("/auth/register", async (req, res) => {
   try {
@@ -988,10 +1016,9 @@ app.post("/auth/register", async (req, res) => {
       });
     }
 
-    const exists = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      [email]
-    );
+    const exists = await pool.query("SELECT id FROM users WHERE email = $1", [
+      email,
+    ]);
     if (exists.rowCount > 0)
       return res.status(409).json({ message: "El email ya está registrado" });
 
@@ -1020,49 +1047,33 @@ app.post("/auth/register", async (req, res) => {
   }
 });
 
-
-
 app.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password)
-      return res
-        .status(400)
-        .json({ message: "Email y contraseña requeridos" });
+      return res.status(400).json({ message: "Email y contraseña requeridos" });
 
     const result = await pool.query(
       "SELECT id, name, email, password FROM users WHERE email = $1",
       [email]
     );
     if (result.rowCount === 0)
-      return res
-        .status(401)
-        .json({ message: "Credenciales inválidas" });
+      return res.status(401).json({ message: "Credenciales inválidas" });
 
     const userRow = result.rows[0];
     const ok = await bcrypt.compare(password, userRow.password);
     if (!ok)
-      return res
-        .status(401)
-        .json({ message: "Credenciales inválidas" });
+      return res.status(401).json({ message: "Credenciales inválidas" });
 
-    const user = {
-      id: userRow.id,
-      name: userRow.name,
-      email: userRow.email,
-    };
-    const token = signToken({
-      id: user.id,
-      email: user.email,
-    });
+    const user = { id: userRow.id, name: userRow.name, email: userRow.email };
+    const token = signToken({ id: user.id, email: user.email });
     res.json({ user, token });
   } catch (e) {
     console.error(e);
-    res
-      .status(500)
-      .json({ message: "Error al iniciar sesión" });
+    res.status(500).json({ message: "Error al iniciar sesión" });
   }
 });
+
 app.delete("/users/me", authMiddleware, async (req, res) => {
   try {
     await pool.query("DELETE FROM users WHERE id = $1", [req.user.id]);
@@ -1072,7 +1083,6 @@ app.delete("/users/me", authMiddleware, async (req, res) => {
     res.status(500).json({ message: "Error eliminando la cuenta" });
   }
 });
-
 
 /* ==========================
    START SERVER

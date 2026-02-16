@@ -37,7 +37,6 @@
     "react-dom": "19.1.0",
     "react-native": "0.81.4",
     "react-native-calendars": "^1.1313.0",
-    "react-native-google-mobile-ads": "^16.0.1",
     "react-native-maps": "1.20.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
@@ -46,6 +45,7 @@
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@react-native-community/cli": "^20.0.2",
+    "baseline-browser-mapping": "^2.9.18",
     "expo-module-scripts": "^5.0.7"
   },
   "private": true
