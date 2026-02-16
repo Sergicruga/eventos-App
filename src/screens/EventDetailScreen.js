@@ -14,6 +14,7 @@ import { scheduleEventNotification } from '../utils/notifications';
 
 // ✅ NUEVO: helper real para cargar usuario
 import { getUser } from '../api/users';
+import { EVENT_CATEGORIES, normalizeEventCategory } from '../constants/categories';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -319,6 +320,15 @@ const formatCommentDate = (raw) => {
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleString();
+};
+
+/**
+ * Get the display name for an event's category
+ */
+const getCategoryDisplayName = (event) => {
+  if (!event) return 'Otro';
+  const category = normalizeEventCategory(event.type || event.type_evento || event.category);
+  return category?.name || 'Otro';
 };
 
 // ==============================================
@@ -728,7 +738,7 @@ export default function EventDetailScreen({ route, navigation }) {
             {current.type && (
               <View style={styles.typeTag}>
                 <Ionicons name="pricetag-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.typeTagText}>{current.type}</Text>
+                <Text style={styles.typeTagText}>{getCategoryDisplayName(current)}</Text>
               </View>
             )}
             {current?.source && (

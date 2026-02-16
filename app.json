@@ -2,6 +2,7 @@
   "expo": {
     "name": "evento-app",
     "slug": "evento-app",
+    "owner": "sergicruga",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,8 +17,10 @@
       "supportsTablet": false,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Necesitamos acceder a tus fotos para elegir la imagen del evento",
-        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para elegir el lugar del evento."
-      }
+        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para elegir el lugar del evento.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.sergicruga.eventoapp"
     },
     "android": {
       "supportsTablet": false,

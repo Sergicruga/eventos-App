@@ -158,8 +158,10 @@ app.get("/events", async (req, res) => {
     if (!userId) {
       const { rows } = await pool.query(
         `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
-                e.latitude, e.longitude, e.created_by
+                e.latitude, e.longitude, e.created_by, e.category_id,
+                ec.slug as category_slug, ec.name as category_name
            FROM events e
+           LEFT JOIN event_categories ec ON e.category_id = ec.id
           ORDER BY e.event_at DESC`
       );
       return res.json(rows);
@@ -168,6 +170,8 @@ app.get("/events", async (req, res) => {
     const { rows } = await pool.query(
       `SELECT 
           e.*,
+          ec.slug as category_slug,
+          ec.name as category_name,
           EXISTS (
             SELECT 1 FROM event_favorites f
             WHERE f.event_id = e.id AND f.user_id = $1
@@ -181,6 +185,7 @@ app.get("/events", async (req, res) => {
             0
           ) AS attendees_count
        FROM events e
+       LEFT JOIN event_categories ec ON e.category_id = ec.id
        ORDER BY e.event_at DESC`,
       [userId]
     );
@@ -218,17 +223,30 @@ app.post("/events", async (req, res) => {
     }
 
     const createdByInt = created_by ? Number(created_by) : null;
+    
+    // Look up category_id from type slug
+    let categoryId = null;
+    if (type) {
+      const catResult = await pool.query(
+        `SELECT id FROM event_categories WHERE slug = $1`,
+        [String(type).toLowerCase()]
+      );
+      if (catResult.rows.length > 0) {
+        categoryId = catResult.rows[0].id;
+      }
+    }
 
     const { rows } = await pool.query(
-      `INSERT INTO events (title, description, event_at, location, type, image, latitude, longitude, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       RETURNING id, title, description, event_at, location, type, image, latitude, longitude, created_by`,
+      `INSERT INTO events (title, description, event_at, location, type, category_id, image, latitude, longitude, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       RETURNING id, title, description, event_at, location, type, category_id, image, latitude, longitude, created_by`,
       [
         title,
         description,
         event_at,
         location,
         type,
+        categoryId,
         image,
         latitude,
         longitude,
@@ -237,6 +255,18 @@ app.post("/events", async (req, res) => {
     );
 
     const row = rows[0];
+
+    // Join with event_categories to get category info
+    if (row && row.category_id) {
+      const catResult = await pool.query(
+        `SELECT slug, name FROM event_categories WHERE id = $1`,
+        [row.category_id]
+      );
+      if (catResult.rows.length > 0) {
+        row.category_slug = catResult.rows[0].slug;
+        row.category_name = catResult.rows[0].name;
+      }
+    }
 
     if (row?.created_by) {
       const u = await pool.query(`SELECT name FROM users WHERE id=$1`, [
@@ -343,6 +373,20 @@ app.patch("/events/:eventId", async (req, res) => {
     return res.status(400).json({ error: "No hay campos para actualizar" });
   }
 
+  // If type is being updated, also look up and update category_id
+  let categoryId = null;
+  if (typeof type !== "undefined" && type) {
+    const catResult = await pool.query(
+      `SELECT id FROM event_categories WHERE slug = $1`,
+      [String(type).toLowerCase()]
+    );
+    if (catResult.rows.length > 0) {
+      categoryId = catResult.rows[0].id;
+      set.push(`category_id = $${i++}`);
+      values.push(categoryId);
+    }
+  }
+
   values.push(eventId);
 
   try {
@@ -351,7 +395,7 @@ app.patch("/events/:eventId", async (req, res) => {
       UPDATE events
          SET ${set.join(", ")}
        WHERE id = $${i}
-       RETURNING id, title, description, event_at, location, type, image, latitude, longitude, created_by
+       RETURNING id, title, description, event_at, location, type, category_id, image, latitude, longitude, created_by
       `,
       values
     );
@@ -360,7 +404,21 @@ app.patch("/events/:eventId", async (req, res) => {
       return res.status(404).json({ error: "Evento no encontrado" });
     }
 
-    res.json(rows[0]);
+    const row = rows[0];
+
+    // Join with event_categories to get category info
+    if (row && row.category_id) {
+      const catResult = await pool.query(
+        `SELECT slug, name FROM event_categories WHERE id = $1`,
+        [row.category_id]
+      );
+      if (catResult.rows.length > 0) {
+        row.category_slug = catResult.rows[0].slug;
+        row.category_name = catResult.rows[0].name;
+      }
+    }
+
+    res.json(row);
   } catch (e) {
     console.error("PATCH /events error:", e);
     res.status(500).json({ error: "Error actualizando evento" });

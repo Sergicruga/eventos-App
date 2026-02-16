@@ -6,6 +6,27 @@ CREATE TABLE IF NOT EXISTS users (
   photo TEXT
 );
 
+-- EVENT CATEGORIES
+CREATE TABLE IF NOT EXISTS event_categories (
+  id SERIAL PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  icon TEXT,
+  color TEXT
+);
+
+-- Insert default categories
+INSERT INTO event_categories (slug, name, icon, color) VALUES
+  ('musica', 'Música', 'musical-notes', '#FF6B6B'),
+  ('deportes', 'Deportes', 'football', '#4ECDC4'),
+  ('arte', 'Arte', 'brush', '#FFE66D'),
+  ('tecnologia', 'Tecnología', 'laptop', '#95E1D3'),
+  ('educacion', 'Educación', 'school', '#A8E6CF'),
+  ('gastronomia', 'Gastronomía', 'restaurant', '#FF8C94'),
+  ('cine', 'Cine', 'film', '#A29BFE'),
+  ('otro', 'Otro', 'star', '#DDA0DD')
+ON CONFLICT (slug) DO NOTHING;
+
 -- EVENTS
 CREATE TABLE IF NOT EXISTS events (
   id SERIAL PRIMARY KEY,
@@ -14,6 +35,7 @@ CREATE TABLE IF NOT EXISTS events (
   event_at DATE NOT NULL,
   location TEXT,
   type TEXT,
+  category_id INTEGER REFERENCES event_categories(id) ON DELETE SET NULL,
   image TEXT,
   latitude FLOAT,
   longitude FLOAT,
