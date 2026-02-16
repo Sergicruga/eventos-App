@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 
-const LAN_IP = "192.168.1.35"; // la IP que acabas de comprobar
+const LAN_IP = "192.168.1.39"; // la IP que acabas de comprobar
 const PORT = 4000;
 
 const host = Platform.select({

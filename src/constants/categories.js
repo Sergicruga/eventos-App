@@ -96,7 +96,12 @@ export const normalizeEventCategory = (eventType) => {
 export const eventMatchesCategory = (event, categorySlug) => {
   if (!event || !categorySlug) return false;
   
-  // Check multiple possible type fields
+  // First check: category_slug field (from backend JOIN)
+  if (event.category_slug && event.category_slug === categorySlug.toLowerCase()) {
+    return true;
+  }
+  
+  // Fallback: check multiple possible type fields if backend slug isn't present
   const eventType = event.type_evento || event.category || event.type || event.categorySlug || '';
   const category = normalizeEventCategory(eventType);
   

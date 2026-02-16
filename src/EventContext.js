@@ -431,6 +431,8 @@ export function EventProvider({ children }) {
           ? ev.startsAt
           : ev.startsAt ?? null,
       date: ev.date ?? '',
+      category_slug: ev.category_slug ?? null,
+      category_name: ev.category_name ?? null,
       latitude: ev.latitude != null ? Number(ev.latitude) : null,
       longitude: ev.longitude != null ? Number(ev.longitude) : null,
       image: ev.image ?? null,
@@ -508,6 +510,8 @@ export function EventProvider({ children }) {
             startsAt: derivedStartsAt || null,
             location: ev.location ?? '',
             type: ev.type || 'local',
+            category_slug: ev.category_slug || null,  // ← ADD THIS
+            category_name: ev.category_name || null,  // ← ADD THIS
             image:
               ev.image && String(ev.image).trim() !== ''
                 ? ev.image
@@ -862,6 +866,8 @@ export function EventProvider({ children }) {
           null,
         location: saved.location ?? '',
         type: saved.type || 'local',
+        category_slug: saved.category_slug ?? null,
+        category_name: saved.category_name ?? null,
         image:
           (saved.image &&
           String(saved.image).trim() !== ''
@@ -969,6 +975,8 @@ export function EventProvider({ children }) {
             updated.startsAt ??
             prevEv.startsAt ??
             null,
+          category_slug: json?.category_slug ?? prevEv.category_slug ?? null,
+          category_name: json?.category_name ?? prevEv.category_name ?? null,
         };
 
         const next = [...prev];

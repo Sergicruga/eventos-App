@@ -48,6 +48,14 @@ export default function HomeScreen() {
   const myUserId = user?.id != null ? String(user.id) : null;
 
   useEffect(() => {
+    console.log('🏠 HomeScreen events:', communityEvents.length);
+    console.log('🏠 HomeScreen myUserId:', myUserId);
+    communityEvents.slice(0, 3).forEach(ev => {
+      console.log('  Event:', ev.title, 'type:', ev.type, 'category_slug:', ev.category_slug);
+    });
+  }, [communityEvents, myUserId]);
+
+  useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -63,23 +71,22 @@ export default function HomeScreen() {
     requestNotificationPermission();
   }, []);
 
-  // Get upcoming events and filter out own events
+  // Get upcoming events - INCLUDE all events for counting (even user's own)
   const upcomingEvents = useMemo(() => {
-    return communityEvents
-      .filter(ev => isUpcoming(ev.date))
-      .filter(ev => {
-        if (!myUserId) return true;
-        const createdByRaw = ev.created_by ?? ev.createdById ?? ev.createdBy ?? null;
-        return createdByRaw == null ? true : String(createdByRaw) !== myUserId;
-      });
-  }, [communityEvents, myUserId]);
+    return communityEvents.filter(ev => isUpcoming(ev.date));
+  }, [communityEvents]);
 
   // Count events by category
   const categoryCounts = useMemo(() => {
     const counts = {};
     EVENT_CATEGORIES.forEach(cat => {
-      counts[cat.slug] = upcomingEvents.filter(ev => eventMatchesCategory(ev, cat.slug)).length;
+      const eventsInCategory = upcomingEvents.filter(ev => eventMatchesCategory(ev, cat.slug));
+      counts[cat.slug] = eventsInCategory.length;
+      if (eventsInCategory.length > 0) {
+        console.log(`✓ ${cat.name}: ${eventsInCategory.length} events`);
+      }
     });
+    console.log('📊 Category counts:', counts);
     return counts;
   }, [upcomingEvents]);
 

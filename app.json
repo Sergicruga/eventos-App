@@ -49,8 +49,7 @@
       }
     },
     "plugins": [
-      "expo-font",
-      "react-native-google-mobile-ads"
+      "expo-font"
     ]
   }
 }
