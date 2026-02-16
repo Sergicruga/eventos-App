@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
 import { AuthContext } from '../context/AuthContext';
 import { Image as ExpoImage } from 'expo-image';
+import { EVENT_CATEGORIES, eventMatchesCategory, findCategoryBySlug } from '../constants/categories';
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   if (lat1 == null || lat2 == null) return null;
@@ -127,7 +128,10 @@ function EventCard({ item, isFavorite, onToggleFavorite, onPress, getEventImageS
 }
 
 export default function CategoryEventsScreen({ route }) {
-  const { category } = route.params;
+  const { category, categorySlug } = route.params;
+  // Support both old format (category name) and new format (slug)
+  const activeSlug = categorySlug || findCategoryBySlug(category)?.slug || 'otro';
+  const activeCategory = findCategoryBySlug(activeSlug);
   const eventCtx = useContext(EventContext) || {};
   const communityEvents = eventCtx.communityEvents ?? eventCtx.events ?? [];
   const {
@@ -152,11 +156,8 @@ export default function CategoryEventsScreen({ route }) {
         const createdByRaw = ev.created_by ?? ev.createdById ?? ev.createdBy ?? null;
         return createdByRaw == null ? true : String(createdByRaw) !== myUserId;
       })
-      .filter(ev => {
-        const eventType = (ev.type_evento || ev.category || ev.type || '').toLowerCase().trim();
-        return eventType === category.toLowerCase() || !eventType && category === 'Otro';
-      });
-  }, [communityEvents, category, myUserId, favorites]);
+      .filter(ev => eventMatchesCategory(ev, activeSlug));
+  }, [communityEvents, activeSlug, myUserId, favorites]);
 
   // Filter by search
   const filteredEvents = useMemo(() => {
@@ -193,7 +194,7 @@ export default function CategoryEventsScreen({ route }) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>{category}</Text>
+      <Text style={styles.header}>{activeCategory?.name || 'Eventos'}</Text>
       <View style={styles.searchBarWrapper}>
         <Ionicons name="search" size={20} color="#1976d2" style={{ marginRight: 8 }} />
         <TextInput
@@ -216,7 +217,7 @@ export default function CategoryEventsScreen({ route }) {
           <View style={styles.centered}>
             <Ionicons name="sad-outline" size={48} color="#1976d2" />
             <Text style={{ color: '#1976d2', marginTop: 8 }}>
-              No hay eventos en {category}.
+              No hay eventos en {activeCategory?.name || 'esta categoría'}.
             </Text>
           </View>
         }

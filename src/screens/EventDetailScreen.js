@@ -11,6 +11,7 @@ import { AuthContext } from '../context/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { scheduleEventNotification } from '../utils/notifications';
+import { EVENT_CATEGORIES, normalizeEventCategory } from '../constants/categories';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -225,6 +226,15 @@ const getAttendeeUserId = (att) => {
   if (att.uid != null) return att.uid;
   if (att.id != null) return att.id;
   return null;
+};
+
+/**
+ * Get the display name for an event's category
+ */
+const getCategoryDisplayName = (event) => {
+  if (!event) return 'Otro';
+  const category = normalizeEventCategory(event.type || event.type_evento || event.category);
+  return category?.name || 'Otro';
 };
 
 // ==============================================
@@ -581,7 +591,7 @@ export default function EventDetailScreen({ route, navigation }) {
             {current.type && (
               <View style={styles.typeTag}>
                 <Ionicons name="pricetag-outline" size={16} color={COLORS.primary} />
-                <Text style={styles.typeTagText}>{current.type}</Text>
+                <Text style={styles.typeTagText}>{getCategoryDisplayName(current)}</Text>
               </View>
             )}
             {current?.source && (

@@ -13,6 +13,7 @@ import { API_URL } from '../api/config';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { uploadEventImage } from '../api/upload';
+import { EVENT_CATEGORIES } from '../constants/categories';
 
 const COLORS = {
   primary: '#3B5BA9',
@@ -27,12 +28,8 @@ const COLORS = {
   text: '#444',
 };
 
-const EVENT_TYPES = [
-  { label: 'Concierto', value: 'Concierto' },
-  { label: 'Fiesta', value: 'Fiesta' },
-  { label: 'Deportivo', value: 'Deportivo' },
-  { label: 'Otro', value: 'Otro' },
-];
+// Create EVENT_TYPES from EVENT_CATEGORIES
+const EVENT_TYPES = EVENT_CATEGORIES.map(cat => ({ label: cat.name, value: cat.slug }));
 
 export default function CreateEventScreen({ navigation }) {
   const { addEvent } = useContext(EventContext);

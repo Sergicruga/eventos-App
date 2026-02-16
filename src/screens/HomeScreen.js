@@ -11,68 +11,9 @@ import styles from './HomeScreen.styles';
 import { AuthContext } from '../context/AuthContext';
 import { Image as ExpoImage } from 'expo-image';
 import { requestNotificationPermission, sendTestNotification } from '../utils/notifications';
+import { EVENT_CATEGORIES, eventMatchesCategory } from '../constants/categories';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
-
-// Category definitions with icons and colors
-const CATEGORIES = [
-  {
-    id: 'Música',
-    name: 'Música',
-    icon: 'musical-notes',
-    color: '#FF6B6B',
-    image: require('../../assets/iconoApp.png'),
-  },
-  {
-    id: 'Deportes',
-    name: 'Deportes',
-    icon: 'football',
-    color: '#4ECDC4',
-    image: require('../../assets/iconoApp.png'),
-  },
-  {
-    id: 'Arte',
-    name: 'Arte',
-    icon: 'brush',
-    color: '#FFE66D',
-    image: require('../../assets/iconoApp.png'),
-  },
-  {
-    id: 'Tecnología',
-    name: 'Tecnología',
-    icon: 'laptop',
-    color: '#95E1D3',
-    image: require('../../assets/iconoApp.png'),
-  },
-  {
-    id: 'Educación',
-    name: 'Educación',
-    icon: 'school',
-    color: '#A8E6CF',
-    image: require('../../assets/iconoApp.png'),
-  },
-  {
-    id: 'Gastronomía',
-    name: 'Gastronomía',
-    icon: 'restaurant',
-    color: '#FF8C94',
-    image: require('../../assets/iconoApp.png'),
-  },
-  {
-    id: 'Cine',
-    name: 'Cine',
-    icon: 'film',
-    color: '#A29BFE',
-    image: require('../../assets/iconoApp.png'),
-  },
-  {
-    id: 'Otro',
-    name: 'Otro',
-    icon: 'star',
-    color: '#DDA0DD',
-    image: require('../../assets/iconoApp.png'),
-  },
-];
 
 // Category Card Component
 function CategoryCard({ category, onPress, eventCount }) {
@@ -136,23 +77,20 @@ export default function HomeScreen() {
   // Count events by category
   const categoryCounts = useMemo(() => {
     const counts = {};
-    CATEGORIES.forEach(cat => {
-      counts[cat.id] = upcomingEvents.filter(ev => {
-        const eventType = (ev.type_evento || ev.category || ev.type || '').toLowerCase().trim();
-        return eventType === cat.id.toLowerCase() || !eventType && cat.id === 'Otro';
-      }).length;
+    EVENT_CATEGORIES.forEach(cat => {
+      counts[cat.slug] = upcomingEvents.filter(ev => eventMatchesCategory(ev, cat.slug)).length;
     });
     return counts;
   }, [upcomingEvents]);
 
   const handleCategoryPress = (category) => {
-    navigation.navigate('CategoryEvents', { category: category.name });
+    navigation.navigate('CategoryEvents', { category: category.slug, categoryName: category.name });
   };
 
   const renderCategoryGrid = ({ item }) => (
     <CategoryCard
       category={item}
-      eventCount={categoryCounts[item.id] || 0}
+      eventCount={categoryCounts[item.slug] || 0}
       onPress={() => handleCategoryPress(item)}
     />
   );
@@ -172,8 +110,8 @@ export default function HomeScreen() {
       <Text style={styles.subtitle}>Encuentra eventos que te interesen</Text>
 
       <FlatList
-        data={CATEGORIES}
-        keyExtractor={item => item.id}
+        data={EVENT_CATEGORIES}
+        keyExtractor={item => item.slug}
         renderItem={renderCategoryGrid}
         numColumns={2}
         scrollEnabled={true}
