@@ -1,6 +1,10 @@
 import React, { useContext, useEffect, useState, useMemo } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, Image, TextInput, ActivityIndicator, Dimensions, Button, ScrollView,
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventContext } from '../EventContext';
@@ -9,10 +13,12 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
 import { AuthContext } from '../context/AuthContext';
-import { Image as ExpoImage } from 'expo-image';
-import { requestNotificationPermission, sendTestNotification } from '../utils/notifications';
+import { requestNotificationPermission } from '../utils/notifications';
 import { EVENT_CATEGORIES, eventMatchesCategory } from '../constants/categories';
 import { isUpcoming } from '../utils/dateHelpers';
+
+// ✅ AdMob Banner
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
 
@@ -55,7 +61,7 @@ export default function HomeScreen() {
         setLoadingLocation(false);
         return;
       }
-      const loc = await Location.getCurrentPositionAsync({});
+      await Location.getCurrentPositionAsync({});
       setLoadingLocation(false);
     })();
   }, []);
@@ -67,8 +73,8 @@ export default function HomeScreen() {
   // Get upcoming events and filter out own events
   const upcomingEvents = useMemo(() => {
     return communityEvents
-      .filter(ev => isUpcoming(ev.date))
-      .filter(ev => {
+      .filter((ev) => isUpcoming(ev.date))
+      .filter((ev) => {
         if (!myUserId) return true;
         const createdByRaw = ev.created_by ?? ev.createdById ?? ev.createdBy ?? null;
         return createdByRaw == null ? true : String(createdByRaw) !== myUserId;
@@ -78,8 +84,8 @@ export default function HomeScreen() {
   // Count events by category
   const categoryCounts = useMemo(() => {
     const counts = {};
-    EVENT_CATEGORIES.forEach(cat => {
-      counts[cat.slug] = upcomingEvents.filter(ev => eventMatchesCategory(ev, cat.slug)).length;
+    EVENT_CATEGORIES.forEach((cat) => {
+      counts[cat.slug] = upcomingEvents.filter((ev) => eventMatchesCategory(ev, cat.slug)).length;
     });
     return counts;
   }, [upcomingEvents]);
@@ -100,7 +106,9 @@ export default function HomeScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#1976d2" />
-        <Text style={{ marginTop: 12, color: '#1976d2', fontWeight: '600' }}>Cargando eventos...</Text>
+        <Text style={{ marginTop: 12, color: '#1976d2', fontWeight: '600' }}>
+          Cargando eventos...
+        </Text>
       </View>
     );
   }
@@ -112,14 +120,30 @@ export default function HomeScreen() {
 
       <FlatList
         data={EVENT_CATEGORIES}
-        keyExtractor={item => item.slug}
+        keyExtractor={(item) => item.slug}
         renderItem={renderCategoryGrid}
         numColumns={2}
         scrollEnabled={true}
-        contentContainerStyle={styles.categoriesGridContent}
-        columnWrapperStyle={{ justifyContent: 'space-around', paddingHorizontal: 12, marginBottom: 12 }}
+        // ✅ sin tocar tu estilo: solo añadimos un paddingBottom para que el banner no tape nada
+        contentContainerStyle={[styles.categoriesGridContent, { paddingBottom: 80 }]}
+        columnWrapperStyle={{
+          justifyContent: 'space-around',
+          paddingHorizontal: 12,
+          marginBottom: 12,
+        }}
         showsVerticalScrollIndicator={false}
       />
+
+      {/* ✅ BANNER FIJO ABAJO (TEST) */}
+      <View style={{ alignItems: 'center' }}>
+        <BannerAd
+          unitId="ca-app-pub-9396892293971176/3865947873"
+          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          onAdLoaded={() => console.log('✅ Banner REAL cargado')}
+          onAdFailedToLoad={(err) => console.log('❌ Banner REAL error', err)}
+        />
+
+      </View>
 
       <TouchableOpacity
         style={styles.fab}
