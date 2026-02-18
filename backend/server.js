@@ -8,8 +8,7 @@ import path from "path";
 import fs from "fs";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-
-
+import { fetchMusicEventsMultipleCities } from "./services/ticketmasterService.js";
 
 dotenv.config();
 const { Pool } = pkg;
@@ -152,11 +151,14 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
    EVENTS
    ========================== */
 
-// GET /events  (con / sin userId → favoritos/asistentes)
+// GET /events  (con / sin userId → favoritos/asistentes + Ticketmaster)
 app.get("/events", async (req, res) => {
   try {
     const userId = req.query.userId ? Number(req.query.userId) : null;
 
+    // Fetch local events from database
+    let events = [];
+    
     if (!userId) {
       const { rows } = await pool.query(
         `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
@@ -166,33 +168,44 @@ app.get("/events", async (req, res) => {
            LEFT JOIN event_categories ec ON e.category_id = ec.id
           ORDER BY e.event_at DESC`
       );
-      return res.json(rows);
+      events = rows;
+    } else {
+      const { rows } = await pool.query(
+        `SELECT 
+            e.*,
+            ec.slug as category_slug,
+            ec.name as category_name,
+            EXISTS (
+              SELECT 1 FROM event_favorites f
+              WHERE f.event_id = e.id AND f.user_id = $1
+            ) AS is_favorite,
+            EXISTS (
+              SELECT 1 FROM event_attendees a
+              WHERE a.event_id = e.id AND a.user_id = $1
+            ) AS is_attending,
+            COALESCE(
+              (SELECT COUNT(*)::int FROM event_attendees a WHERE a.event_id = e.id),
+              0
+            ) AS attendees_count
+         FROM events e
+         LEFT JOIN event_categories ec ON e.category_id = ec.id
+         ORDER BY e.event_at DESC`,
+        [userId]
+      );
+      events = rows;
     }
 
-    const { rows } = await pool.query(
-      `SELECT 
-          e.*,
-          ec.slug as category_slug,
-          ec.name as category_name,
-          EXISTS (
-            SELECT 1 FROM event_favorites f
-            WHERE f.event_id = e.id AND f.user_id = $1
-          ) AS is_favorite,
-          EXISTS (
-            SELECT 1 FROM event_attendees a
-            WHERE a.event_id = e.id AND a.user_id = $1
-          ) AS is_attending,
-          COALESCE(
-            (SELECT COUNT(*)::int FROM event_attendees a WHERE a.event_id = e.id),
-            0
-          ) AS attendees_count
-       FROM events e
-       LEFT JOIN event_categories ec ON e.category_id = ec.id
-       ORDER BY e.event_at DESC`,
-      [userId]
-    );
+    // Fetch Ticketmaster music events (non-blocking, errors don't crash the response)
+    let ticketmasterEvents = [];
+    try {
+      ticketmasterEvents = await fetchMusicEventsMultipleCities();
+    } catch (tmError) {
+      console.warn("Ticketmaster fetch failed, continuing without external events:", tmError.message);
+    }
 
-    res.json(rows);
+    // Combine and return events
+    const allEvents = [...events, ...ticketmasterEvents];
+    return res.json(allEvents);
   } catch (e) {
     console.error("PG ERROR:", e);
     res.status(500).json({ error: "Error listando eventos" });
