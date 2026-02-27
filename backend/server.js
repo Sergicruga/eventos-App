@@ -799,6 +799,7 @@ app.post("/events/:eventId/favorite", async (req, res) => {
 app.delete("/events/:eventId/favorite", async (req, res) => {
   const eventId = req.eventId;
   const { userId } = req.body;
+  
   if (!userId) return res.status(400).json({ error: "userId requerido" });
   await pool.query(
     `DELETE FROM event_favorites WHERE user_id = $1 AND event_id = $2`,

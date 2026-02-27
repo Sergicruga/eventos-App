@@ -111,7 +111,6 @@ export default function CategoryEventsScreen({ route }) {
   const categoryEvents = useMemo(() => {
     return communityEvents
       .filter(ev => isUpcoming(ev.date))
-      .filter(ev => (ev.type === 'api' ? favorites.includes(String(ev.id)) : true))
       .filter(ev => {
         if (!myUserId) return true;
         const createdByRaw = ev.created_by ?? ev.createdById ?? ev.createdBy ?? null;
@@ -128,11 +127,31 @@ export default function CategoryEventsScreen({ route }) {
     );
   }, [categoryEvents, search]);
 
-  // Remove duplicates
+  // Remove duplicates; for API / Ticketmaster events we collapse
+  // variants (VIP, GA, etc.) by normalizing their title so only the first
+  // version is kept.
+  const normalizeTitleKey = (title = '') => {
+    let t = String(title || '').toLowerCase();
+    // strip everything after pipe (e.g., "Title | VIP PACKAGES" → "Title")
+    t = t.split('|')[0].trim();
+    // strip common ticket type / variant keywords
+    t = t.replace(/\b(vip|ga|general admission|packages|package|tickets?|presale|early\s?bird)\b/g, '');
+    // remove non-alphanumeric characters (keeps spaces temporarily)
+    t = t.replace(/[^a-z0-9\s]/g, '');
+    // collapse multiple spaces
+    t = t.replace(/\s+/g, ' ').trim();
+    return t;
+  };
+
   const deduped = [];
   const seen = new Set();
   for (const ev of filteredEvents) {
-    const key = `${ev.type}-${ev.id}`;
+    let key;
+    if (String(ev.type) === 'api' || String(ev.source) === 'ticketmaster') {
+      key = normalizeTitleKey(ev.title);
+    } else {
+      key = `${ev.type}-${ev.id}`;
+    }
     if (!seen.has(key)) {
       deduped.push(ev);
       seen.add(key);

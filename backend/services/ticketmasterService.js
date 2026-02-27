@@ -1,6 +1,9 @@
 // services/ticketmasterService.js
-const TICKETMASTER_API_KEY = process.env.TICKETMASTER_API_KEY;
 const TICKETMASTER_API_URL = 'https://app.ticketmaster.com/discovery/v2/events';
+
+function getApiKey() {
+  return process.env.TICKETMASTER_API_KEY;
+}
 
 /**
  * Fetch music events from Ticketmaster API
@@ -9,6 +12,7 @@ const TICKETMASTER_API_URL = 'https://app.ticketmaster.com/discovery/v2/events';
  * @returns {Promise<Array>} Array of formatted music events
  */
 async function fetchMusicEventsByCity(city = 'Madrid', size = 50) {
+  const TICKETMASTER_API_KEY = getApiKey();
   if (!TICKETMASTER_API_KEY) {
     console.warn('Ticketmaster API key not configured');
     return [];

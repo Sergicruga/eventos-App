@@ -23,6 +23,38 @@ import { pickAndPersistImage } from './utils/pickAndPersistImage';
 const isNumericId = (v) =>
   typeof v === 'number' || (typeof v === 'string' && /^\d+$/.test(v));
 
+// Normalize a title for deduplication. Remove everything after pipe (for "Title | VIP"),
+// strip common variant keywords, and collapse to a normalized base form.
+const normalizeTitleKey = (title = '') => {
+  let t = String(title || '').toLowerCase();
+  // strip everything after pipe (e.g., "Title | VIP PACKAGES" → "Title")
+  t = t.split('|')[0].trim();
+  // strip common ticket type / variant keywords
+  t = t.replace(/\b(vip|ga|general admission|packages|package|tickets?|presale|early\s?bird)\b/g, '');
+  // remove non-alphanumeric characters (keeps spaces temporarily)
+  t = t.replace(/[^a-z0-9\s]/g, '');
+  // collapse multiple spaces
+  t = t.replace(/\s+/g, ' ').trim();
+  return t;
+};
+// Remove duplicate API/Ticketmaster events by normalized title. Keeps first
+// occurrence.
+const dedupeApiEvents = (arr = []) => {
+  const seen = new Set();
+  return (arr || []).filter((ev) => {
+    if (String(ev.type) !== 'api' && String(ev.source) !== 'ticketmaster') {
+      return true; // leave local events alone
+    }
+    const key = normalizeTitleKey(ev.title);
+    if (!key) return true; // nothing to compare
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+};
+
 const externalIdFrom = (ev) => {
   const ext = ev?.externalId ?? ev?.tm_id ?? ev?.sourceId ?? null;
   if (ext) return String(ext);
@@ -456,22 +488,40 @@ export function EventProvider({ children }) {
             ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
             ev.type = ev.type || 'local';
           });
-          setEvents(cached);
+          // dedupe persisted API events as well
+          const cleaned = dedupeApiEvents(cached);
+          setEvents(cleaned);
         }
-      } catch {}
+      } catch (e) {}
 
       // 2) server
       try {
-        const url = `${API_URL}/events${
-          uid ? `?userId=${uid}` : ''
-        }`;
-        const res = await safeFetch(
-          url,
-          {},
-          { timeoutMs: 12000 }
-        );
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
+        // Try multiple bases in case the client can't reach the configured LAN IP
+        const basesToTry = [
+          API_URL,
+          'http://localhost:4000',
+          'http://127.0.0.1:4000',
+          'http://10.0.2.2:4000',
+        ];
+        let data = null;
+        let usedBase = null;
+        for (const base of basesToTry) {
+          if (!base) continue;
+          const url = `${base.replace(/\/$/, '')}/events${uid ? `?userId=${uid}` : ''}`;
+          try {
+            const res = await safeFetch(url, {}, { timeoutMs: 8000 });
+            if (!res.ok) continue;
+            const json = await res.json();
+            if (Array.isArray(json)) {
+              data = json;
+              usedBase = base;
+              break;
+            }
+          } catch (e) {
+            // try next
+          }
+        }
+        if (!data) throw new Error('Unable to fetch /events from any base URL');
 
         let mapped = (data || []).map((ev) => {
           const rawEventAt = ev.event_at ?? null;
@@ -528,6 +578,9 @@ export function EventProvider({ children }) {
             asistentes: [],
           };
         });
+
+        // dedupe any API/Ticketmaster events before merging with cache
+        mapped = dedupeApiEvents(mapped);
 
         // merge con caché para no perder hora
         try {
@@ -1212,10 +1265,16 @@ export function EventProvider({ children }) {
   };
 
   // ===== Valores expuestos =====
+  // Derived lists: my events and community events
+  const myEvents = useMemo(() => events.filter(isMine), [events, user, effectiveUser]);
+  const communityEvents = useMemo(() => events.filter((e) => !isMine(e)), [events, user, effectiveUser]);
+
   const value = useMemo(
     () => ({
       events,
       setEvents,
+      myEvents,
+      communityEvents,
       formEvent,
       setFormEvent,
       coords,
@@ -1242,6 +1301,8 @@ export function EventProvider({ children }) {
     }),
     [
       events,
+      myEvents,
+      communityEvents,
       formEvent,
       coords,
       city,
@@ -1252,6 +1313,8 @@ export function EventProvider({ children }) {
       overridesReady,
       authToken,
       uid,
+      user,
+      effectiveUser,
     ]
   );
 

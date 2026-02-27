@@ -45,9 +45,9 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
-    "@react-native-community/cli": "^20.0.2",
+    "@react-native-community/cli": "^13.6.9",
     "baseline-browser-mapping": "^2.9.18",
-    "expo-module-scripts": "^5.0.7"
+    "expo-module-scripts": "^1.1.1"
   },
   "private": true
 }

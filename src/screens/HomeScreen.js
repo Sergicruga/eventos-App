@@ -5,6 +5,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventContext } from '../EventContext';
@@ -18,9 +19,9 @@ import { EVENT_CATEGORIES, eventMatchesCategory } from '../constants/categories'
 import { isUpcoming } from '../utils/dateHelpers';
 
 // ✅ AdMob Banner
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+// Lazily require `react-native-google-mobile-ads` at runtime to avoid
+// crashing in environments where the native module isn't installed
 
-const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
 
 // Category Card Component
 function CategoryCard({ category, onPress, eventCount }) {
@@ -53,6 +54,26 @@ export default function HomeScreen() {
   const [loadingLocation, setLoadingLocation] = useState(true);
   const navigation = useNavigation();
   const myUserId = user?.id != null ? String(user.id) : null;
+  const [ads, setAds] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    try {
+      const gmads = eval("require")('react-native-google-mobile-ads');
+      if (mounted && gmads) {
+        setAds({
+          BannerAd: gmads.BannerAd,
+          BannerAdSize: gmads.BannerAdSize,
+          TestIds: gmads.TestIds,
+        });
+      }
+    } catch (e) {
+      // native module not present; ignore
+    }
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -113,10 +134,12 @@ export default function HomeScreen() {
     );
   }
 
+
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Explora categorías</Text>
       <Text style={styles.subtitle}>Encuentra eventos que te interesen</Text>
+
 
       <FlatList
         data={EVENT_CATEGORIES}
@@ -134,14 +157,23 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       />
 
+
       {/* ✅ BANNER FIJO ABAJO (TEST) */}
       <View style={{ alignItems: 'center' }}>
-        <BannerAd
-          unitId="ca-app-pub-9396892293971176/3865947873"
-          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-          onAdLoaded={() => console.log('✅ Banner REAL cargado')}
-          onAdFailedToLoad={(err) => console.log('❌ Banner REAL error', err)}
-        />
+        {ads && ads.BannerAd ? (
+          (() => {
+            const BannerComp = ads.BannerAd;
+            const Size = ads.BannerAdSize;
+            const Ids = ads.TestIds || {};
+            return (
+              <BannerComp
+                unitId={Ids.BANNER || 'ca-app-pub-9396892293971176/3865947873'}
+                size={Size?.ANCHORED_ADAPTIVE_BANNER}
+
+              />
+            );
+          })()
+        ) : null}
 
       </View>
 
