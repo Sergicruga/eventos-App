@@ -439,6 +439,37 @@ export default function EventDetailScreen({ route, navigation }) {
     } catch {}
     setSending(false);
   }, [current.id, user?.id, newComment, fetchComments]);
+  const deleteComment = useCallback((commentId) => {
+    if (!commentId || !user?.id) return;
+
+    Alert.alert('Eliminar comentario', '¿Seguro que quieres eliminar este comentario?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const res = await fetch(
+              `${API_URL}/events/${current.id}/comments/${commentId}?userId=${user.id}`,
+              { method: 'DELETE' }
+            );
+
+            if (!res.ok) {
+              const txt = await res.text().catch(() => '');
+              console.log('❌ DELETE comment:', res.status, txt);
+              Alert.alert('Error', 'No se pudo eliminar.');
+              return;
+            }
+
+            fetchComments();
+          } catch (e) {
+            console.log('❌ DELETE comment exception:', e);
+            Alert.alert('Error', 'No se pudo eliminar.');
+          }
+        },
+      },
+    ]);
+  }, [current.id, user?.id, fetchComments]);
 
   useEffect(() => { fetchComments(); }, [fetchComments]);
 
@@ -752,22 +783,27 @@ export default function EventDetailScreen({ route, navigation }) {
                 const avatar = getCommentAvatar(item);
                 const initials = getInitials(name);
                 const targetUserId = getCommentUserId(item);
+                const uid = user?.id != null ? String(user.id) : null;
+                const authorId = targetUserId != null ? String(targetUserId) : null;
+                const canDelete = !!uid && !!authorId && uid === authorId;
 
                 const canNavigate = targetUserId != null && String(targetUserId).trim() !== '';
 
                 return (
                   <View key={item.id ?? `${idx}`} style={styles.commentContainer}>
                     <View style={styles.commentHeaderRow}>
+                      
+                      {/* Avatar */}
                       <TouchableOpacity
                         activeOpacity={0.8}
                         disabled={!canNavigate}
-                        onPress={() =>
-                          canNavigate &&
+                        onPress={() => {
+                          if (!canNavigate) return;
                           navigation.navigate('Tabs', {
                             screen: 'Profile',
                             params: { userId: String(targetUserId) },
-                          })
-                        }
+                          });
+                        }}
                         style={styles.commentAvatarWrap}
                       >
                         {avatar ? (
@@ -779,10 +815,25 @@ export default function EventDetailScreen({ route, navigation }) {
                         )}
                       </TouchableOpacity>
 
+                      {/* Contenido */}
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.commentName}>
-                          {name || 'Usuario'}
-                        </Text>
+                        
+                        {/* Nombre + papelera alineada derecha */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={styles.commentName}>{name || 'Usuario'}</Text>
+
+                          {canDelete && (
+                            <TouchableOpacity
+                              onPress={() => deleteComment(item.id)}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                              style={{ marginLeft: 'auto' }}   // 👈 ESTA ES LA CLAVE
+                              accessibilityLabel="Eliminar comentario"
+                            >
+                              <Ionicons name="trash-outline" size={18} color={COLORS.gray} />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
                         <Text style={styles.commentText}>{item.comment}</Text>
                       </View>
                     </View>
@@ -796,6 +847,7 @@ export default function EventDetailScreen({ route, navigation }) {
             ) : (
               <Text style={{ color: COLORS.gray, marginVertical: 8 }}>No hay comentarios.</Text>
             )}
+            
 
             <View style={styles.commentInputRow}>
               <TextInput
@@ -967,6 +1019,7 @@ const styles = StyleSheet.create({
   commentDate: { fontSize: 10, color: COLORS.gray, marginTop: 6, alignSelf: 'flex-end' },
 
   // ===== NUEVO: layout avatar comentarios =====
+  
   commentHeaderRow: {
     flexDirection: 'row',
     gap: 10,
@@ -1030,4 +1083,5 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
+  
 });
