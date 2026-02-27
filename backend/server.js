@@ -989,6 +989,34 @@ app.post("/events/:eventId/comments", async (req, res) => {
   );
   res.status(201).json(rows[0]);
 });
+app.delete("/events/:eventId/comments/:commentId", async (req, res) => {
+  const eventId = req.params.eventId;
+  const commentId = req.params.commentId;
+
+  // Sin JWT: userId por query o body
+  const userId = req.query.userId || req.body?.userId;
+  if (!userId) return res.status(401).json({ error: "userId requerido" });
+
+  try {
+    // ✅ Solo borra si el comentario pertenece a ese usuario
+    const result = await pool.query(
+      `DELETE FROM event_comments
+       WHERE id = $1 AND event_id = $2 AND user_id = $3
+       RETURNING id`,
+      [commentId, eventId, userId]
+    );
+
+    if (result.rowCount === 0) {
+      // puede ser que no exista o no sea tuyo (no damos detalles)
+      return res.status(403).json({ error: "No autorizado o no existe" });
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("DELETE comment error:", e);
+    res.status(500).json({ error: "Error borrando comentario" });
+  }
+});
 
 /* ==========================
    AUTH (registro / login)
@@ -1097,6 +1125,7 @@ app.delete("/users/me", authMiddleware, async (req, res) => {
     res.status(500).json({ message: "Error eliminando la cuenta" });
   }
 });
+
 
 /* ==========================
    START SERVER
