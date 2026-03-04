@@ -965,7 +965,7 @@ app.get("/events/:eventId/attendees/:userId", async (req, res) => {
 app.get("/events/:eventId/comments", async (req, res) => {
   const eventId = req.eventId;
   const { rows } = await pool.query(
-    `SELECT ec.id, ec.comment, ec.created_at, u.name
+    `SELECT ec.id, ec.comment, ec.created_at, u.id AS user_id, u.name, u.photo
        FROM event_comments ec
        JOIN users u ON ec.user_id = u.id
       WHERE ec.event_id = $1
