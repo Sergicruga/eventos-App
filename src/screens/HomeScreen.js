@@ -18,7 +18,7 @@ import { EVENT_CATEGORIES, eventMatchesCategory } from '../constants/categories'
 import { isUpcoming } from '../utils/dateHelpers';
 
 // ✅ AdMob Banner
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import { BannerAd, BannerAdSize, TestIds, MobileAds } from 'react-native-google-mobile-ads';
 
 const TICKETMASTER_API_KEY = 'jIIdDB9mZI5gZgJeDdeESohPT4Pl0wdi';
 
@@ -52,6 +52,7 @@ export default function HomeScreen() {
   const { user } = useContext(AuthContext);
   const [loadingLocation, setLoadingLocation] = useState(true);
   const navigation = useNavigation();
+  const [adReady, setAdReady] = useState(false);
   const myUserId = user?.id != null ? String(user.id) : null;
 
   useEffect(() => {
@@ -68,6 +69,20 @@ export default function HomeScreen() {
 
   useEffect(() => {
     requestNotificationPermission();
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        await MobileAds().initialize();
+        if (mounted) setAdReady(true);
+        console.log('✅ MobileAds initialized');
+      } catch (e) {
+        console.log('❌ MobileAds init error', e);
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
 
   // Get upcoming events and filter out own events
@@ -134,15 +149,18 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* ✅ BANNER FIJO ABAJO (TEST) */}
-      <View style={{ alignItems: 'center' }}>
-        <BannerAd
-          unitId="ca-app-pub-9396892293971176/3865947873"
-          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-          onAdLoaded={() => console.log('✅ Banner REAL cargado')}
-          onAdFailedToLoad={(err) => console.log('❌ Banner REAL error', err)}
-        />
-      </View>
+      {/* Banner temporalmente deshabilitado para builds de prueba
+      {adReady ? (
+        <View style={{ alignItems: 'center' }}>
+          <BannerAd
+            unitId="ca-app-pub-9396892293971176/3865947873"
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            onAdLoaded={() => console.log('✅ Banner REAL cargado')}
+            onAdFailedToLoad={(err) => console.log('❌ Banner REAL error', err)}
+          />
+        </View>
+      ) : null}
+      */}
 
       <TouchableOpacity
         style={styles.fab}

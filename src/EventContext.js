@@ -14,7 +14,7 @@ import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Alert } from 'react-native';
 import { AuthContext } from './context/AuthContext';
-import { API_URL } from './api/config';
+import { API_URL } from './api/config.js';
 import { getFavoriteIds } from './api/favorites';
 import { attend as apiAttend, unattend as apiUnattend } from './api/attendees';
 import { pickAndPersistImage } from './utils/pickAndPersistImage';
