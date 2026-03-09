@@ -5,7 +5,6 @@ import { EventProvider } from './src/EventContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AuthProvider from './src/context/AuthContext';
 import { requestNotificationPermission } from './src/utils/notifications';
-import * as Notifications from 'expo-notifications';
 
 export default function App() {
   Notifications.setNotificationHandler({
