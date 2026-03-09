@@ -12,7 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { uploadEventImage } from '../api/upload';
 import { Calendar } from 'react-native-calendars'; // Add this import at the top
-import { API_URL } from '../api/config'; // <-- necesario para resolver rutas relativas
+const API_URL = 'http://192.168.1.37:4000';
 import { EVENT_CATEGORIES } from '../constants/categories';
 import { formatAddress, normalizeDate } from '../utils/eventFormHelpers';
 

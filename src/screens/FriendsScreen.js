@@ -14,7 +14,7 @@ import {
   RefreshControl,
   Pressable,
 } from "react-native";
-import { API_URL } from '../api/config';
+const API_URL = 'http://192.168.1.37:4000';
 import { AuthContext } from "../context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native"; // <-- Only this is needed

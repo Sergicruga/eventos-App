@@ -14,7 +14,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useFocusEffect, useRoute } from "@react-navigation/native";
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
-import { API_URL } from "../api/config";
+const API_URL = 'http://192.168.1.37:4000';
 import {
   getUser,
   getUserCreatedEvents,
