@@ -1,4 +1,4 @@
-import { API_URL } from './config';
+const API_URL = 'http://192.168.1.37:4000';
 
 export async function getFavoriteIds(userId) {
   const res = await fetch(`${API_URL}/users/${userId}/favorites`);

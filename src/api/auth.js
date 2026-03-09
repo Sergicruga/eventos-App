@@ -1,4 +1,4 @@
-import { API_URL } from "../api/config";
+const API_URL = 'http://192.168.1.37:4000';
 
 export async function registerApi(data) {
   const res = await fetch(`${API_URL}/auth/register`, {
