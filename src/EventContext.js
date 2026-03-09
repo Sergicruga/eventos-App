@@ -6,18 +6,18 @@ import React, {
   useMemo,
 } from 'react';
 
-// Proveer un valor por defecto mínimo para evitar errores si se consume fuera del Provider
-export const EventContext = createContext({ events: [] });
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Alert } from 'react-native';
 import { AuthContext } from './context/AuthContext';
-import { API_URL } from './api/config.js';
+import { API_URL } from './api/config';
 import { getFavoriteIds } from './api/favorites';
 import { attend as apiAttend, unattend as apiUnattend } from './api/attendees';
 import { pickAndPersistImage } from './utils/pickAndPersistImage';
+
+// Proveer un valor por defecto mínimo para evitar errores si se consume fuera del Provider
+export const EventContext = createContext({ events: [] });
 
 // ========= Utils =========
 const isNumericId = (v) =>
