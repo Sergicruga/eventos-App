@@ -9,4 +9,5 @@ const host = Platform.select({
   default: LAN_IP,
 });
 
-export const API_URL = 'http://${host}:${PORT}';
+const hostStr = String(host || LAN_IP);
+export const API_URL = 'http://' + hostStr + ':' + String(PORT);
