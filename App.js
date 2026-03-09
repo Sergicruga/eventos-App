@@ -4,6 +4,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { EventProvider } from './src/EventContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AuthProvider from './src/context/AuthContext';
+import * as Notifications from 'expo-notifications';
 import { requestNotificationPermission } from './src/utils/notifications';
 
 export default function App() {
