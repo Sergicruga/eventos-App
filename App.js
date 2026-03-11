@@ -7,21 +7,30 @@ import AuthProvider from './src/context/AuthContext';
 import * as Notifications from 'expo-notifications';
 import { requestNotificationPermission } from './src/utils/notifications';
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
+
 export default function App() {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true, // show as banner
-      shouldShowList: true,   // show in notification center
-      shouldPlaySound: false,
-      shouldSetBadge: false,
-    }),
-  });
   useEffect(() => {
-    const subscription = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received:', notification);
-    });
-    return () => subscription.remove();
+    requestNotificationPermission();
+
+    const subscription = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        console.log('Notification received:', notification);
+      }
+    );
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
+
   return (
     <SafeAreaProvider>
       <AuthProvider>
