@@ -1,6 +1,5 @@
+import { API_URL } from './config';
 // /src/api/upload.js
-const API_URL = 'http://192.168.1.37:4000';
-
 // Usa un nombre único para cada imagen subida
 export async function uploadEventImage(localUri, oldImagePath = '') {
   const uniqueName = `event_${Date.now()}.jpg`;

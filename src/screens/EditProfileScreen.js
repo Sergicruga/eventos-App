@@ -13,10 +13,9 @@ import {
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
 import { updateProfile, changePassword } from "../api/users";
-const API_URL = 'http://192.168.1.37:4000';
+import { API_URL } from '../api/config';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export default function EditProfileScreen({ navigation }) {
   const auth = useContext(AuthContext);
   const { user: userFromEventCtx, updateUser } = useContext(EventContext);

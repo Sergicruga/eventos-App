@@ -9,7 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Calendar } from 'react-native-calendars';
 import MapView, { Marker } from 'react-native-maps';
 import { Picker } from '@react-native-picker/picker';
-const API_URL = 'http://192.168.1.37:4000';
+import { API_URL } from '../api/config';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { uploadEventImage } from '../api/upload';

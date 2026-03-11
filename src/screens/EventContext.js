@@ -3,7 +3,7 @@ import React, { createContext, useState, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { Alert, Platform  } from 'react-native';
-const API_URL = 'http://192.168.1.37:4000';
+import { API_URL } from '../api/config';
 
 
 export const EventContext = createContext();

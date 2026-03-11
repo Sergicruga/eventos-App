@@ -1,5 +1,5 @@
 // api/events.js
-const API_URL = 'http://192.168.1.37:4000';
+import { API_URL } from './config';
 
 /** Util: parsea JSON sin romper si el cuerpo viene vacío o malformado */
 async function parseJsonSafe(res) {

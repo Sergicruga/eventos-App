@@ -11,8 +11,7 @@ import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Alert } from 'react-native';
 import { AuthContext } from './context/AuthContext';
-// API_URL inlined as a temporary workaround for bundling issues
-const API_URL = 'http://192.168.1.37:4000';
+import { API_URL } from './api/config';
 import { getFavoriteIds } from './api/favorites';
 import { attend as apiAttend, unattend as apiUnattend } from './api/attendees';
 import { pickAndPersistImage } from './utils/pickAndPersistImage';
