@@ -1,5 +1,5 @@
 // src/utils/imageSource.js
-import { API_URL } from '../api/config';
+import { API_URL } from '../config';
 
 const DEFAULT_IMAGE_URI = 'https://placehold.co/800x400?text=Evento';
 

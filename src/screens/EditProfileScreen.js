@@ -13,7 +13,7 @@ import {
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
 import { updateProfile, changePassword } from "../api/users";
-import { API_URL } from '../api/config';
+import { API_URL } from '../config';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function EditProfileScreen({ navigation }) {

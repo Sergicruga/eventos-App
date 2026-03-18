@@ -11,7 +11,7 @@ import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Alert } from 'react-native';
 import { AuthContext } from './context/AuthContext';
-import { API_URL } from './api/config';
+import { API_URL } from './config';
 import { getFavoriteIds } from './api/favorites';
 import { attend as apiAttend, unattend as apiUnattend } from './api/attendees';
 import { pickAndPersistImage } from './utils/pickAndPersistImage';
@@ -496,13 +496,8 @@ export function EventProvider({ children }) {
 
       // 2) server
       try {
-        // Try multiple bases in case the client can't reach the configured LAN IP
-        const basesToTry = [
-          API_URL,
-          'http://localhost:4000',
-          'http://127.0.0.1:4000',
-          'http://10.0.2.2:4000',
-        ];
+        // Only use the configured production API URL
+        const basesToTry = [API_URL];
         let data = null;
         let usedBase = null;
         for (const base of basesToTry) {

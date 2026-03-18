@@ -1,5 +1,5 @@
 // src/api/users.js
-import { API_URL } from './config';
+import { API_URL } from '../config';
 
 export async function getUser(userId) {
   const r = await fetch(`${API_URL}/users/${userId}`);

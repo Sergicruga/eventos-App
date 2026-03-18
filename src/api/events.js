@@ -1,5 +1,5 @@
 // api/events.js
-import { API_URL } from './config';
+import { API_URL } from '../config';
 
 /** Util: parsea JSON sin romper si el cuerpo viene vacío o malformado */
 async function parseJsonSafe(res) {

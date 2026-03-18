@@ -1,4 +1,4 @@
-import { API_URL } from './config';
+import { API_URL } from '../config';
 
 export async function registerApi(data) {
   const res = await fetch(`${API_URL}/auth/register`, {

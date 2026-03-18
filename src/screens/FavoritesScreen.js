@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndi
 import { useFocusEffect } from '@react-navigation/native';
 import { EventContext } from '../EventContext';
 import { AuthContext } from '../context/AuthContext';
-import { API_URL } from '../api/config';
+import { API_URL } from '../config';
 import Ionicons from '@expo/vector-icons/Ionicons'; // o 'react-native-vector-icons/Ionicons'
 
 // 🔑 API key de Ticketmaster (para resolver URL si falta)

@@ -1,4 +1,4 @@
-import { API_URL } from './config';
+import { API_URL } from '../config';
 // /src/api/upload.js
 // Usa un nombre único para cada imagen subida
 export async function uploadEventImage(localUri, oldImagePath = '') {
