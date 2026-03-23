@@ -89,7 +89,10 @@ export default function HomeScreen() {
         console.log('❌ MobileAds init error', e);
       }
     })();
-    return () => { mounted = false; };
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Get upcoming events and filter out own events
@@ -212,18 +215,16 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Banner temporalmente deshabilitado para builds de prueba
-      {adReady ? (
-        <View style={{ alignItems: 'center' }}>
-          <BannerAd
-            unitId="ca-app-pub-9396892293971176/3865947873"
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            onAdLoaded={() => console.log('✅ Banner REAL cargado')}
-            onAdFailedToLoad={(err) => console.log('❌ Banner REAL error', err)}
-          />
-        </View>
-      ) : null}
-      */}
+      {/* ✅ BANNER FIJO ABAJO (TEST) */}
+      <View style={{ alignItems: 'center' }}>
+        <BannerAd
+          unitId="ca-app-pub-9396892293971176/3865947873" // Reemplaza con tu ID real
+          size={BannerAdSize.BANNER}
+          requestOptions={{
+            requestNonPersonalizedAdsOnly: true,
+          }}
+        />
+      </View>
 
       <TouchableOpacity
         style={styles.fab}
