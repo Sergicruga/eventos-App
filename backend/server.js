@@ -155,6 +155,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 app.get("/events", async (req, res) => {
   try {
     const userId = req.query.userId ? Number(req.query.userId) : null;
+    const userCity = req.query.city ? String(req.query.city).trim() : null;
 
     // Fetch local events from database
     let events = [];
@@ -196,9 +197,13 @@ app.get("/events", async (req, res) => {
     }
 
     // Fetch Ticketmaster music events (non-blocking, errors don't crash the response)
+    // Prioritize user's city if provided, otherwise use default cities
     let ticketmasterEvents = [];
     try {
-      ticketmasterEvents = await fetchMusicEventsMultipleCities();
+      const citiesToFetch = userCity 
+        ? [userCity, 'Madrid', 'Barcelona'] 
+        : ['Madrid', 'Barcelona', 'Valencia'];
+      ticketmasterEvents = await fetchMusicEventsMultipleCities(citiesToFetch);
     } catch (tmError) {
       console.warn("Ticketmaster fetch failed, continuing without external events:", tmError.message);
     }

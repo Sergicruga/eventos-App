@@ -94,7 +94,7 @@ export default function CategoryEventsScreen({ route }) {
   const activeSlug = categorySlug || findCategoryBySlug(category)?.slug || 'otro';
   const activeCategory = findCategoryBySlug(activeSlug);
   const eventCtx = useContext(EventContext) || {};
-  const communityEvents = eventCtx.communityEvents ?? eventCtx.events ?? [];
+  const locationFilteredEvents = eventCtx.locationFilteredEvents ?? eventCtx.events ?? [];
   const {
     favorites = [],
     toggleFavorite = () => {},
@@ -109,7 +109,7 @@ export default function CategoryEventsScreen({ route }) {
 
   // Filter events by category
   const categoryEvents = useMemo(() => {
-    return communityEvents
+    return locationFilteredEvents
       .filter(ev => isUpcoming(ev.date))
       .filter(ev => {
         if (!myUserId) return true;
@@ -117,7 +117,7 @@ export default function CategoryEventsScreen({ route }) {
         return createdByRaw == null ? true : String(createdByRaw) !== myUserId;
       })
       .filter(ev => eventMatchesCategory(ev, activeSlug));
-  }, [communityEvents, activeSlug, myUserId, favorites]);
+  }, [locationFilteredEvents, activeSlug, myUserId, favorites]);
 
   // Filter by search
   const filteredEvents = useMemo(() => {

@@ -48,12 +48,19 @@ function CategoryCard({ category, onPress, eventCount }) {
 
 export default function HomeScreen() {
   const eventCtx = useContext(EventContext) || {};
-  const communityEvents = eventCtx.communityEvents ?? eventCtx.events ?? [];
+  const locationFilteredEvents = eventCtx.locationFilteredEvents ?? [];
   const { user } = useContext(AuthContext);
   const [loadingLocation, setLoadingLocation] = useState(true);
   const navigation = useNavigation();
   const [adReady, setAdReady] = useState(false);
+  const [showRadiusOptions, setShowRadiusOptions] = useState(false);
   const myUserId = user?.id != null ? String(user.id) : null;
+  
+  const locLoading = eventCtx.locLoading ?? false;
+  const coords = eventCtx.coords ?? null;
+  const city = eventCtx.city ?? null;
+  const searchRadius = eventCtx.searchRadius ?? 25;
+  const setSearchRadius = eventCtx.setSearchRadius ?? (() => {});
 
   useEffect(() => {
     (async () => {
@@ -87,14 +94,14 @@ export default function HomeScreen() {
 
   // Get upcoming events and filter out own events
   const upcomingEvents = useMemo(() => {
-    return communityEvents
+    return locationFilteredEvents
       .filter((ev) => isUpcoming(ev.date))
       .filter((ev) => {
         if (!myUserId) return true;
         const createdByRaw = ev.created_by ?? ev.createdById ?? ev.createdBy ?? null;
         return createdByRaw == null ? true : String(createdByRaw) !== myUserId;
       });
-  }, [communityEvents, myUserId]);
+  }, [locationFilteredEvents, myUserId]);
 
   // Count events by category
   const categoryCounts = useMemo(() => {
@@ -109,6 +116,11 @@ export default function HomeScreen() {
     navigation.navigate('CategoryEvents', { category: category.slug, categoryName: category.name });
   };
 
+  const handleRadiusChange = (newRadius) => {
+    setSearchRadius(newRadius);
+    setShowRadiusOptions(false);
+  };
+
   const renderCategoryGrid = ({ item }) => (
     <CategoryCard
       category={item}
@@ -117,12 +129,12 @@ export default function HomeScreen() {
     />
   );
 
-  if (loadingLocation) {
+  if (locLoading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#1976d2" />
         <Text style={{ marginTop: 12, color: '#1976d2', fontWeight: '600' }}>
-          Cargando eventos...
+          Detectando ubicación...
         </Text>
       </View>
     );
@@ -130,6 +142,57 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Location Info & Radius Selector */}
+      {coords && (
+        <View style={{ backgroundColor: '#f0f0f0', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+                📍 {city || 'Tu ubicación'}
+              </Text>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#1976d2' }}>
+                Radio de búsqueda: {searchRadius} km
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setShowRadiusOptions(!showRadiusOptions)}
+              style={{ padding: 8, marginLeft: 8 }}
+            >
+              <Ionicons name="ellipsis-vertical" size={20} color="#1976d2" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Radius Options */}
+          {showRadiusOptions && (
+            <View style={{ marginTop: 12, backgroundColor: '#fff', borderRadius: 8, overflow: 'hidden' }}>
+              {[5, 10, 15, 25, 50, 100].map((radius) => (
+                <TouchableOpacity
+                  key={radius}
+                  onPress={() => handleRadiusChange(radius)}
+                  style={{
+                    paddingVertical: 10,
+                    paddingHorizontal: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#eee',
+                    backgroundColor: searchRadius === radius ? '#e3f2fd' : '#fff',
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ fontSize: 14, color: searchRadius === radius ? '#1976d2' : '#333' }}>
+                    {radius} km
+                  </Text>
+                  {searchRadius === radius && (
+                    <Ionicons name="checkmark-circle" size={18} color="#1976d2" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
       <Text style={styles.header}>Explora categorías</Text>
       <Text style={styles.subtitle}>Encuentra eventos que te interesen</Text>
 

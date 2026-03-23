@@ -15,6 +15,7 @@ import { API_URL } from './config';
 import { getFavoriteIds } from './api/favorites';
 import { attend as apiAttend, unattend as apiUnattend } from './api/attendees';
 import { pickAndPersistImage } from './utils/pickAndPersistImage';
+import { filterEventsByRadius } from './utils/locationUtils';
 
 // Proveer un valor por defecto mínimo para evitar errores si se consume fuera del Provider
 export const EventContext = createContext({ events: [] });
@@ -92,6 +93,7 @@ const BASE_EVENTS_KEY = 'eventos_guardados';
 const BASE_FAVORITES_KEY = 'favoritos_eventos_ids';
 const BASE_FAVORITES_MAP_KEY = 'favoritos_eventos_map';
 const EVENT_IMAGE_OVERRIDES_KEY = 'event_image_overrides'; // global (por dispositivo)
+const SEARCH_RADIUS_KEY = 'search_radius_km'; // user's search radius preference
 
 const storageKey = (base, uid) => `${base}:${uid ?? 'guest'}`;
 
@@ -334,6 +336,7 @@ export function EventProvider({ children }) {
   const [coords, setCoords] = useState(null);
   const [city, setCity] = useState(null);
   const [locLoading, setLocLoading] = useState(true);
+  const [searchRadius, setSearchRadius] = useState(25); // km, default 25
 
   // Favoritos
   const [favorites, setFavorites] = useState([]);
@@ -394,6 +397,26 @@ export function EventProvider({ children }) {
       }
     })();
   }, []);
+
+  // ===== Load search radius from storage =====
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(SEARCH_RADIUS_KEY);
+        if (saved) {
+          const radius = parseInt(saved, 10);
+          if (!isNaN(radius) && radius > 0) {
+            setSearchRadius(radius);
+          }
+        }
+      } catch {}
+    })();
+  }, []);
+
+  // ===== Save search radius to storage =====
+  useEffect(() => {
+    AsyncStorage.setItem(SEARCH_RADIUS_KEY, String(searchRadius)).catch(() => {});
+  }, [searchRadius]);
 
   // ===== Favoritos por usuario =====
   useEffect(() => {
@@ -502,7 +525,11 @@ export function EventProvider({ children }) {
         let usedBase = null;
         for (const base of basesToTry) {
           if (!base) continue;
-          const url = `${base.replace(/\/$/, '')}/events${uid ? `?userId=${uid}` : ''}`;
+          const params = [];
+          if (uid) params.push(`userId=${uid}`);
+          if (city) params.push(`city=${encodeURIComponent(city)}`);
+          const queryString = params.length > 0 ? `?${params.join('&')}` : '';
+          const url = `${base.replace(/\/$/, '')}/events${queryString}`;
           try {
             const res = await safeFetch(url, {}, { timeoutMs: 8000 });
             if (!res.ok) continue;
@@ -673,7 +700,7 @@ export function EventProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [uid, authToken]);
+  }, [uid, authToken, city]);
 
   // Persistir eventos por-usuario ante cambios
   useEffect(() => {
@@ -1263,6 +1290,11 @@ export function EventProvider({ children }) {
   // Derived lists: my events and community events
   const myEvents = useMemo(() => events.filter(isMine), [events, user, effectiveUser]);
   const communityEvents = useMemo(() => events.filter((e) => !isMine(e)), [events, user, effectiveUser]);
+  
+  // Location-filtered events
+  const locationFilteredEvents = useMemo(() => {
+    return filterEventsByRadius(communityEvents, coords, searchRadius);
+  }, [communityEvents, coords, searchRadius]);
 
   const value = useMemo(
     () => ({
@@ -1270,11 +1302,14 @@ export function EventProvider({ children }) {
       setEvents,
       myEvents,
       communityEvents,
+      locationFilteredEvents,
       formEvent,
       setFormEvent,
       coords,
       city,
       locLoading,
+      searchRadius,
+      setSearchRadius,
       favorites,
       favoriteItems,
       imageOverrides,
@@ -1298,10 +1333,12 @@ export function EventProvider({ children }) {
       events,
       myEvents,
       communityEvents,
+      locationFilteredEvents,
       formEvent,
       coords,
       city,
       locLoading,
+      searchRadius,
       favorites,
       favoriteItems,
       imageOverrides,
