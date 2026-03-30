@@ -38,22 +38,46 @@ const normalizeTitleKey = (title = '') => {
   t = t.replace(/\s+/g, ' ').trim();
   return t;
 };
-// Remove duplicate API/Ticketmaster events by normalized title. Keeps first
-// occurrence.
+// Remove duplicate API/Ticketmaster events by normalized title. Prefers non-VIP versions.
 const dedupeApiEvents = (arr = []) => {
-  const seen = new Set();
-  return (arr || []).filter((ev) => {
+  const groups = {};
+  
+  // Group events by normalized title
+  (arr || []).forEach((ev) => {
     if (String(ev.type) !== 'api' && String(ev.source) !== 'ticketmaster') {
-      return true; // leave local events alone
+      return; // skip local events
     }
     const key = normalizeTitleKey(ev.title);
-    if (!key) return true; // nothing to compare
-    if (seen.has(key)) {
-      return false;
+    if (!key) return;
+    
+    if (!groups[key]) {
+      groups[key] = [];
     }
-    seen.add(key);
-    return true;
+    groups[key].push(ev);
   });
+  
+  // For each group, prefer the event that doesn't have VIP indicators
+  const result = [];
+  Object.values(groups).forEach((group) => {
+    if (group.length === 1) {
+      result.push(group[0]);
+    } else {
+      // Find events without VIP in title (case insensitive)
+      const nonVipEvents = group.filter(ev => 
+        !/\b(vip|packages?|package)\b/i.test(String(ev.title || ''))
+      );
+      
+      if (nonVipEvents.length > 0) {
+        // Keep the first non-VIP event
+        result.push(nonVipEvents[0]);
+      } else {
+        // If all are VIP, keep the first one
+        result.push(group[0]);
+      }
+    }
+  });
+  
+  return result;
 };
 
 const externalIdFrom = (ev) => {

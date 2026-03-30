@@ -45,11 +45,11 @@ export function filterEventsByRadius(events = [], userCoords, radiusKm = 25) {
           withinRadius: distance <= radiusKm,
         };
       }
-      // Events without coordinates are always included
+      // Events without coordinates are excluded from location filtering
       return {
         ...event,
         distance: null,
-        withinRadius: true,
+        withinRadius: false,
       };
     })
     .filter((event) => event.withinRadius)

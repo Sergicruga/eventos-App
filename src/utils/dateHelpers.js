@@ -25,8 +25,8 @@ export const todayLocalMidnightMs = () => {
 
 export const isUpcoming = (dateStr) => {
   const eventMs = toLocalMidnightMs(dateStr);
-  const todayMs = todayLocalMidnightMs();
-  return !Number.isNaN(eventMs) && eventMs >= todayMs;
+  const yesterdayMs = todayLocalMidnightMs() - (24 * 60 * 60 * 1000); // Yesterday at midnight
+  return !Number.isNaN(eventMs) && eventMs >= yesterdayMs;
 };
 
 export const formatDateDMY = (dateStr) => {
