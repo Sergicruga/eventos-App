@@ -14,7 +14,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useFocusEffect, useRoute } from "@react-navigation/native";
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
-import { API_URL } from '../config';
+import { API_URL } from "../config";
 import {
   getUser,
   getUserCreatedEvents,
@@ -54,6 +54,7 @@ function toLocalMidnightMs(dateStr) {
     0
   ).getTime();
 }
+
 function todayLocalMidnightMs() {
   const now = new Date();
   return new Date(
@@ -66,6 +67,7 @@ function todayLocalMidnightMs() {
     0
   ).getTime();
 }
+
 function isUpcoming(dateStr) {
   const e = toLocalMidnightMs(dateStr);
   const t = todayLocalMidnightMs();
@@ -89,7 +91,7 @@ function getEventTime(ev) {
   }
   const iso = ev?.startsAt || ev?.starts_at || ev?.event_at;
   if (typeof iso === "string" && iso.length >= 16) {
-    return iso.slice(11, 16); // HH:mm
+    return iso.slice(11, 16);
   }
   return "";
 }
@@ -98,17 +100,13 @@ function getEventTime(ev) {
   Imagen miniatura evento  
 ----------------------------------------------------------------------------- */
 function EventThumbImage({ eventId, serverImage, style }) {
-  const {
-    getEffectiveEventImage,
-    getEventImageSource,
-    overridesReady,
-  } = useContext(EventContext);
-  const [stage, setStage] = React.useState(0); // 0: efectiva, 1: backup web, 2: asset local
+  const { getEffectiveEventImage, getEventImageSource, overridesReady } =
+    useContext(EventContext);
+
+  const [stage, setStage] = React.useState(0);
 
   const effective =
-    getEffectiveEventImage?.(eventId, serverImage) ??
-    serverImage ??
-    null;
+    getEffectiveEventImage?.(eventId, serverImage) ?? serverImage ?? null;
 
   React.useEffect(() => {
     setStage(0);
@@ -136,9 +134,7 @@ function EventThumbImage({ eventId, serverImage, style }) {
       source={src}
       style={style}
       resizeMode="cover"
-      onError={() =>
-        setStage((prev) => (prev < 2 ? prev + 1 : 2))
-      }
+      onError={() => setStage((prev) => (prev < 2 ? prev + 1 : 2))}
     />
   );
 }
@@ -146,19 +142,13 @@ function EventThumbImage({ eventId, serverImage, style }) {
 /* -----------------------------------------------------------------------------  
   Normalizador de eventos  
 ----------------------------------------------------------------------------- */
-function normalizeEvents(
-  rawEvents,
-  getEffectiveEventImage,
-  { onlyUpcoming = true } = {}
-) {
+function normalizeEvents(rawEvents, getEffectiveEventImage, { onlyUpcoming = true } = {}) {
   const mapped = (rawEvents || []).map((e) => {
     const rawDate =
       e.event_at ||
       e.date ||
       e.eventAt ||
-      (typeof e.starts_at === "string"
-        ? e.starts_at.slice(0, 10)
-        : null);
+      (typeof e.starts_at === "string" ? e.starts_at.slice(0, 10) : null);
 
     const date = rawDate ? String(rawDate).slice(0, 10) : "";
 
@@ -167,10 +157,7 @@ function normalizeEvents(
       title: e.title,
       date,
       location: e.location ?? "",
-      image:
-        getEffectiveEventImage?.(e.id, e.image) ??
-        e.image ??
-        null,
+      image: getEffectiveEventImage?.(e.id, e.image) ?? e.image ?? null,
       description: e.description ?? "",
       latitude: e.latitude ?? null,
       longitude: e.longitude ?? null,
@@ -181,9 +168,7 @@ function normalizeEvents(
     };
   });
 
-  const filtered = onlyUpcoming
-    ? mapped.filter((ev) => isUpcoming(ev.date))
-    : mapped;
+  const filtered = onlyUpcoming ? mapped.filter((ev) => isUpcoming(ev.date)) : mapped;
 
   return filtered.sort(
     (a, b) => toLocalMidnightMs(a.date) - toLocalMidnightMs(b.date)
@@ -194,9 +179,7 @@ function normalizeEvents(
   Merge con eventos del EventContext  
 ----------------------------------------------------------------------------- */
 function mergeWithContextEvents(rawEvents, ctxEvents) {
-  const ctxMap = Object.fromEntries(
-    (ctxEvents || []).map((e) => [String(e.id), e])
-  );
+  const ctxMap = Object.fromEntries((ctxEvents || []).map((e) => [String(e.id), e]));
 
   return (rawEvents || []).map((ev) => {
     const ctx = ctxMap[String(ev.id)];
@@ -205,20 +188,11 @@ function mergeWithContextEvents(rawEvents, ctxEvents) {
     return {
       ...ev,
       date: ctx.date ?? ev.date,
-      time_start:
-        ctx.timeStart ?? ev.time_start ?? ev.timeStart ?? null,
+      time_start: ctx.timeStart ?? ev.time_start ?? ev.timeStart ?? null,
       timeStart: ctx.timeStart ?? ev.timeStart ?? null,
-      starts_at:
-        ctx.startsAt ??
-        ev.starts_at ??
-        ev.startsAt ??
-        null,
+      starts_at: ctx.startsAt ?? ev.starts_at ?? ev.startsAt ?? null,
       startsAt: ctx.startsAt ?? ev.startsAt ?? null,
-      event_at:
-        ctx.startsAt ??
-        ctx.event_at ??
-        ev.event_at ??
-        null,
+      event_at: ctx.startsAt ?? ctx.event_at ?? ev.event_at ?? null,
     };
   });
 }
@@ -230,159 +204,128 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const route = useRoute();
 
-  // Contextos
-  const {
-    logout,
-    user: authUser,
-    token,
-    login,
-  } = useContext(AuthContext);
-  const {
-    user: evCtxUser,
-    updateUser,
-    getEffectiveEventImage,
-    events,
-  } = useContext(EventContext);
+  const { logout, user: authUser, token, login } = useContext(AuthContext);
+  const { user: evCtxUser, updateUser, getEffectiveEventImage, events } =
+    useContext(EventContext);
 
-  // userId recibido por params (cuando vienes desde un asistente)
   const routeUserIdRaw = route?.params?.userId;
   const authUid = authUser?.id ?? null;
-  const viewedUserId =
-    routeUserIdRaw != null ? String(routeUserIdRaw) : authUid;
+  const viewedUserId = routeUserIdRaw != null ? String(routeUserIdRaw) : authUid;
 
-  // ¿Estoy viendo mi propio perfil o el de otro usuario?
   const isMe =
     routeUserIdRaw == null ||
-    (authUid != null &&
-      String(authUid) === String(routeUserIdRaw));
+    (authUid != null && String(authUid) === String(routeUserIdRaw));
 
-  // Estado local
   const [me, setMe] = useState(null);
-  const [myEvents, setMyEvents] = useState([]); // creados
-  const [attendingEvents, setAttendingEvents] = useState([]); // a los que voy / va
-  const [activeTab, setActiveTab] = useState("created"); // "created" | "attending"
+  const [myEvents, setMyEvents] = useState([]);
+  const [attendingEvents, setAttendingEvents] = useState([]);
+  const [activeTab, setActiveTab] = useState("created");
   const [loading, setLoading] = useState(true);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoBust, setPhotoBust] = useState(0);
 
-  // Helpers
   const absolutePhoto = (photoPath) =>
-    photoPath?.startsWith("http")
-      ? photoPath
-      : `${API_URL}${photoPath}`;
+    photoPath?.startsWith("http") ? photoPath : `${API_URL}${photoPath}`;
 
-  const hydrate = useCallback(
-    async () => {
-      if (!viewedUserId) return;
-      try {
-        setLoading(true);
+  const hydrate = useCallback(async () => {
+    if (!viewedUserId) return;
 
-        // 👇 Cargamos SIEMPRE el usuario que estamos viendo (propio u otro)
-        const [u, evsCreated, evsAttending] = await Promise.all([
-          getUser(viewedUserId),
-          getUserCreatedEvents(viewedUserId),
-          getUserAttendingEvents(viewedUserId),
-        ]);
+    try {
+      setLoading(true);
 
-        // Datos de usuario
-        setMe((prev) =>
-          prev && prev.id === u.id ? { ...prev, ...u } : u
-        );
+      const [u, evsCreated, evsAttending] = await Promise.all([
+        getUser(viewedUserId),
+        getUserCreatedEvents(viewedUserId),
+        getUserAttendingEvents(viewedUserId),
+      ]);
 
-        // Merge con eventos del contexto
-        const createdMerged = mergeWithContextEvents(
-          evsCreated,
-          events
-        );
-        const attendingMerged = mergeWithContextEvents(
-          evsAttending,
-          events
-        );
+      setMe((prev) => (prev && prev.id === u.id ? { ...prev, ...u } : u));
 
-        setMyEvents(
-          normalizeEvents(createdMerged, getEffectiveEventImage, {
-            onlyUpcoming: true,
-          })
-        );
-        setAttendingEvents(
-          normalizeEvents(
-            attendingMerged,
-            getEffectiveEventImage,
-            { onlyUpcoming: true }
-          )
-        );
+      const createdMerged = mergeWithContextEvents(evsCreated, events);
+      const attendingMerged = mergeWithContextEvents(evsAttending, events);
 
-        // 🔒 Solo sincronizamos con contextos si es MI perfil
-        if (isMe && updateUser) {
-          const needEvCtx =
-            evCtxUser?.id !== u.id ||
-            evCtxUser?.name !== u.name ||
-            evCtxUser?.email !== u.email ||
-            evCtxUser?.photo !== u.photo;
-          if (needEvCtx)
-            updateUser({
+      setMyEvents(
+        normalizeEvents(createdMerged, getEffectiveEventImage, {
+          onlyUpcoming: true,
+        })
+      );
+
+      setAttendingEvents(
+        normalizeEvents(attendingMerged, getEffectiveEventImage, {
+          onlyUpcoming: true,
+        })
+      );
+
+      if (isMe && updateUser) {
+        const needEvCtx =
+          evCtxUser?.id !== u.id ||
+          evCtxUser?.name !== u.name ||
+          evCtxUser?.email !== u.email ||
+          evCtxUser?.photo !== u.photo;
+
+        if (needEvCtx) {
+          updateUser({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            photo: u.photo,
+          });
+        }
+      }
+
+      if (isMe) {
+        const needAuth =
+          authUser?.id !== u.id ||
+          authUser?.name !== u.name ||
+          authUser?.email !== u.email ||
+          authUser?.photo !== u.photo;
+
+        if (needAuth) {
+          await login({
+            user: {
+              ...(authUser || {}),
               id: u.id,
               name: u.name,
               email: u.email,
               photo: u.photo,
-            });
+            },
+            token,
+          });
         }
-
-        if (isMe) {
-          const needAuth =
-            authUser?.id !== u.id ||
-            authUser?.name !== u.name ||
-            authUser?.email !== u.email ||
-            authUser?.photo !== u.photo;
-          if (needAuth)
-            await login({
-              user: {
-                ...(authUser || {}),
-                id: u.id,
-                name: u.name,
-                email: u.email,
-                photo: u.photo,
-              },
-              token,
-            });
-        }
-      } catch (e) {
-        Alert.alert("Error", e.message);
-      } finally {
-        setLoading(false);
       }
-    },
-    [
-      viewedUserId,
-      token,
-      evCtxUser?.id,
-      evCtxUser?.name,
-      evCtxUser?.email,
-      evCtxUser?.photo,
-      updateUser,
-      login,
-      authUser,
-      getEffectiveEventImage,
-      events,
-      isMe,
-    ]
-  );
+    } catch (e) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    viewedUserId,
+    token,
+    evCtxUser?.id,
+    evCtxUser?.name,
+    evCtxUser?.email,
+    evCtxUser?.photo,
+    updateUser,
+    login,
+    authUser,
+    getEffectiveEventImage,
+    events,
+    isMe,
+  ]);
 
-  // Carga inicial
   useEffect(() => {
     hydrate();
   }, [hydrate]);
 
-  // Recarga al enfocar la pantalla
   useFocusEffect(
     useCallback(() => {
       hydrate();
     }, [hydrate])
   );
 
-  // Refleja cambios del EventContext SOLO si es mi propio perfil
   useEffect(() => {
     if (!authUid || !isMe) return;
+
     if (evCtxUser?.id === authUid) {
       setMe((prev) => {
         const next = {
@@ -391,30 +334,25 @@ export default function ProfileScreen() {
           email: evCtxUser.email ?? prev?.email,
           photo: evCtxUser.photo ?? prev?.photo,
         };
+
         const equal =
           prev &&
           prev.id === next.id &&
           prev.name === next.name &&
           prev.email === next.email &&
           prev.photo === next.photo;
+
         return equal ? prev : { ...(prev || {}), ...next };
       });
     }
-  }, [
-    evCtxUser?.name,
-    evCtxUser?.email,
-    evCtxUser?.photo,
-    authUid,
-    isMe,
-  ]);
+  }, [evCtxUser?.name, evCtxUser?.email, evCtxUser?.photo, authUid, isMe]);
 
-  // Cambiar foto (solo si es mi perfil)
   const onChangePhoto = async () => {
     if (!isMe || !authUid) return;
 
     try {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
       if (status !== "granted") {
         Alert.alert(
           "Permiso requerido",
@@ -429,6 +367,7 @@ export default function ProfileScreen() {
         aspect: [1, 1],
         quality: 0.8,
       });
+
       if (res.canceled || !res.assets?.[0]?.uri) return;
 
       setPhotoUploading(true);
@@ -439,11 +378,13 @@ export default function ProfileScreen() {
         ...(prev || {}),
         photo: data.photo,
       }));
+
       updateUser?.({
         ...(evCtxUser || {}),
         id: authUid,
         photo: data.photo,
       });
+
       await login({
         user: { ...(authUser || {}), photo: data.photo },
         token,
@@ -458,7 +399,6 @@ export default function ProfileScreen() {
     }
   };
 
-  // Si no hay usuario logueado
   if (!authUid) {
     return (
       <SafeAreaView
@@ -471,7 +411,14 @@ export default function ProfileScreen() {
         }}
       >
         <Ionicons name="person-circle-outline" size={64} color="#9CA3AF" />
-        <Text style={{ fontSize: 18, fontWeight: "600", marginTop: 12, color: "#374151" }}>
+        <Text
+          style={{
+            fontSize: 18,
+            fontWeight: "600",
+            marginTop: 12,
+            color: "#374151",
+          }}
+        >
           Inicia sesión para ver tu perfil.
         </Text>
       </SafeAreaView>
@@ -493,24 +440,21 @@ export default function ProfileScreen() {
     );
   }
 
-  // Datos a mostrar
   const displayName = me?.name ?? authUser?.name ?? "-";
   const displayEmail = me?.email ?? authUser?.email ?? "-";
+
   const basePhoto = me?.photo
     ? absolutePhoto(me.photo)
     : authUser?.photo
     ? absolutePhoto(authUser.photo)
     : null;
-  const avatarUri = basePhoto
-    ? `${basePhoto}?t=${photoBust}`
-    : null;
 
-  const eventsData =
-    activeTab === "created" ? myEvents : attendingEvents;
+  const avatarUri = basePhoto ? `${basePhoto}?t=${photoBust}` : null;
+
+  const eventsData = activeTab === "created" ? myEvents : attendingEvents;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#F3F4F6" }}>
-      {/* Barra superior: volver a mi perfil cuando estoy viendo a otro */}
       {!isMe && authUid && (
         <View
           style={{
@@ -539,7 +483,6 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {/* Profile Card */}
       <View
         style={{
           margin: 20,
@@ -588,14 +531,20 @@ export default function ProfileScreen() {
           ) : null}
         </TouchableOpacity>
 
-        <Text style={{ fontSize: 22, fontWeight: "700", color: "#1F2937", marginTop: 8 }}>
+        <Text
+          style={{
+            fontSize: 22,
+            fontWeight: "700",
+            color: "#1F2937",
+            marginTop: 8,
+          }}
+        >
           {displayName}
         </Text>
         <Text style={{ color: "#6B7280", marginTop: 2, fontSize: 15 }}>
           {displayEmail}
         </Text>
 
-        {/* Botones solo para MI perfil */}
         {isMe && (
           <View style={{ flexDirection: "row", marginTop: 18 }}>
             <TouchableOpacity
@@ -615,7 +564,12 @@ export default function ProfileScreen() {
               }}
               activeOpacity={0.85}
             >
-              <Ionicons name="create-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Ionicons
+                name="create-outline"
+                size={18}
+                color="#fff"
+                style={{ marginRight: 6 }}
+              />
               <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
                 Editar perfil
               </Text>
@@ -637,7 +591,12 @@ export default function ProfileScreen() {
               }}
               activeOpacity={0.85}
             >
-              <Ionicons name="notifications-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Ionicons
+                name="notifications-outline"
+                size={18}
+                color="#fff"
+                style={{ marginRight: 6 }}
+              />
               <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
                 Notificaciones
               </Text>
@@ -646,14 +605,12 @@ export default function ProfileScreen() {
         )}
       </View>
 
-      {/* Events Section */}
       <View style={{ paddingHorizontal: 24, paddingTop: 4 }}>
         <Text style={{ fontSize: 18, fontWeight: "700", color: "#1F2937" }}>
           {isMe ? "Mis eventos" : "Eventos"}
         </Text>
       </View>
 
-      {/* Tabs */}
       <View
         style={{
           flexDirection: "row",
@@ -709,33 +666,90 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Event List */}
       <FlatList
         data={eventsData}
         keyExtractor={(i) => i.id}
+        style={{ flex: 1 }}
         contentContainerStyle={{
           padding: 24,
           paddingTop: 12,
+          paddingBottom: 60,
         }}
         ListEmptyComponent={
-          <View style={{
-            alignItems: "center",
-            marginTop: 32,
-          }}>
+          <View
+            style={{
+              alignItems: "center",
+              marginTop: 32,
+            }}
+          >
             <Ionicons name="calendar-outline" size={40} color="#9CA3AF" />
             <Text style={{ color: "#6B7280", fontSize: 16, marginTop: 8 }}>
               {activeTab === "created"
-                ? (isMe
+                ? isMe
                   ? "No tienes eventos creados."
-                  : "No tiene eventos creados.")
-                : (isMe
-                  ? "No estás apuntado a ningún evento próximo."
-                  : "No está apuntado a ningún evento próximo.")}
+                  : "No tiene eventos creados."
+                : isMe
+                ? "No estás apuntado a ningún evento próximo."
+                : "No está apuntado a ningún evento próximo."}
             </Text>
           </View>
         }
+        ListFooterComponent={
+          isMe ? (
+            <View style={{ marginTop: 8 }}>
+              <View
+                style={{
+                  backgroundColor: "#FFFFFF",
+                  borderRadius: 18,
+                  paddingVertical: 6,
+                  shadowColor: "#000",
+                  shadowOpacity: 0.06,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 2 },
+                  elevation: 3,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={() => navigation.navigate("PrivacyPolicy")}
+                  activeOpacity={0.85}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingHorizontal: 18,
+                    paddingVertical: 16,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <Ionicons
+                      name="shield-checkmark-outline"
+                      size={20}
+                      color="#2563EB"
+                      style={{ marginRight: 12 }}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 16,
+                        fontWeight: "600",
+                        color: "#1F2937",
+                      }}
+                    >
+                      Política de privacidad
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward-outline"
+                    size={20}
+                    color="#9CA3AF"
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null
+        }
         renderItem={({ item }) => {
           const timeLabel = getEventTime(item);
+
           return (
             <TouchableOpacity
               onPress={() =>
@@ -769,13 +783,19 @@ export default function ProfileScreen() {
                   backgroundColor: "#E5E7EB",
                 }}
               />
+
               <View style={{ flex: 1 }}>
                 <Text
-                  style={{ fontWeight: "700", fontSize: 16, color: "#1F2937" }}
+                  style={{
+                    fontWeight: "700",
+                    fontSize: 16,
+                    color: "#1F2937",
+                  }}
                   numberOfLines={1}
                 >
                   {item.title}
                 </Text>
+
                 <View
                   style={{
                     flexDirection: "row",
@@ -793,6 +813,7 @@ export default function ProfileScreen() {
                   <Text style={{ color: "#374151", fontSize: 14 }}>
                     {formatEventDate(item.date)}
                   </Text>
+
                   {timeLabel ? (
                     <>
                       <Text style={{ color: "#374151", fontSize: 14 }}>
@@ -809,48 +830,50 @@ export default function ProfileScreen() {
                       </Text>
                     </>
                   ) : null}
-                  <Text style={{ color: "#374151", fontSize: 14 }}>
-                    {" · "}{item.location}
-                  </Text>
+
+                  {!!item.location && (
+                    <Text style={{ color: "#374151", fontSize: 14 }}>
+                      {" · "}
+                      {item.location}
+                    </Text>
+                  )}
                 </View>
               </View>
-              <Ionicons name="chevron-forward-outline" size={22} color="#9CA3AF" />
+
+              <Ionicons
+                name="chevron-forward-outline"
+                size={22}
+                color="#9CA3AF"
+              />
             </TouchableOpacity>
           );
         }}
       />
-      <TouchableOpacity onPress={() => navigation.navigate("PrivacyPolicy")}>
-        <Text style={{ paddingVertical: 12 }}>
-          Política de privacidad
-        </Text>
-      </TouchableOpacity>
-      {/* Floating Logout Button */}
-      <TouchableOpacity
-        onPress={logout}
-        activeOpacity={0.85}
-        style={{
-          position: "absolute",
-          right: 24,
-          bottom: 32,
-          backgroundColor: "#EF4444",
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          justifyContent: "center",
-          alignItems: "center",
-          shadowColor: "#EF4444",
-          shadowOpacity: 0.18,
-          shadowRadius: 8,
-          elevation: 6,
-        }}
-      >
-        <Ionicons
-          name="log-out-outline"
-          size={28}
-          color="#fff"
-        />
-      </TouchableOpacity>
-      
+
+      {isMe && (
+        <TouchableOpacity
+          onPress={logout}
+          activeOpacity={0.85}
+          style={{
+            position: "absolute",
+            right: 24,
+            bottom: 16,
+            backgroundColor: "#EF4444",
+            width: 60,
+            height: 60,
+            borderRadius: 30,
+            justifyContent: "center",
+            alignItems: "center",
+            shadowColor: "#EF4444",
+            shadowOpacity: 0.22,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 8,
+          }}
+        >
+          <Ionicons name="log-out-outline" size={28} color="#fff" />
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
