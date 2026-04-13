@@ -3,7 +3,20 @@ CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
-  photo TEXT
+  password TEXT, -- optional now, for migration
+  photo TEXT,
+  privacy_accepted_at TIMESTAMP,
+  privacy_version TEXT
+);
+
+-- VERIFICATION CODES
+CREATE TABLE IF NOT EXISTS verification_codes (
+  id SERIAL PRIMARY KEY,
+  email TEXT NOT NULL,
+  code TEXT NOT NULL,
+  purpose TEXT NOT NULL, -- 'register' or 'login'
+  expires_at TIMESTAMP NOT NULL,
+  used BOOLEAN DEFAULT FALSE
 );
 
 -- EVENT CATEGORIES

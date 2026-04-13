@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
-import { updateProfile, changePassword } from "../api/users";
+import { updateProfile } from "../api/users";
 import { API_URL } from '../config';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -28,11 +28,6 @@ export default function EditProfileScreen({ navigation }) {
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail);
   const [saving, setSaving] = useState(false);
-
-  // password
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [changingPwd, setChangingPwd] = useState(false);
 
   // Rehidratar inputs si el usuario global cambió fuera de esta pantalla
   useEffect(() => {
@@ -72,30 +67,6 @@ export default function EditProfileScreen({ navigation }) {
       }
     } finally {
       setSaving(false);
-    }
-  };
-
-  const savePassword = async () => {
-    if (!uid) return;
-    if (!currentPassword || !newPassword) return Alert.alert("Campos requeridos", "Rellena ambas contraseñas.");
-    if (newPassword.length < 6)
-      return Alert.alert("Contraseña débil", "La nueva contraseña debe tener al menos 6 caracteres.");
-
-    setChangingPwd(true);
-    try {
-      await changePassword(uid, currentPassword, newPassword);
-      Alert.alert("Contraseña actualizada");
-      setCurrentPassword("");
-      setNewPassword("");
-    } catch (e) {
-      const msg = String(e?.message || "");
-      if (msg.toLowerCase().includes("incorrecta") || msg.includes("401")) {
-        Alert.alert("Error", "La contraseña actual no es correcta.");
-      } else {
-        Alert.alert("Error", msg || "No se pudo cambiar la contraseña");
-      }
-    } finally {
-      setChangingPwd(false);
     }
   };
 
@@ -161,35 +132,6 @@ export default function EditProfileScreen({ navigation }) {
       </TouchableOpacity>
 
       <View style={{ height: 24 }} />
-
-      <Text style={{ fontSize: 16, fontWeight: "700", marginBottom: 12 }}>Cambiar contraseña</Text>
-      <TextInput
-        placeholder="Contraseña actual"
-        secureTextEntry
-        value={currentPassword}
-        onChangeText={setCurrentPassword}
-        style={{ borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 12, marginBottom: 12 }}
-      />
-      <TextInput
-        placeholder="Nueva contraseña"
-        secureTextEntry
-        value={newPassword}
-        onChangeText={setNewPassword}
-        style={{ borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 12, marginBottom: 16 }}
-      />
-
-      <TouchableOpacity
-        onPress={savePassword}
-        disabled={changingPwd}
-        style={{ backgroundColor: "#2563eb", padding: 14, borderRadius: 12, alignItems: "center" }}
-        activeOpacity={0.85}
-      >
-        {changingPwd ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={{ color: "#fff", fontWeight: "600" }}>Actualizar contraseña</Text>
-        )}
-      </TouchableOpacity>
 
       {/* ✅ Botón eliminar cuenta */}
       <TouchableOpacity

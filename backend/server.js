@@ -8,6 +8,7 @@ import path from "path";
 import fs from "fs";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
 import { fetchMusicEventsMultipleCities } from "./services/ticketmasterService.js";
 
 dotenv.config();
@@ -65,6 +66,22 @@ pool
   .catch((err) =>
     console.error("❌ Error conectando a PostgreSQL:", err.message)
   );
+
+/* ==========================
+   EMAIL SETUP
+   ========================== */
+
+const transporter = nodemailer.createTransporter({
+  host: process.env.SMTP_HOST || "smtp.gmail.com",
+  port: process.env.SMTP_PORT || 587,
+  secure: false, // true for 465, false for other ports
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+/* ==========================
 
 /* ==========================
    MIDDLEWARES
@@ -1024,6 +1041,64 @@ app.delete("/events/:eventId/comments/:commentId", async (req, res) => {
 });
 
 /* ==========================
+   AUTH HELPERS
+   ========================== */
+
+function generateCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
+}
+
+async function sendVerificationEmail(email, code, purpose) {
+  const subject = purpose === 'register' ? 'Código de verificación para registro' : 'Código de verificación para inicio de sesión';
+  const html = `
+    <h2>${subject}</h2>
+    <p>Tu código de verificación es: <strong>${code}</strong></p>
+    <p>Este código expira en 10 minutos.</p>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_USER,
+      to: email,
+      subject,
+      html,
+    });
+  } catch (error) {
+    console.error('Error sending email:', error);
+    throw error;
+  }
+}
+
+async function createVerificationCode(email, purpose) {
+  const code = generateCode();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  await pool.query(
+    'INSERT INTO verification_codes (email, code, purpose, expires_at) VALUES ($1, $2, $3, $4)',
+    [email, code, purpose, expiresAt]
+  );
+
+  return code;
+}
+
+async function verifyCode(email, code, purpose) {
+  const result = await pool.query(
+    'SELECT * FROM verification_codes WHERE email = $1 AND code = $2 AND purpose = $3 AND used = FALSE AND expires_at > NOW()',
+    [email, code, purpose]
+  );
+
+  if (result.rowCount === 0) return null;
+
+  // Mark as used
+  await pool.query(
+    'UPDATE verification_codes SET used = TRUE WHERE id = $1',
+    [result.rows[0].id]
+  );
+
+  return result.rows[0];
+}
+
+/* ==========================
    AUTH (registro / login)
    ========================== */
 
@@ -1051,10 +1126,10 @@ function authMiddleware(req, res, next) {
 
 app.post("/auth/register", async (req, res) => {
   try {
-    const { name, email, password, privacyAccepted } = req.body;
+    const { name, email, privacyAccepted } = req.body;
 
-    if (!name || !email || !password)
-      return res.status(400).json({ message: "Campos obligatorios" });
+    if (!name || !email)
+      return res.status(400).json({ message: "Nombre y email obligatorios" });
 
     // ✅ Consentimiento obligatorio
     if (privacyAccepted !== true) {
@@ -1069,19 +1144,44 @@ app.post("/auth/register", async (req, res) => {
     if (exists.rowCount > 0)
       return res.status(409).json({ message: "El email ya está registrado" });
 
-    const hash = await bcrypt.hash(password, 10);
+    const code = await createVerificationCode(email, 'register');
+    await sendVerificationEmail(email, code, 'register');
 
-    // ✅ Guardamos versión + fecha de aceptación
+    res.json({ message: "Código enviado a tu email" });
+  } catch (e) {
+    console.error("REGISTER ERROR:", e);
+    res.status(500).json({ message: "Error enviando código" });
+  }
+});
+
+app.post("/auth/verify-register", async (req, res) => {
+  try {
+    const { email, code, name, privacyAccepted } = req.body;
+
+    if (!email || !code || !name)
+      return res.status(400).json({ message: "Campos obligatorios" });
+
+    if (privacyAccepted !== true) {
+      return res.status(400).json({
+        message: "Debes aceptar la política de privacidad",
+      });
+    }
+
+    const verification = await verifyCode(email, code, 'register');
+    if (!verification) {
+      return res.status(400).json({ message: "Código inválido o expirado" });
+    }
+
     const PRIVACY_VERSION = "1.0";
 
     const result = await pool.query(
       `INSERT INTO users (
-         name, email, password,
+         name, email,
          privacy_accepted_at, privacy_version
        )
-       VALUES ($1, $2, $3, NOW(), $4)
+       VALUES ($1, $2, NOW(), $3)
        RETURNING id, name, email, privacy_accepted_at, privacy_version`,
-      [name, email, hash, PRIVACY_VERSION]
+      [name, email, PRIVACY_VERSION]
     );
 
     const user = result.rows[0];
@@ -1089,35 +1189,55 @@ app.post("/auth/register", async (req, res) => {
 
     res.json({ user, token });
   } catch (e) {
-    console.error("REGISTER ERROR:", e);
-    res.status(500).json({ message: "Error registrando usuario" });
+    console.error("VERIFY REGISTER ERROR:", e);
+    res.status(500).json({ message: "Error verificando registro" });
   }
 });
 
 app.post("/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ message: "Email y contraseña requeridos" });
+    const { email } = req.body;
+    if (!email)
+      return res.status(400).json({ message: "Email requerido" });
+
+    const exists = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
+    if (exists.rowCount === 0)
+      return res.status(404).json({ message: "Usuario no encontrado" });
+
+    const code = await createVerificationCode(email, 'login');
+    await sendVerificationEmail(email, code, 'login');
+
+    res.json({ message: "Código enviado a tu email" });
+  } catch (e) {
+    console.error("LOGIN ERROR:", e);
+    res.status(500).json({ message: "Error enviando código" });
+  }
+});
+
+app.post("/auth/verify-login", async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code)
+      return res.status(400).json({ message: "Email y código requeridos" });
+
+    const verification = await verifyCode(email, code, 'login');
+    if (!verification) {
+      return res.status(400).json({ message: "Código inválido o expirado" });
+    }
 
     const result = await pool.query(
-      "SELECT id, name, email, password FROM users WHERE email = $1",
+      "SELECT id, name, email FROM users WHERE email = $1",
       [email]
     );
     if (result.rowCount === 0)
-      return res.status(401).json({ message: "Credenciales inválidas" });
+      return res.status(404).json({ message: "Usuario no encontrado" });
 
-    const userRow = result.rows[0];
-    const ok = await bcrypt.compare(password, userRow.password);
-    if (!ok)
-      return res.status(401).json({ message: "Credenciales inválidas" });
-
-    const user = { id: userRow.id, name: userRow.name, email: userRow.email };
+    const user = result.rows[0];
     const token = signToken({ id: user.id, email: user.email });
     res.json({ user, token });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "Error al iniciar sesión" });
+    console.error("VERIFY LOGIN ERROR:", e);
+    res.status(500).json({ message: "Error verificando login" });
   }
 });
 
