@@ -12,13 +12,16 @@
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^3.0.2",
+    "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
-    "nodemailer": "^6.9.8",
-    "pg": "^8.16.3"
+    "node-schedule": "^2.1.1",
+    "nodemailer": "^8.0.5",
+    "pg": "^8.16.3",
+    "puppeteer": "^24.41.0"
   },
   "description": ""
 }

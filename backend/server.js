@@ -9,7 +9,9 @@ import fs from "fs";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
+import schedule from "node-schedule";
 import { fetchMusicEventsMultipleCities } from "./services/ticketmasterService.js";
+import { fetchAtrapaloEventsMultipleCities } from "./services/atrapaloService.js";
 
 dotenv.config();
 const { Pool } = pkg;
@@ -71,7 +73,7 @@ pool
    EMAIL SETUP
    ========================== */
 
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: process.env.SMTP_PORT || 587,
   secure: false, // true for 465, false for other ports
@@ -80,6 +82,23 @@ const transporter = nodemailer.createTransporter({
     pass: process.env.SMTP_PASS,
   },
 });
+
+/* ==========================
+   ATRAPALO SCHEDULER
+   ========================== */
+
+// Optional: Schedule Atrapalo scraping every 3 hours to cache events
+// Uncomment to enable automatic scraping cache updates
+// schedule.scheduleJob('0 */3 * * *', async () => {
+//   console.log('🕐 Running scheduled Atrapalo scrape...');
+//   try {
+//     const cities = ['Madrid', 'Barcelona', 'Valencia', 'Asturias', 'Bilbao', 'Sevilla'];
+//     const atrapaloEvents = await fetchAtrapaloEventsMultipleCities(cities);
+//     console.log(`✅ Cached ${atrapaloEvents.length} Atrapalo events`);
+//   } catch (error) {
+//     console.error('❌ Scheduled Atrapalo scrape failed:', error.message);
+//   }
+// });
 
 /* ==========================
 
@@ -216,17 +235,29 @@ app.get("/events", async (req, res) => {
     // Fetch Ticketmaster music events (non-blocking, errors don't crash the response)
     // Prioritize user's city if provided, otherwise use default cities
     let ticketmasterEvents = [];
+    let atrapaloEvents = [];
     try {
       const citiesToFetch = userCity 
         ? [userCity, 'Madrid', 'Barcelona'] 
         : ['Madrid', 'Barcelona', 'Valencia'];
-      ticketmasterEvents = await fetchMusicEventsMultipleCities(citiesToFetch);
+      
+      // Fetch both Ticketmaster and Atrapalo events in parallel
+      const [tmEvents, atrapaloRes] = await Promise.all([
+        fetchMusicEventsMultipleCities(citiesToFetch),
+        fetchAtrapaloEventsMultipleCities(citiesToFetch).catch(err => {
+          console.warn("Atrapalo fetch failed, continuing without Atrapalo events:", err.message);
+          return [];
+        })
+      ]);
+      
+      ticketmasterEvents = tmEvents;
+      atrapaloEvents = atrapaloRes;
     } catch (tmError) {
-      console.warn("Ticketmaster fetch failed, continuing without external events:", tmError.message);
+      console.warn("External events fetch failed, continuing without external events:", tmError.message);
     }
 
     // Combine and return events
-    const allEvents = [...events, ...ticketmasterEvents];
+    const allEvents = [...events, ...ticketmasterEvents, ...atrapaloEvents];
     return res.json(allEvents);
   } catch (e) {
     console.error("PG ERROR:", e);
