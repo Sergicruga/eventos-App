@@ -6,6 +6,7 @@ import pkg from "pg";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
@@ -13,7 +14,10 @@ import schedule from "node-schedule";
 import { fetchMusicEventsMultipleCities } from "./services/ticketmasterService.js";
 import { fetchAtrapaloEventsMultipleCities } from "./services/atrapaloService.js";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, ".env") });
 const { Pool } = pkg;
 
 const app = express();
@@ -65,9 +69,10 @@ pool
     console.log("✅ Conectado a PostgreSQL (Render)");
     c.release();
   })
-  .catch((err) =>
-    console.error("❌ Error conectando a PostgreSQL:", err.message)
-  );
+  .catch((err) => {
+    console.error("❌ Error conectando a PostgreSQL:", err.message);
+    console.log("⚠️  Continuando sin base de datos (solo para testing de scraping)");
+  });
 
 /* ==========================
    EMAIL SETUP
@@ -195,41 +200,46 @@ app.get("/events", async (req, res) => {
 
     // Fetch local events from database
     let events = [];
-    
-    if (!userId) {
-      const { rows } = await pool.query(
-        `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
-                e.latitude, e.longitude, e.created_by, e.category_id,
-                ec.slug as category_slug, ec.name as category_name
+
+    try {
+      if (!userId) {
+        const { rows } = await pool.query(
+          `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+                  e.latitude, e.longitude, e.created_by, e.category_id,
+                  ec.slug as category_slug, ec.name as category_name
+             FROM events e
+             LEFT JOIN event_categories ec ON e.category_id = ec.id
+            ORDER BY e.event_at DESC`
+        );
+        events = rows;
+      } else {
+        const { rows } = await pool.query(
+          `SELECT
+              e.*,
+              ec.slug as category_slug,
+              ec.name as category_name,
+              EXISTS (
+                SELECT 1 FROM event_favorites f
+                WHERE f.event_id = e.id AND f.user_id = $1
+              ) AS is_favorite,
+              EXISTS (
+                SELECT 1 FROM event_attendees a
+                WHERE a.event_id = e.id AND a.user_id = $1
+              ) AS is_attending,
+              COALESCE(
+                (SELECT COUNT(*)::int FROM event_attendees a WHERE a.event_id = e.id),
+                0
+              ) AS attendees_count
            FROM events e
            LEFT JOIN event_categories ec ON e.category_id = ec.id
-          ORDER BY e.event_at DESC`
-      );
-      events = rows;
-    } else {
-      const { rows } = await pool.query(
-        `SELECT 
-            e.*,
-            ec.slug as category_slug,
-            ec.name as category_name,
-            EXISTS (
-              SELECT 1 FROM event_favorites f
-              WHERE f.event_id = e.id AND f.user_id = $1
-            ) AS is_favorite,
-            EXISTS (
-              SELECT 1 FROM event_attendees a
-              WHERE a.event_id = e.id AND a.user_id = $1
-            ) AS is_attending,
-            COALESCE(
-              (SELECT COUNT(*)::int FROM event_attendees a WHERE a.event_id = e.id),
-              0
-            ) AS attendees_count
-         FROM events e
-         LEFT JOIN event_categories ec ON e.category_id = ec.id
-         ORDER BY e.event_at DESC`,
-        [userId]
-      );
-      events = rows;
+           ORDER BY e.event_at DESC`,
+          [userId]
+        );
+        events = rows;
+      }
+    } catch (dbError) {
+      console.warn("⚠️ Database not available, skipping local events:", dbError.message);
+      events = []; // Continue with external events only
     }
 
     // Fetch Ticketmaster music events (non-blocking, errors don't crash the response)

@@ -22,61 +22,59 @@ const CITY_URLS = {
  * @returns {Promise<Array>} Array of formatted events
  */
 async function fetchAtrapaloEventsByCity(city = 'Madrid') {
-  const urlPath = CITY_URLS[city];
-  if (!urlPath) {
-    console.warn(`City ${city} not supported in Atrapalo scraper`);
-    return [];
-  }
-
   let browser = null;
   try {
-    // Launch Puppeteer with headless mode
     browser = await puppeteer.launch({
       headless: 'new',
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
     const page = await browser.newPage();
-    
-    // Set user agent to avoid blocking
     await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
 
-    const fullUrl = `${ATRAPALO_BASE_URL}${urlPath}`;
+    const fullUrl = `${ATRAPALO_BASE_URL}/entradas/`;
     console.log(`Scraping Atrapalo: ${fullUrl}`);
 
     await page.goto(fullUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-    // Wait for event items to load
-    await page.waitForSelector('[data-test="event-item"], .event-card, .evento-item', { timeout: 5000 }).catch(() => {
-      console.warn(`No event selector found for ${city}`);
-    });
+    const pageTitle = await page.title();
+    if (pageTitle.includes('404') || pageTitle.includes('Dónde estamos')) {
+      console.warn(`⚠️ Atrapalo returned 404 for ${fullUrl}`);
+      return [];
+    }
 
-    // Get page content
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
     const content = await page.content();
     const $ = cheerio.load(content);
 
-    // Try multiple selectors to find events
     let events = [];
-    
-    // Selector 1: data-test attribute
-    $('[data-test="event-item"]').each((_, element) => {
-      const event = parseEventElement($, element);
-      if (event) events.push(event);
-    });
+    const selectors = ['.card', '[data-test="event-item"]', '.event-card', '.evento-item', '[class*="event"]'];
 
-    // If no events found, try other selectors
-    if (events.length === 0) {
-      $('.event-card, .evento-item, [class*="event"]').each((_, element) => {
-        const event = parseEventElement($, element);
-        if (event && event.title) events.push(event);
+    for (const selector of selectors) {
+      if (events.length === 0) {
+        $(selector).each((_, element) => {
+          const event = parseEventElement($, element);
+          if (event && event.title) events.push(event);
+        });
+        if (events.length > 0) {
+          console.log(`✅ Found ${events.length} events using selector: ${selector}`);
+        }
+      }
+    }
+
+    if (city) {
+      const normalizedCity = city.toLowerCase();
+      events = events.filter((event) => {
+        const location = event.location?.toLowerCase() || '';
+        const description = event.description?.toLowerCase() || '';
+        return location.includes(normalizedCity) || description.includes(normalizedCity);
       });
     }
 
-    console.log(`Found ${events.length} events from Atrapalo in ${city}`);
-    
-    // Format events to match our internal schema
+    console.log(`📊 Total events found from Atrapalo in ${city}: ${events.length}`);
     return formatAtrapaloEvents(events, city);
 
   } catch (error) {
@@ -95,33 +93,49 @@ async function fetchAtrapaloEventsByCity(city = 'Madrid') {
 function parseEventElement($, element) {
   try {
     const $element = $(element);
-    
-    // Try to extract title
-    let title = $element.find('h2, h3, [class*="title"]').first().text().trim() ||
-                $element.attr('title') ||
-                $element.find('a').first().text().trim();
+
+    const title = $element.find('.card__text-title').first().text().trim() ||
+                  $element.find('h2, h3, [class*=\"title\"]').first().text().trim() ||
+                  $element.attr('title') ||
+                  $element.find('a').first().text().trim();
 
     if (!title) return null;
 
-    // Extract other fields
-    const description = $element.find('p, [class*="description"]').first().text().trim() || title;
-    const location = $element.find('[class*="location"], [class*="venue"], span').text().trim() || '';
-    
-    // Extract date
-    let dateStr = $element.find('[class*="date"], time').first().text().trim() ||
-                  $element.find('[class*="fecha"]').first().text().trim();
-    
-    // Extract image
-    const imageUrl = $element.find('img').first().attr('src') || 
-                     $element.find('[class*="image"]').css('background-image').match(/url\(['"]?([^'")]+)['"]?\)/)?.[1] || null;
-    
-    // Extract URL
-    const eventUrl = $element.find('a').first().attr('href');
-    const fullUrl = eventUrl && eventUrl.startsWith('http') ? eventUrl : (eventUrl ? `${ATRAPALO_BASE_URL}${eventUrl}` : null);
+    const rawDescription = $element.find('.card__text-description').first().text().trim() ||
+                           $element.find('p, [class*=\"description\"]').first().text().trim() ||
+                           title;
+
+    let location = '';
+    if (rawDescription.includes('·')) {
+      const [cityPart] = rawDescription.split('·').map(part => part.trim());
+      location = cityPart;
+    } else {
+      location = rawDescription;
+    }
+
+    const dateStr = $element.find('time').first().text().trim() ||
+                    $element.find('[class*=\"date\"]').first().text().trim() ||
+                    '';
+
+    const imageElement = $element.find('img').first();
+    let imageUrl = imageElement.attr('src') || imageElement.attr('data-src') || null;
+    if (!imageUrl) {
+      const bgStyle = $element.find('[class*=\"image\"]').first().attr('style') || '';
+      const match = bgStyle.match(/url\(['\"]?([^'\")]+)['\"]?\)/);
+      imageUrl = match ? match[1] : null;
+    }
+
+    const eventUrl = $element.find('a.card__link').first().attr('href') ||
+                     $element.find('a').first().attr('href');
+    const fullUrl = eventUrl
+      ? eventUrl.startsWith('http')
+        ? eventUrl
+        : `${ATRAPALO_BASE_URL}${eventUrl}`
+      : null;
 
     return {
       title,
-      description,
+      description: rawDescription,
       location,
       dateStr,
       imageUrl,
