@@ -24,28 +24,29 @@ const CITY_URLS = {
 async function fetchAtrapaloEventsByCity(city = 'Madrid') {
   let browser = null;
   try {
-    // Try @sparticuz/chromium for Render (dynamically imported)
-    let launchOptions;
-    try {
-      const chromium = await import('@sparticuz/chromium');
-      launchOptions = {
-        executablePath: await chromium.executablePath(),
-        headless: true,
-        args: chromium.args.concat([
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage'
-        ])
-      };
-    } catch (chromiumError) {
-      // Fallback to default puppeteer
-      console.log('Using default Puppeteer Chrome');
-      launchOptions = {
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-      };
+    // Use @sparticuz/chromium with proper configuration
+    const chromium = await import('@sparticuz/chromium');
+    
+    // Configure with version that matches the installed Chrome
+    const chrome = chromium.default || chromium;
+    await chrome.setHeadlessMode(true);
+    
+    const exePath = await chrome.executablePath;
+    if (!exePath) {
+      throw new Error('No executable path from @sparticuz/chromium');
     }
     
+    const launchOptions = {
+      executablePath: exePath,
+      headless: true,
+      args: chrome.args.concat([
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage'
+      ])
+    };
+    
+    console.log('✅ Using @sparticuz/chromium');
     browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();
