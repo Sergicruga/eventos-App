@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "puppeteer-core": "^24.41.0",
     "bcryptjs": "^3.0.2",
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
