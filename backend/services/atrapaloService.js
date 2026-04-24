@@ -1,5 +1,5 @@
 // services/atrapaloService.js
-import puppeteer from 'puppeteer-core';
+import puppeteer from 'puppeteer';
 import * as cheerio from 'cheerio';
 
 const ATRAPALO_BASE_URL = 'https://www.atrapalo.com';
@@ -24,30 +24,17 @@ const CITY_URLS = {
 async function fetchAtrapaloEventsByCity(city = 'Madrid') {
   let browser = null;
   try {
-    // Use @sparticuz/chromium with proper configuration
-    const chromium = await import('@sparticuz/chromium');
-    
-    // Get the default export
-    const chrome = chromium.default || chromium;
-    
-    // Get executable path and args
-    const exePath = await chrome.executablePath;
-    if (!exePath) {
-      throw new Error('No executable path from @sparticuz/chromium');
-    }
-    
+    // Use puppeteer with default Chrome (should find the one installed by postinstall)
     const launchOptions = {
-      executablePath: exePath,
-      headless: true,
+      headless: 'new',
       args: [
-        ...chrome.args,
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage'
       ]
     };
     
-    console.log('✅ Using @sparticuz/chromium');
+    console.log('✅ Launching Puppeteer');
     browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();

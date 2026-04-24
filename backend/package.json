@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "postinstall": "npx puppeteer browsers install chrome@123"
+    "postinstall": "npx puppeteer browsers install chrome"
   },
   "keywords": [],
   "author": "",
@@ -23,8 +23,7 @@
     "node-schedule": "^2.1.1",
     "nodemailer": "^8.0.5",
     "pg": "^8.16.3",
-    "puppeteer": "^24.41.0",
-    "puppeteer-core": "^24.41.0"
+    "puppeteer": "^24.41.0"
   },
   "description": ""
 }
