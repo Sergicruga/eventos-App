@@ -254,10 +254,10 @@ app.get("/events", async (req, res) => {
       // Fetch both Ticketmaster and Atrapalo events in parallel
       const [tmEvents, atrapaloRes] = await Promise.all([
         fetchMusicEventsMultipleCities(citiesToFetch),
-        fetchAtrapaloEventsMultipleCities(citiesToFetch).catch(err => {
+        (process.env.DISABLE_ATRAPALO === 'true' ? Promise.resolve([]) : fetchAtrapaloEventsMultipleCities(citiesToFetch).catch(err => {
           console.warn("Atrapalo fetch failed, continuing without Atrapalo events:", err.message);
           return [];
-        })
+        }))
       ]);
       
       ticketmasterEvents = tmEvents;
