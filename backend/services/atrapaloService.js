@@ -27,10 +27,10 @@ async function fetchAtrapaloEventsByCity(city = 'Madrid') {
     // Use @sparticuz/chromium with proper configuration
     const chromium = await import('@sparticuz/chromium');
     
-    // Configure with version that matches the installed Chrome
+    // Get the default export
     const chrome = chromium.default || chromium;
-    await chrome.setHeadlessMode(true);
     
+    // Get executable path and args
     const exePath = await chrome.executablePath;
     if (!exePath) {
       throw new Error('No executable path from @sparticuz/chromium');
@@ -39,11 +39,12 @@ async function fetchAtrapaloEventsByCity(city = 'Madrid') {
     const launchOptions = {
       executablePath: exePath,
       headless: true,
-      args: chrome.args.concat([
+      args: [
+        ...chrome.args,
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage'
-      ])
+      ]
     };
     
     console.log('✅ Using @sparticuz/chromium');
