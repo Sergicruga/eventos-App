@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "npx puppeteer browsers install chrome@latest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@sparticuz/chromium": "^123.0.1",
     "bcryptjs": "^3.0.2",
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",

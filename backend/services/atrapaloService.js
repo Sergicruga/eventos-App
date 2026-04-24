@@ -1,5 +1,6 @@
 // services/atrapaloService.js
 import puppeteer from 'puppeteer';
+import chromium from '@sparticuz/chromium';
 import * as cheerio from 'cheerio';
 
 const ATRAPALO_BASE_URL = 'https://www.atrapalo.com';
@@ -25,12 +26,12 @@ async function fetchAtrapaloEventsByCity(city = 'Madrid') {
   let browser = null;
   try {
     browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
+      headless: chromium.headless,
+      args: chromium.args.concat([
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage'  // Important for Render's limited memory
-      ]
+        '--disable-dev-shm-usage'
+      ])
     });
 
     const page = await browser.newPage();
