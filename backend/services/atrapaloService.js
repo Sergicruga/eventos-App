@@ -1,6 +1,5 @@
 // services/atrapaloService.js
-import puppeteer from 'puppeteer';
-import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer-core';
 import * as cheerio from 'cheerio';
 
 const ATRAPALO_BASE_URL = 'https://www.atrapalo.com';
@@ -25,14 +24,29 @@ const CITY_URLS = {
 async function fetchAtrapaloEventsByCity(city = 'Madrid') {
   let browser = null;
   try {
-    browser = await puppeteer.launch({
-      headless: chromium.headless,
-      args: chromium.args.concat([
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage'
-      ])
-    });
+    // Try @sparticuz/chromium for Render (dynamically imported)
+    let launchOptions;
+    try {
+      const chromium = await import('@sparticuz/chromium');
+      launchOptions = {
+        executablePath: await chromium.executablePath(),
+        headless: true,
+        args: chromium.args.concat([
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage'
+        ])
+      };
+    } catch (chromiumError) {
+      // Fallback to default puppeteer
+      console.log('Using default Puppeteer Chrome');
+      launchOptions = {
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      };
+    }
+    
+    browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();
     await page.setUserAgent(
