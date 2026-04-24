@@ -99,13 +99,9 @@ The Atrapalo events will be returned with:
    - Each scrape takes 5-15 seconds per city
 
 2. **Production Deployment (Render/Heroku)**:
-   - Puppeteer may not work in some free tiers
-   - Consider using environment variable to disable Atrapalo on deployment:
-   ```javascript
-   if (process.env.SCRAPE_ATRAPALO === 'false') {
-     return []; // Skip Atrapalo
-   }
-   ```
+   - **Render Free tier**: Puppeteer won't work (limited resources)
+   - **Render Starter+ tier**: ✅ Fully supported! Puppeteer is configured with memory optimization flags
+   - Backend includes `--disable-dev-shm-usage` flag for Render's limited memory
 
 3. **Rate Limiting**:
    - Add delays between requests to avoid blocking

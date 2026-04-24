@@ -26,7 +26,11 @@ async function fetchAtrapaloEventsByCity(city = 'Madrid') {
   try {
     browser = await puppeteer.launch({
       headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage'  // Important for Render's limited memory
+      ]
     });
 
     const page = await browser.newPage();
