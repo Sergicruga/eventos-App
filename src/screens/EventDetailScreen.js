@@ -1,5 +1,5 @@
 // src/screens/EventDetailScreen.js
-import React, { useContext, useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useContext, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, Image, StyleSheet, Alert, Linking, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Platform, KeyboardAvoidingView, Dimensions,
@@ -327,7 +327,15 @@ export default function EventDetailScreen({ route, navigation }) {
     return tmFallback || null;
   }, [route?.params?.buyUrl, route?.params?.event, current]);
 
-  const buyUrl = computedBuyUrl;
+  const stableBuyUrlRef = useRef(computedBuyUrl);
+
+    useEffect(() => {
+      if (computedBuyUrl && !stableBuyUrlRef.current) {
+        stableBuyUrlRef.current = computedBuyUrl;
+      }
+    }, [computedBuyUrl]);
+
+  const buyUrl = computedBuyUrl || stableBuyUrlRef.current;
 
   // ----- Asistentes -----
   const [attendees, setAttendees] = useState([]);
