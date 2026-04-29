@@ -24,16 +24,33 @@ const CITY_URLS = {
 async function fetchAtrapaloEventsByCity(city = 'Madrid') {
   let browser = null;
   try {
-    // Find Chrome executable from puppeteer cache or environment
-    const chromePaths = [
-      process.env.PUPPETEER_EXECUTABLE_PATH,
-      process.env.CHROME_PATH,
-      '/opt/render/.cache/puppeteer/chrome/linux-123.0.7737.56/chrome-linux/chrome',
-      '/root/.cache/puppeteer/chrome/linux-123.0.7737.56/chrome-linux/chrome'
-    ].filter(Boolean);
+    // Dynamically find Chrome from puppeteer cache
+    const { execSync } = await import('child_process');
+    
+    let chromePath;
+    try {
+      // Try to find Chrome using find command
+      const result = execSync('find /root/.cache/puppeteer -name chrome -type f 2>/dev/null | head -1', { encoding: 'utf8' });
+      chromePath = result.trim();
+    } catch (e) {
+      // Fallback to common paths
+      const possiblePaths = [
+        '/root/.cache/puppeteer/chrome/linux-123.0.7737.56/chrome-linux/chrome',
+        '/opt/render/.cache/puppeteer/chrome/linux-123.0.7737.56/chrome-linux/chrome',
+        process.env.PUPPETEER_EXECUTABLE_PATH,
+        process.env.CHROME_PATH
+      ].filter(Boolean);
+      chromePath = possiblePaths[0];
+    }
+    
+    if (!chromePath) {
+      throw new Error('Chrome not found');
+    }
+    
+    console.log('✅ Using Chrome at:', chromePath);
     
     const launchOptions = {
-      executablePath: chromePaths[0],
+      executablePath: chromePath,
       headless: true,
       args: [
         '--no-sandbox',
@@ -42,7 +59,6 @@ async function fetchAtrapaloEventsByCity(city = 'Madrid') {
       ]
     };
     
-    console.log('✅ Launching Puppeteer with executablePath');
     browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();
