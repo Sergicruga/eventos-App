@@ -19,11 +19,45 @@ export default function WelcomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container:{ flex:1, justifyContent:"center", alignItems:"center", padding:24 },
-  title:{ fontSize:28, fontWeight:"700", marginBottom:8 },
-  subtitle:{ fontSize:16, color:"#666", marginBottom:24 },
-  btn:{ width:"100%", padding:14, borderRadius:12, alignItems:"center", marginBottom:12 },
-  primary:{ backgroundColor:"#111827" },
-  secondary:{ backgroundColor:"#4B5563" },
-  btnText:{ color:"#fff", fontWeight:"600" },
+  container:{ 
+    flex:1, 
+    justifyContent:"center", 
+    alignItems:"center", 
+    padding:24,
+    backgroundColor:"#FFFFFF"
+  },
+
+  title:{ 
+    fontSize:28, 
+    fontWeight:"700", 
+    marginBottom:8,
+    color:"#111827"
+  },
+
+  subtitle:{ 
+    fontSize:16, 
+    color:"#4B5563", 
+    marginBottom:24 
+  },
+
+  btn:{ 
+    width:"100%", 
+    padding:14, 
+    borderRadius:12, 
+    alignItems:"center", 
+    marginBottom:12 
+  },
+
+  primary:{ 
+    backgroundColor:"#111827" 
+  },
+
+  secondary:{ 
+    backgroundColor:"#4B5563" 
+  },
+
+  btnText:{ 
+    color:"#FFFFFF", 
+    fontWeight:"600" 
+  },
 });

@@ -59,10 +59,11 @@ export default function RegisterScreen() {
 
       {step === "register" ? (
         <>
-          <TextInput style={styles.input} placeholder="Nombre" value={name} onChangeText={setName} />
+          <TextInput style={styles.input} placeholder="Nombre"  placeholderTextColor="#6B7280" value={name} onChangeText={setName} />
           <TextInput
             style={styles.input}
             placeholder="Email"
+            placeholderTextColor="#6B7280"
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
@@ -106,12 +107,62 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:{ flex:1, padding:24, justifyContent:"center" },
-  title:{ fontSize:24, fontWeight:"700", marginBottom:24, textAlign:"center" },
-  subtitle:{ fontSize:16, marginBottom:12, textAlign:"center", color:"#666" },
-  input:{ borderWidth:1, borderColor:"#E5E7EB", borderRadius:10, paddingHorizontal:12, paddingVertical:12, marginBottom:12 },
-  checkboxContainer:{ marginBottom:12 },
-  link:{ textDecorationLine:"underline", color:"#007AFF" },
-  btn:{ backgroundColor:"#111827", padding:14, borderRadius:12, alignItems:"center", marginBottom:12 },
-  btnText:{ color:"#fff", fontWeight:"600" },
+  container:{ 
+    flex:1, 
+    padding:24, 
+    justifyContent:"center",
+    backgroundColor:"#FFFFFF"
+  },
+
+  title:{ 
+    fontSize:24, 
+    fontWeight:"700", 
+    marginBottom:24, 
+    textAlign:"center",
+    color:"#111827"
+  },
+
+  subtitle:{ 
+    fontSize:16, 
+    marginBottom:12, 
+    textAlign:"center", 
+    color:"#4B5563" 
+  },
+
+  input:{ 
+    borderWidth:1, 
+    borderColor:"#E5E7EB", 
+    borderRadius:10, 
+    paddingHorizontal:12, 
+    paddingVertical:12, 
+    marginBottom:12,
+    color:"#111827",
+    backgroundColor:"#FFFFFF"
+  },
+
+  checkboxContainer:{ 
+    marginBottom:12 
+  },
+
+  checkboxText:{
+    color:"#111827"
+  },
+
+  link:{ 
+    textDecorationLine:"underline", 
+    color:"#007AFF" 
+  },
+
+  btn:{ 
+    backgroundColor:"#111827", 
+    padding:14, 
+    borderRadius:12, 
+    alignItems:"center", 
+    marginBottom:12 
+  },
+
+  btnText:{ 
+    color:"#FFFFFF", 
+    fontWeight:"600" 
+  },
 });

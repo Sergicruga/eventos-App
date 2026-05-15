@@ -1167,26 +1167,28 @@ function authMiddleware(req, res, next) {
 
 app.post("/auth/register", async (req, res) => {
   try {
-    const { name, email, privacyAccepted } = req.body;
+    const name = req.body.name?.trim();
+    const email = req.body.email?.trim().toLowerCase();
+    const { privacyAccepted } = req.body;
 
     if (!name || !email)
       return res.status(400).json({ message: "Nombre y email obligatorios" });
 
-    // ✅ Consentimiento obligatorio
     if (privacyAccepted !== true) {
       return res.status(400).json({
         message: "Debes aceptar la política de privacidad",
       });
     }
 
-    const exists = await pool.query("SELECT id FROM users WHERE email = $1", [
+    const exists = await pool.query("SELECT id FROM users WHERE LOWER(email) = $1", [
       email,
     ]);
+
     if (exists.rowCount > 0)
       return res.status(409).json({ message: "El email ya está registrado" });
 
-    const code = await createVerificationCode(email, 'register');
-    await sendVerificationEmail(email, code, 'register');
+    const code = await createVerificationCode(email, "register");
+    await sendVerificationEmail(email, code, "register");
 
     res.json({ message: "Código enviado a tu email" });
   } catch (e) {
@@ -1197,7 +1199,10 @@ app.post("/auth/register", async (req, res) => {
 
 app.post("/auth/verify-register", async (req, res) => {
   try {
-    const { email, code, name, privacyAccepted } = req.body;
+    const email = req.body.email?.trim().toLowerCase();
+    const code = req.body.code?.trim();
+    const name = req.body.name?.trim();
+    const { privacyAccepted } = req.body;
 
     if (!email || !code || !name)
       return res.status(400).json({ message: "Campos obligatorios" });
@@ -1208,7 +1213,8 @@ app.post("/auth/verify-register", async (req, res) => {
       });
     }
 
-    const verification = await verifyCode(email, code, 'register');
+    const verification = await verifyCode(email, code, "register");
+
     if (!verification) {
       return res.status(400).json({ message: "Código inválido o expirado" });
     }
