@@ -1317,8 +1317,8 @@ export function EventProvider({ children }) {
   
   // Location-filtered events
   const locationFilteredEvents = useMemo(() => {
-    return filterEventsByRadius(communityEvents, coords, searchRadius);
-  }, [communityEvents, coords, searchRadius]);
+    return filterEventsByRadius(communityEvents, coords, searchRadius, city);
+  }, [communityEvents, coords, searchRadius, city]);
 
   const value = useMemo(
     () => ({

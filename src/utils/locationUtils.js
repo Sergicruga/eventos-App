@@ -24,14 +24,15 @@ function toRad(degrees) {
 /**
  * Filter events by distance from user location
  */
-export function filterEventsByRadius(events = [], userCoords, radiusKm = 25) {
+export function filterEventsByRadius(events = [], userCoords, radiusKm = 25, userCity = '') {
   if (!userCoords || !userCoords.latitude || !userCoords.longitude) {
     return events; // Return all if no user location
   }
 
+  const normalizedCity = String(userCity || '').trim().toLowerCase();
+
   return events
     .map((event) => {
-      // Only calculate distance if event has coordinates
       if (event.latitude != null && event.longitude != null) {
         const distance = calculateDistance(
           userCoords.latitude,
@@ -45,16 +46,19 @@ export function filterEventsByRadius(events = [], userCoords, radiusKm = 25) {
           withinRadius: distance <= radiusKm,
         };
       }
-      // Events without coordinates are excluded from location filtering
+
+      const eventCity = String(event.city || event.location || '').trim().toLowerCase();
+      const isExternal = ['ticketmaster', 'atrapalo'].includes(String(event.source || '').toLowerCase());
+      const cityMatches = normalizedCity && eventCity && eventCity.includes(normalizedCity);
+
       return {
         ...event,
         distance: null,
-        withinRadius: false,
+        withinRadius: isExternal && cityMatches,
       };
     })
     .filter((event) => event.withinRadius)
     .sort((a, b) => {
-      // Events with distance first (sorted by distance), then events without distance
       if (a.distance !== null && b.distance !== null) {
         return a.distance - b.distance;
       }
