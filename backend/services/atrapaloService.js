@@ -26,19 +26,41 @@ async function fetchAtrapaloEventsByCity(city = 'Madrid') {
   try {
     // Dynamically find Chrome from puppeteer cache
     const { execSync } = await import('child_process');
+    const os = await import('os');
     
     let chromePath;
+    const isWindows = os.platform() === 'win32';
+    
     try {
-      // Try to find Chrome using find command
-      const result = execSync('find /root/.cache/puppeteer -name chrome -type f 2>/dev/null | head -1', { encoding: 'utf8' });
-      chromePath = result.trim();
+      // Try to find Chrome using appropriate command for OS
+      if (isWindows) {
+        // Windows: look for chrome in common locations
+        const possiblePaths = [
+          'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+          'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+          process.env.PUPPETEER_EXECUTABLE_PATH,
+          process.env.CHROME_PATH
+        ].filter(Boolean);
+        chromePath = possiblePaths.find(p => {
+          try {
+            execSync(`dir "${p}" 2>nul`);
+            return true;
+          } catch {
+            return false;
+          }
+        });
+      } else {
+        // Unix: use find command
+        const result = execSync('find /root/.cache/puppeteer -name chrome -type f 2>/dev/null | head -1', { encoding: 'utf8' });
+        chromePath = result.trim();
+      }
     } catch (e) {
-      // Fallback to common paths
+      // Final fallback paths
       const possiblePaths = [
-        '/root/.cache/puppeteer/chrome/linux-123.0.7737.56/chrome-linux/chrome',
-        '/opt/render/.cache/puppeteer/chrome/linux-123.0.7737.56/chrome-linux/chrome',
         process.env.PUPPETEER_EXECUTABLE_PATH,
-        process.env.CHROME_PATH
+        process.env.CHROME_PATH,
+        '/root/.cache/puppeteer/chrome/linux-123.0.7737.56/chrome-linux/chrome',
+        '/opt/render/.cache/puppeteer/chrome/linux-123.0.7737.56/chrome-linux/chrome'
       ].filter(Boolean);
       chromePath = possiblePaths[0];
     }
@@ -51,7 +73,7 @@ async function fetchAtrapaloEventsByCity(city = 'Madrid') {
     
     const launchOptions = {
       executablePath: chromePath,
-      headless: true,
+      headless: 'new',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -66,8 +88,10 @@ async function fetchAtrapaloEventsByCity(city = 'Madrid') {
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
 
-    const fullUrl = `${ATRAPALO_BASE_URL}/entradas/`;
-    console.log(`Scraping Atrapalo: ${fullUrl}`);
+    // Construct city-specific URL from CITY_URLS map
+    const cityPath = CITY_URLS[city] || '/eventos/madrid';
+    const fullUrl = `${ATRAPALO_BASE_URL}${cityPath}`;
+    console.log(`Scraping Atrapalo for ${city}: ${fullUrl}`);
 
     await page.goto(fullUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
@@ -97,13 +121,10 @@ async function fetchAtrapaloEventsByCity(city = 'Madrid') {
       }
     }
 
-    if (city) {
-      const normalizedCity = city.toLowerCase();
-      events = events.filter((event) => {
-        const location = event.location?.toLowerCase() || '';
-        const description = event.description?.toLowerCase() || '';
-        return location.includes(normalizedCity) || description.includes(normalizedCity);
-      });
+    // No strict city filtering needed since we're scraping city-specific URLs
+    // Events from the city URL should already be city-relevant
+    if (events.length === 0) {
+      console.warn(`⚠️ No events found from Atrapalo for ${city}`);
     }
 
     console.log(`📊 Total events found from Atrapalo in ${city}: ${events.length}`);

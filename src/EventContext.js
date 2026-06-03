@@ -44,8 +44,8 @@ const dedupeApiEvents = (arr = []) => {
   
   // Group events by normalized title
   (arr || []).forEach((ev) => {
-    if (String(ev.type) !== 'api' && String(ev.source) !== 'ticketmaster') {
-      return; // skip local events
+    if (String(ev.type) !== 'api' && !['ticketmaster', 'atrapalo'].includes(String(ev.source))) {
+      return; // skip local events (but keep ticketmaster and atrapalo)
     }
     const key = normalizeTitleKey(ev.title);
     if (!key) return;
