@@ -23,8 +23,16 @@ import { API_URL } from '../config';
 const AVATAR_PLACEHOLDER = "https://placehold.co/80x80?text=User";
 
 // Helper to get full avatar URL
-const getAvatarUrl = (photo) =>
-  photo ? API_URL + photo : AVATAR_PLACEHOLDER;
+const buildImageUrl = (img) => {
+  if (!img) return null;
+  if (String(img).startsWith("http")) return img;
+  return `${API_URL}${String(img).startsWith("/") ? "" : "/"}${img}`;
+};
+
+const getAvatarUrl = (photo) => {
+  const url = buildImageUrl(photo);
+  return url || "https://placehold.co/80x80/png?text=User";
+};
 
 export default function FriendsScreen() {
   const { getEventImageSource, getEffectiveEventImage } = useContext(EventContext);
@@ -32,23 +40,25 @@ export default function FriendsScreen() {
    const navigation = useNavigation();
    // Small component that mirrors HomeScreen loading/fallback behavior
    const EventThumb = ({ event }) => {
-     const [thumbFallback, setThumbFallback] = useState(false);
-     const effective = getEffectiveEventImage ? getEffectiveEventImage(event.id, event.image) : event.image;
-     const source = thumbFallback
-       ? require("../../assets/iconoApp.png")
-       : getEventImageSource
-         ? getEventImageSource(effective)
-         : (effective ? { uri: effective } : require("../../assets/iconoApp.png"));
+    const [thumbFallback, setThumbFallback] = useState(false);
 
-     return (
-       <Image
-         source={source}
-         style={styles.eventImage}
-         resizeMode="cover"
-         onError={() => setThumbFallback(true)}
-       />
-     );
-   };
+    const imageUrl = buildImageUrl(
+      event.image || event.imageUrl || event.imageUri || event.photo
+    );
+
+    return (
+      <Image
+        source={
+          thumbFallback || !imageUrl
+            ? require("../../assets/iconoApp.png")
+            : { uri: imageUrl }
+        }
+        style={styles.eventImage}
+        resizeMode="cover"
+        onError={() => setThumbFallback(true)}
+      />
+    );
+  };
 
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
