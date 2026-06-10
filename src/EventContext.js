@@ -12,10 +12,11 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Alert } from 'react-native';
 import { AuthContext } from './context/AuthContext';
 import { API_URL } from './config';
-import { getFavoriteIds } from './api/favorites';
+import { addFavorite, getFavoriteIds, removeFavorite } from './api/favorites';
 import { attend as apiAttend, unattend as apiUnattend } from './api/attendees';
 import { pickAndPersistImage } from './utils/pickAndPersistImage';
 import { filterEventsByRadius } from './utils/locationUtils';
+import { resolveImageUrl } from './utils/imageSource';
 
 // Proveer un valor por defecto mínimo para evitar errores si se consume fuera del Provider
 export const EventContext = createContext({ events: [] });
@@ -44,8 +45,8 @@ const dedupeApiEvents = (arr = []) => {
   
   // Group events by normalized title
   (arr || []).forEach((ev) => {
-    if (String(ev.type) !== 'api' && !['ticketmaster', 'atrapalo'].includes(String(ev.source))) {
-      return; // skip local events (but keep ticketmaster and atrapalo)
+    if (String(ev.type) !== 'api' && String(ev.source) !== 'ticketmaster') {
+      return; // skip local events (but keep ticketmaster events)
     }
     const key = normalizeTitleKey(ev.title);
     if (!key) return;
@@ -745,6 +746,54 @@ export function EventProvider({ children }) {
     image: ev.image ?? ev.imageUrl ?? ev.imageUri ?? null,
   });
 
+  const toggleFavorite = async (eventId, eventObj) => {
+    const normalizedId = String(eventId ?? '').trim();
+    if (!normalizedId || !uid) {
+      return false;
+    }
+
+    const isFav = favorites.some((fid) => String(fid) === normalizedId);
+
+    try {
+      if (isFav) {
+        if (isNumericId(normalizedId)) {
+          await removeFavorite(uid, normalizedId);
+        }
+        setFavorites((prev) => prev.filter((fid) => String(fid) !== normalizedId));
+        setFavoriteItems((prev) => {
+          const next = { ...prev };
+          delete next[normalizedId];
+          return next;
+        });
+      } else {
+        if (isNumericId(normalizedId)) {
+          await addFavorite(uid, normalizedId);
+        }
+        setFavorites((prev) => [normalizedId, ...prev.filter((fid) => String(fid) !== normalizedId)]);
+        if (eventObj) {
+          setFavoriteItems((prev) => ({
+            ...prev,
+            [normalizedId]: {
+              id: String(eventObj.id ?? normalizedId),
+              title: eventObj.title || '',
+              date: eventObj.date || '',
+              location: eventObj.location || '',
+              description: eventObj.description || '',
+              image: eventObj.image || eventObj.images?.[0]?.url || null,
+              type: eventObj.type || 'local',
+              latitude: eventObj.latitude != null ? Number(eventObj.latitude) : null,
+              longitude: eventObj.longitude != null ? Number(eventObj.longitude) : null,
+            },
+          }));
+        }
+      }
+      return true;
+    } catch (error) {
+      console.warn('[toggleFavorite] error:', error?.message || error);
+      return false;
+    }
+  };
+
   const isMine = (ev) => {
     if (ev?.createdById && effectiveUser?.id)
       return String(ev.createdById) === String(effectiveUser.id);
@@ -763,15 +812,13 @@ export function EventProvider({ children }) {
       img === '/assets/iconoApp.png' ||
       img === 'assets/iconoApp.png' ||
       img === 'iconoApp.png' ||
-      img.startsWith('https://placehold.co/') ||
-      img.startsWith('https://via.placeholder.com/')
+      (typeof img === 'string' && (img.startsWith('https://placehold.co/') || img.startsWith('https://via.placeholder.com/')))
     ) {
       return require('../assets/iconoApp.png');
     }
-    if (typeof img === 'string' && img.startsWith('/uploads/')) {
-      return { uri: `${API_URL}${img}` };
-    }
-    return { uri: img };
+
+    const resolved = resolveImageUrl(img);
+    return resolved ? { uri: resolved } : require('../assets/iconoApp.png');
   };
 
   const getEffectiveEventImage = (eventId, serverImage) => {
@@ -1344,6 +1391,7 @@ export function EventProvider({ children }) {
       getEventImageSource,
       getEffectiveEventImage,
       toPatchPayload,
+      toggleFavorite,
       addEvent,
       updateEvent,
       deleteEvent,

@@ -147,7 +147,7 @@ export default function CategoryEventsScreen({ route }) {
   const seen = new Set();
   for (const ev of filteredEvents) {
     let key;
-    if (String(ev.type) === 'api' || String(ev.source) === 'ticketmaster' || String(ev.source) === 'atrapalo') {
+    if (String(ev.type) === 'api' || String(ev.source) === 'ticketmaster') {
       key = normalizeTitleKey(ev.title);
     } else {
       key = `${ev.type}-${ev.id}`;

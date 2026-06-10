@@ -18,13 +18,12 @@ import { AuthContext } from "../context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native"; // <-- Only this is needed
 import { EventContext } from "../EventContext";
-import { API_URL } from '../config';
+import { resolveImageUrl } from "../utils/imageSource";
 
 const AVATAR_PLACEHOLDER = "https://placehold.co/80x80?text=User";
 
 // Helper to get full avatar URL
-const getAvatarUrl = (photo) =>
-  photo ? API_URL + photo : AVATAR_PLACEHOLDER;
+const getAvatarUrl = (photo) => resolveImageUrl(photo) || AVATAR_PLACEHOLDER;
 
 export default function FriendsScreen() {
   const { getEventImageSource, getEffectiveEventImage } = useContext(EventContext);
