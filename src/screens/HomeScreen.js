@@ -105,13 +105,52 @@ export default function HomeScreen() {
         return createdByRaw == null ? true : String(createdByRaw) !== myUserId;
       });
   }, [locationFilteredEvents, myUserId]);
+  const normalizeTitleKey = (title = '') => {
+    let t = String(title || '').toLowerCase();
+    t = t.split('|')[0].trim();
+    t = t.replace(/\b(vip|ga|general admission|packages|package|tickets?|presale|early\s?bird)\b/g, '');
+    t = t.replace(/[^a-z0-9\s]/g, '');
+    t = t.replace(/\s+/g, ' ').trim();
+    return t;
+  };
 
+  const dedupeEvents = (events = []) => {
+    const deduped = [];
+    const seen = new Set();
+
+    for (const ev of events) {
+      let key;
+
+      if (
+        String(ev.type) === 'api' ||
+        String(ev.source) === 'ticketmaster' ||
+        String(ev.source) === 'atrapalo'
+      ) {
+        key = normalizeTitleKey(ev.title);
+      } else {
+        key = `${ev.type}-${ev.id}`;
+      }
+
+      if (!seen.has(key)) {
+        deduped.push(ev);
+        seen.add(key);
+      }
+    }
+
+      return deduped;
+    };
   // Count events by category
   const categoryCounts = useMemo(() => {
     const counts = {};
+
     EVENT_CATEGORIES.forEach((cat) => {
-      counts[cat.slug] = upcomingEvents.filter((ev) => eventMatchesCategory(ev, cat.slug)).length;
+      const eventsInCategory = upcomingEvents.filter((ev) =>
+        eventMatchesCategory(ev, cat.slug)
+      );
+
+      counts[cat.slug] = dedupeEvents(eventsInCategory).length;
     });
+
     return counts;
   }, [upcomingEvents]);
 
