@@ -14,7 +14,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useFocusEffect, useRoute } from "@react-navigation/native";
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
-import { API_URL } from "../config";
+import { resolveImageUrl } from "../utils/imageSource";
 import {
   getUser,
   getUserCreatedEvents,
@@ -224,8 +224,7 @@ export default function ProfileScreen() {
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoBust, setPhotoBust] = useState(0);
 
-  const absolutePhoto = (photoPath) =>
-    photoPath?.startsWith("http") ? photoPath : `${API_URL}${photoPath}`;
+  const absolutePhoto = (photoPath) => resolveImageUrl(photoPath);
 
   const hydrate = useCallback(async () => {
     if (!viewedUserId) return;

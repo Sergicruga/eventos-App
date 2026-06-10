@@ -263,7 +263,7 @@ export default function EventDetailScreen({ route, navigation }) {
     [matchedFromList, event]
   );
 
-  const isFavorite = favorites.includes(current.id);
+  const isFavorite = favorites.some((fid) => String(fid) === String(current?.id));
   const amOwner = isOwner(current, user);
 
   const effectiveImage = getEffectiveEventImage(current.id, current.image);

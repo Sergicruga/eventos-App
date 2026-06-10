@@ -5,25 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "puppeteer-core": "^24.41.0",
     "bcryptjs": "^3.0.2",
-    "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
-    "node-schedule": "^2.1.1",
     "nodemailer": "^8.0.5",
-    "pg": "^8.16.3",
-    "puppeteer": "^24.41.0"
+    "pg": "^8.16.3"
   },
   "description": ""
 }
