@@ -45,7 +45,10 @@ const dedupeApiEvents = (arr = []) => {
   
   // Group events by normalized title
   (arr || []).forEach((ev) => {
-    if (String(ev.type) !== 'api' && String(ev.source) !== 'ticketmaster') {
+    if (
+      String(ev.type) !== 'api' &&
+      !['ticketmaster', 'atrapalo'].includes(String(ev.source))
+    ) {
       return; // skip local events (but keep ticketmaster events)
     }
     const key = normalizeTitleKey(ev.title);
@@ -1317,9 +1320,7 @@ export function EventProvider({ children }) {
           ) || {};
         const ext = externalIdFrom(ev) || String(eventId);
         const src =
-          ev.source || ev.type === 'api'
-            ? 'ticketmaster'
-            : 'unknown';
+          ev.source || (ev.type === 'api' ? 'ticketmaster' : 'unknown');
         const url = `${API_URL}/events/${encodeURIComponent(
           ext
         )}?source=${encodeURIComponent(

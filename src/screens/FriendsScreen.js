@@ -22,6 +22,15 @@ import { API_URL } from "../config";
 import { resolveImageUrl } from "../utils/imageSource";
 
 const AVATAR_PLACEHOLDER = "https://placehold.co/80x80?text=User";
+const buildImageUrl = (image) => {
+  if (!image) return null;
+
+  if (String(image).startsWith("http")) {
+    return image;
+  }
+
+  return `${API_URL}${image.startsWith("/") ? "" : "/"}${image}`;
+};
 
 // Helper to get full avatar URL
 const getAvatarUrl = (photo) => resolveImageUrl(photo) || AVATAR_PLACEHOLDER;
@@ -34,8 +43,8 @@ export default function FriendsScreen() {
    const EventThumb = ({ event }) => {
     const [thumbFallback, setThumbFallback] = useState(false);
 
-    const imageUrl = buildImageUrl(
-      event.image || event.imageUrl || event.imageUri || event.photo
+    const imageUrl = resolveImageUrl(
+      event.image || event.imageUrl || event.imageUri
     );
 
     return (

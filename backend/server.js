@@ -11,6 +11,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { fetchMusicEventsMultipleCities } from "./services/ticketmasterService.js";
+import {
+  fetchAtrapaloEventsMultipleCities,
+  warmAtrapaloCache,
+} from "./services/atrapaloService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -226,18 +230,22 @@ app.get("/events", async (req, res) => {
     // Fetch Ticketmaster music events (non-blocking, errors don't crash the response)
     // Prioritize user's city if provided, otherwise use default cities
     let ticketmasterEvents = [];
+    let atrapaloEvents = [];
     try {
       const citiesToFetch = userCity
         ? [userCity, 'Madrid', 'Barcelona']
         : ['Madrid', 'Barcelona', 'Valencia'];
 
-      ticketmasterEvents = await fetchMusicEventsMultipleCities(citiesToFetch);
+      [ticketmasterEvents, atrapaloEvents] = await Promise.all([
+        fetchMusicEventsMultipleCities(citiesToFetch),
+        fetchAtrapaloEventsMultipleCities(citiesToFetch),
+      ]);
     } catch (tmError) {
       console.warn("External events fetch failed, continuing without external events:", tmError.message);
     }
 
     // Combine and return events
-    const allEvents = [...events, ...ticketmasterEvents];
+    const allEvents = [...events, ...ticketmasterEvents, ...atrapaloEvents];
     return res.json(allEvents);
   } catch (e) {
     console.error("PG ERROR:", e);
@@ -1272,6 +1280,8 @@ app.delete("/users/me", authMiddleware, async (req, res) => {
 /* ==========================
    START SERVER
    ========================== */
+
+void warmAtrapaloCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);
