@@ -22,18 +22,25 @@ import { API_URL } from "../config";
 import { resolveImageUrl } from "../utils/imageSource";
 
 const AVATAR_PLACEHOLDER = "https://placehold.co/80x80?text=User";
-const buildImageUrl = (image) => {
-  if (!image) return null;
+const getFriendPhoto = (friend) =>
+  friend?.photo ||
+  friend?.avatar ||
+  friend?.avatarUrl ||
+  friend?.avatar_url ||
+  friend?.profileImage ||
+  friend?.profile_image ||
+  friend?.image ||
+  friend?.image_url ||
+  null;
 
-  if (String(image).startsWith("http")) {
-    return image;
-  }
+const getAvatarUrl = (friendOrPhoto) => {
+  const photo =
+    typeof friendOrPhoto === "string"
+      ? friendOrPhoto
+      : getFriendPhoto(friendOrPhoto);
 
-  return `${API_URL}${image.startsWith("/") ? "" : "/"}${image}`;
+  return resolveImageUrl(photo) || AVATAR_PLACEHOLDER;
 };
-
-// Helper to get full avatar URL
-const getAvatarUrl = (photo) => resolveImageUrl(photo) || AVATAR_PLACEHOLDER;
 
 export default function FriendsScreen() {
   const { getEventImageSource, getEffectiveEventImage } = useContext(EventContext);
@@ -215,15 +222,19 @@ export default function FriendsScreen() {
     setFriendActionVisible(false);
   };
 
+  const openFriendProfile = (friend) => {
+    navigation.navigate("Profile", { userId: friend.id });
+  };
+
   // Render friend card
   const renderFriend = ({ item }) => (
     <TouchableOpacity
       style={styles.friendCard}
-      onPress={() => viewFriendEvents(item)}
+      onPress={() => openFriendProfile(item)}
       activeOpacity={0.88}
     >
       <Image
-        source={{ uri: getAvatarUrl(item.photo) }}
+        source={{ uri: getAvatarUrl(item) }}
         style={styles.avatar}
       />
       <View style={{ flex: 1, paddingRight: 8, marginLeft: 12 }}>
@@ -240,7 +251,7 @@ export default function FriendsScreen() {
   const renderSearchResult = ({ item }) => (
     <View style={styles.friendCard}>
       <Image
-        source={{ uri: getAvatarUrl(item.photo) }}
+        source={{ uri: getAvatarUrl(item) }}
         style={styles.avatar}
       />
       <View style={{ flex: 1, paddingRight: 8, marginLeft: 12 }}>
@@ -259,7 +270,7 @@ export default function FriendsScreen() {
   // Render friend request card (compact)
   const renderFriendRequest = ({ item }) => (
     <View style={[styles.requestCard]}>
-      <Image source={{ uri: getAvatarUrl(item.photo) }} style={styles.requestAvatar} />
+      <Image source={{ uri: getAvatarUrl(item) }} style={styles.requestAvatar} />
       <View style={{ flex: 1, paddingHorizontal: 8, marginLeft: 4 }}>
         <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.friendEmail} numberOfLines={1}>{item.email}</Text>
@@ -367,7 +378,7 @@ export default function FriendsScreen() {
                <>
                  <View style={styles.profileCard}>
                    <Image
-                     source={{ uri: getAvatarUrl(selectedFriend.photo) }}
+                     source={{ uri: getAvatarUrl(selectedFriend) }}
                      style={styles.avatarLarge}
                    />
                    <View style={{ flex: 1, marginLeft: 12 }}>

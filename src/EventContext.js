@@ -610,12 +610,18 @@ export function EventProvider({ children }) {
             startsAt: derivedStartsAt || null,
             location: ev.location ?? '',
             type: ev.type || 'local',
+            source: ev.source || null,
+            externalId: ev.externalId || ev.external_id || null,
+            url: ev.url || null,
+            purchaseUrl: ev.purchaseUrl || ev.purchase_url || ev.url || null,
+            city: ev.city || null,
             category_slug: ev.category_slug || null,  // ← ADD THIS
             category_name: ev.category_name || null,  // ← ADD THIS
             image:
               ev.image && String(ev.image).trim() !== ''
                 ? ev.image
                 : null,
+            images: Array.isArray(ev.images) ? ev.images : [],
             latitude:
               ev.latitude != null ? Number(ev.latitude) : null,
             longitude:

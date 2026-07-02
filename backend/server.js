@@ -231,17 +231,31 @@ app.get("/events", async (req, res) => {
     // Prioritize user's city if provided, otherwise use default cities
     let ticketmasterEvents = [];
     let atrapaloEvents = [];
-    try {
-      const citiesToFetch = userCity
-        ? [userCity, 'Madrid', 'Barcelona']
-        : ['Madrid', 'Barcelona', 'Valencia'];
+    const citiesToFetch = userCity
+      ? [userCity, 'Madrid', 'Barcelona']
+      : ['Madrid', 'Barcelona', 'Valencia'];
 
-      [ticketmasterEvents, atrapaloEvents] = await Promise.all([
-        fetchMusicEventsMultipleCities(citiesToFetch),
-        fetchAtrapaloEventsMultipleCities(citiesToFetch),
-      ]);
-    } catch (tmError) {
-      console.warn("External events fetch failed, continuing without external events:", tmError.message);
+    const [ticketmasterResult, atrapaloResult] = await Promise.allSettled([
+      fetchMusicEventsMultipleCities(citiesToFetch),
+      fetchAtrapaloEventsMultipleCities(citiesToFetch),
+    ]);
+
+    if (ticketmasterResult.status === "fulfilled") {
+      ticketmasterEvents = ticketmasterResult.value;
+    } else {
+      console.warn(
+        "Ticketmaster events fetch failed, continuing:",
+        ticketmasterResult.reason?.message || ticketmasterResult.reason
+      );
+    }
+
+    if (atrapaloResult.status === "fulfilled") {
+      atrapaloEvents = atrapaloResult.value;
+    } else {
+      console.warn(
+        "Atrápalo events fetch failed, continuing:",
+        atrapaloResult.reason?.message || atrapaloResult.reason
+      );
     }
 
     // Combine and return events
