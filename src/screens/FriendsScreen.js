@@ -21,7 +21,6 @@ import { EventContext } from "../EventContext";
 import { API_URL } from "../config";
 import { resolveImageUrl } from "../utils/imageSource";
 
-const AVATAR_PLACEHOLDER = "https://placehold.co/80x80?text=User";
 const getFriendPhoto = (friend) =>
   friend?.photo ||
   friend?.avatar ||
@@ -39,7 +38,29 @@ const getAvatarUrl = (friendOrPhoto) => {
       ? friendOrPhoto
       : getFriendPhoto(friendOrPhoto);
 
-  return resolveImageUrl(photo) || AVATAR_PLACEHOLDER;
+  return resolveImageUrl(photo);
+};
+
+const FriendAvatar = ({ friend, style }) => {
+  const [fallback, setFallback] = useState(false);
+  const uri = getAvatarUrl(friend);
+
+  if (fallback || !uri) {
+    return (
+      <View style={[style, styles.avatarFallback]}>
+        <Ionicons name="person" size={28} color="#78909c" />
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={style}
+      resizeMode="cover"
+      onError={() => setFallback(true)}
+    />
+  );
 };
 
 export default function FriendsScreen() {
@@ -233,10 +254,7 @@ export default function FriendsScreen() {
       onPress={() => openFriendProfile(item)}
       activeOpacity={0.88}
     >
-      <Image
-        source={{ uri: getAvatarUrl(item) }}
-        style={styles.avatar}
-      />
+      <FriendAvatar friend={item} style={styles.avatar} />
       <View style={{ flex: 1, paddingRight: 8, marginLeft: 12 }}>
         <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.friendEmail} numberOfLines={1}>{item.email}</Text>
@@ -250,10 +268,7 @@ export default function FriendsScreen() {
   // Render search result card
   const renderSearchResult = ({ item }) => (
     <View style={styles.friendCard}>
-      <Image
-        source={{ uri: getAvatarUrl(item) }}
-        style={styles.avatar}
-      />
+      <FriendAvatar friend={item} style={styles.avatar} />
       <View style={{ flex: 1, paddingRight: 8, marginLeft: 12 }}>
         <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.friendEmail} numberOfLines={1}>{item.email}</Text>
@@ -270,7 +285,7 @@ export default function FriendsScreen() {
   // Render friend request card (compact)
   const renderFriendRequest = ({ item }) => (
     <View style={[styles.requestCard]}>
-      <Image source={{ uri: getAvatarUrl(item) }} style={styles.requestAvatar} />
+      <FriendAvatar friend={item} style={styles.requestAvatar} />
       <View style={{ flex: 1, paddingHorizontal: 8, marginLeft: 4 }}>
         <Text style={styles.friendName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.friendEmail} numberOfLines={1}>{item.email}</Text>
@@ -377,10 +392,7 @@ export default function FriendsScreen() {
              {selectedFriend ? (
                <>
                  <View style={styles.profileCard}>
-                   <Image
-                     source={{ uri: getAvatarUrl(selectedFriend) }}
-                     style={styles.avatarLarge}
-                   />
+                   <FriendAvatar friend={selectedFriend} style={styles.avatarLarge} />
                    <View style={{ flex: 1, marginLeft: 12 }}>
                      <Text style={styles.profileName}>{selectedFriend.name}</Text>
                      <Text style={styles.profileEmail}>{selectedFriend.email}</Text>
@@ -543,6 +555,12 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: "#e0e0e0",
+  },
+  avatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    backgroundColor: "#eceff1",
   },
   avatarLarge: {
     width: 76,
