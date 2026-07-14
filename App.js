@@ -18,16 +18,30 @@ Notifications.setNotificationHandler({
 
 export default function App() {
   useEffect(() => {
-    requestNotificationPermission();
+    let subscription;
 
-    const subscription = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        console.log('Notification received:', notification);
+    const initNotifications = async () => {
+      try {
+        await requestNotificationPermission();
+      } catch (error) {
+        console.warn('Notification permission init failed:', error);
       }
-    );
+
+      try {
+        subscription = Notifications.addNotificationReceivedListener(
+          (notification) => {
+            console.log('Notification received:', notification);
+          }
+        );
+      } catch (error) {
+        console.warn('Notification listener setup failed:', error);
+      }
+    };
+
+    initNotifications();
 
     return () => {
-      subscription.remove();
+      subscription?.remove?.();
     };
   }, []);
 

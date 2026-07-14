@@ -8,10 +8,13 @@ import {
   ActivityIndicator,
   FlatList,
   Alert,
+  StyleSheet,
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useFocusEffect, useRoute } from "@react-navigation/native";
+import { StatusBar } from "react-native";
 import { AuthContext } from "../context/AuthContext";
 import { EventContext } from "../EventContext";
 import { resolveImageUrl } from "../utils/imageSource";
@@ -430,6 +433,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="#111827" />
       {!isMe && authUid && (
         <View style={styles.backLinkWrap}>
           <TouchableOpacity
