@@ -400,40 +400,16 @@ export default function ProfileScreen() {
 
   if (!authUid) {
     return (
-      <SafeAreaView
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 24,
-          backgroundColor: "#F3F4F6",
-        }}
-      >
+      <SafeAreaView style={styles.emptyStateScreen}>
         <Ionicons name="person-circle-outline" size={64} color="#9CA3AF" />
-        <Text
-          style={{
-            fontSize: 18,
-            fontWeight: "600",
-            marginTop: 12,
-            color: "#374151",
-          }}
-        >
-          Inicia sesión para ver tu perfil.
-        </Text>
+        <Text style={styles.emptyStateTitle}>Inicia sesión para ver tu perfil.</Text>
       </SafeAreaView>
     );
   }
 
   if (loading) {
     return (
-      <SafeAreaView
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "#F3F4F6",
-        }}
-      >
+      <SafeAreaView style={styles.loadingScreen}>
         <ActivityIndicator size="large" color="#2563EB" />
       </SafeAreaView>
     );
@@ -453,236 +429,134 @@ export default function ProfileScreen() {
   const eventsData = activeTab === "created" ? myEvents : attendingEvents;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "#F3F4F6" }}>
+    <SafeAreaView style={styles.safeArea}>
       {!isMe && authUid && (
-        <View
-          style={{
-            paddingHorizontal: 16,
-            paddingTop: 8,
-            paddingBottom: 2,
-          }}
-        >
+        <View style={styles.backLinkWrap}>
           <TouchableOpacity
             onPress={() => navigation.setParams({ userId: authUid })}
-            style={{ flexDirection: "row", alignItems: "center" }}
+            style={styles.backLink}
             activeOpacity={0.85}
           >
             <Ionicons name="arrow-back-circle-outline" size={22} color="#2563EB" />
-            <Text
-              style={{
-                marginLeft: 6,
-                color: "#2563EB",
-                fontWeight: "600",
-                fontSize: 14,
-              }}
-            >
-              Volver a mi perfil
-            </Text>
+            <Text style={styles.backLinkText}>Volver a mi perfil</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <View
-        style={{
-          margin: 20,
-          marginTop: isMe ? 20 : 10,
-          padding: 24,
-          borderRadius: 24,
-          backgroundColor: "#fff",
-          alignItems: "center",
-          shadowColor: "#000",
-          shadowOpacity: 0.08,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 6,
-        }}
-      >
-        <TouchableOpacity
-          onPress={onChangePhoto}
-          disabled={photoUploading || !isMe}
-          style={{ alignItems: "center" }}
-        >
-          <Image
-            source={
-              avatarUri
-                ? { uri: avatarUri }
-                : require("../../assets/icon.png")
-            }
-            style={{
-              width: 110,
-              height: 110,
-              borderRadius: 55,
-              marginBottom: 8,
-              borderWidth: 3,
-              borderColor: "#2563EB",
-              opacity: isMe ? 1 : 0.9,
-            }}
-          />
-          {photoUploading ? (
-            <ActivityIndicator
-              style={{
-                position: "absolute",
-                left: 45,
-                top: 45,
-              }}
-              color="#2563EB"
-            />
-          ) : null}
-        </TouchableOpacity>
-
-        <Text
-          style={{
-            fontSize: 22,
-            fontWeight: "700",
-            color: "#1F2937",
-            marginTop: 8,
-          }}
-        >
-          {displayName}
-        </Text>
-        <Text style={{ color: "#6B7280", marginTop: 2, fontSize: 15 }}>
-          {displayEmail}
-        </Text>
-
-        {isMe && (
-          <View style={{ flexDirection: "row", marginTop: 18 }}>
-            <TouchableOpacity
-              onPress={() => navigation.navigate("EditProfile")}
-              style={{
-                backgroundColor: "#2563EB",
-                paddingVertical: 10,
-                paddingHorizontal: 20,
-                borderRadius: 12,
-                marginRight: 10,
-                flexDirection: "row",
-                alignItems: "center",
-                shadowColor: "#2563EB",
-                shadowOpacity: 0.15,
-                shadowRadius: 4,
-                elevation: 2,
-              }}
-              activeOpacity={0.85}
-            >
-              <Ionicons
-                name="create-outline"
-                size={18}
-                color="#fff"
-                style={{ marginRight: 6 }}
-              />
-              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
-                Editar perfil
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => navigation.navigate("NotificationSettings")}
-              style={{
-                backgroundColor: "#F59E42",
-                paddingVertical: 10,
-                paddingHorizontal: 20,
-                borderRadius: 12,
-                flexDirection: "row",
-                alignItems: "center",
-                shadowColor: "#F59E42",
-                shadowOpacity: 0.15,
-                shadowRadius: 4,
-                elevation: 2,
-              }}
-              activeOpacity={0.85}
-            >
-              <Ionicons
-                name="notifications-outline"
-                size={18}
-                color="#fff"
-                style={{ marginRight: 6 }}
-              />
-              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
-                Notificaciones
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
-      <View style={{ paddingHorizontal: 24, paddingTop: 4 }}>
-        <Text style={{ fontSize: 18, fontWeight: "700", color: "#1F2937" }}>
-          {isMe ? "Mis eventos" : "Eventos"}
-        </Text>
-      </View>
-
-      <View
-        style={{
-          flexDirection: "row",
-          marginTop: 12,
-          marginHorizontal: 24,
-          borderRadius: 999,
-          backgroundColor: "#E5E7EB",
-          padding: 3,
-        }}
-      >
-        <TouchableOpacity
-          style={{
-            flex: 1,
-            paddingVertical: 10,
-            borderRadius: 999,
-            alignItems: "center",
-            backgroundColor: activeTab === "created" ? "#2563EB" : "transparent",
-          }}
-          onPress={() => setActiveTab("created")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={{
-              fontSize: 15,
-              fontWeight: "700",
-              color: activeTab === "created" ? "#fff" : "#374151",
-            }}
-          >
-            Creados
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={{
-            flex: 1,
-            paddingVertical: 10,
-            borderRadius: 999,
-            alignItems: "center",
-            backgroundColor: activeTab === "attending" ? "#2563EB" : "transparent",
-          }}
-          onPress={() => setActiveTab("attending")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={{
-              fontSize: 15,
-              fontWeight: "700",
-              color: activeTab === "attending" ? "#fff" : "#374151",
-            }}
-          >
-            A los que va
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       <FlatList
         data={eventsData}
-        keyExtractor={(i) => i.id}
-        style={{ flex: 1 }}
-        contentContainerStyle={{
-          padding: 24,
-          paddingTop: 12,
-          paddingBottom: 60,
-        }}
+        keyExtractor={(item) => item.id}
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <View style={styles.headerWrap}>
+            <View style={styles.heroCard}>
+              <LinearGradient
+                colors={["#111827", "#4f46e5"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroGradient}
+              >
+                <View style={styles.heroTopRow}>
+                  <View style={styles.heroTitleWrap}>
+                    <Text style={styles.heroEyebrow}>{isMe ? "Tu perfil" : "Perfil"}</Text>
+                    <Text style={styles.heroName}>{displayName}</Text>
+                    <Text style={styles.heroEmail}>{displayEmail}</Text>
+                  </View>
+
+                  {isMe ? (
+                    <TouchableOpacity onPress={logout} style={styles.iconButton}>
+                      <Ionicons name="log-out-outline" size={20} color="#fff" />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+
+                <View style={styles.avatarBlock}>
+                  <TouchableOpacity
+                    onPress={onChangePhoto}
+                    disabled={photoUploading || !isMe}
+                    style={styles.avatarButton}
+                    activeOpacity={0.85}
+                  >
+                    <Image
+                      source={avatarUri ? { uri: avatarUri } : require("../../assets/icon.png")}
+                      style={styles.avatar}
+                    />
+                    {photoUploading ? (
+                      <ActivityIndicator style={styles.avatarLoader} color="#fff" />
+                    ) : null}
+                  </TouchableOpacity>
+                  <View style={styles.avatarBadge}>
+                    <Ionicons name="sparkles-outline" size={14} color="#fff" />
+                  </View>
+                </View>
+
+                <View style={styles.statsRow}>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statValue}>{myEvents.length}</Text>
+                    <Text style={styles.statLabel}>Creados</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statValue}>{attendingEvents.length}</Text>
+                    <Text style={styles.statLabel}>Asistirás</Text>
+                  </View>
+                </View>
+
+                {isMe ? (
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate("EditProfile")}
+                      style={styles.primaryAction}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="create-outline" size={18} color="#fff" />
+                      <Text style={styles.primaryActionText}>Editar perfil</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate("NotificationSettings")}
+                      style={styles.secondaryAction}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="notifications-outline" size={18} color="#fff" />
+                      <Text style={styles.secondaryActionText}>Notificaciones</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </LinearGradient>
+            </View>
+
+            <View style={styles.tabsWrapper}>
+              <Text style={styles.sectionTitle}>{isMe ? "Mis eventos" : "Eventos"}</Text>
+              <View style={styles.tabBar}>
+                <TouchableOpacity
+                  style={[styles.tabButton, activeTab === "created" && styles.tabButtonActive]}
+                  onPress={() => setActiveTab("created")}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tabText, activeTab === "created" && styles.tabTextActive]}>
+                    Creados
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.tabButton, activeTab === "attending" && styles.tabButtonActive]}
+                  onPress={() => setActiveTab("attending")}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tabText, activeTab === "attending" && styles.tabTextActive]}>
+                    A los que va
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        }
         ListEmptyComponent={
-          <View
-            style={{
-              alignItems: "center",
-              marginTop: 32,
-            }}
-          >
+          <View style={styles.emptyStateCard}>
             <Ionicons name="calendar-outline" size={40} color="#9CA3AF" />
-            <Text style={{ color: "#6B7280", fontSize: 16, marginTop: 8 }}>
+            <Text style={styles.emptyStateText}>
               {activeTab === "created"
                 ? isMe
                   ? "No tienes eventos creados."
@@ -695,54 +569,18 @@ export default function ProfileScreen() {
         }
         ListFooterComponent={
           isMe ? (
-            <View style={{ marginTop: 8 }}>
-              <View
-                style={{
-                  backgroundColor: "#FFFFFF",
-                  borderRadius: 18,
-                  paddingVertical: 6,
-                  shadowColor: "#000",
-                  shadowOpacity: 0.06,
-                  shadowRadius: 8,
-                  shadowOffset: { width: 0, height: 2 },
-                  elevation: 3,
-                }}
+            <View style={styles.footerCard}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("PrivacyPolicy")}
+                activeOpacity={0.85}
+                style={styles.footerRow}
               >
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("PrivacyPolicy")}
-                  activeOpacity={0.85}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    paddingHorizontal: 18,
-                    paddingVertical: 16,
-                  }}
-                >
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    <Ionicons
-                      name="shield-checkmark-outline"
-                      size={20}
-                      color="#2563EB"
-                      style={{ marginRight: 12 }}
-                    />
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        fontWeight: "600",
-                        color: "#1F2937",
-                      }}
-                    >
-                      Política de privacidad
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name="chevron-forward-outline"
-                    size={20}
-                    color="#9CA3AF"
-                  />
-                </TouchableOpacity>
-              </View>
+                <View style={styles.footerRowLeft}>
+                  <Ionicons name="shield-checkmark-outline" size={20} color="#2563EB" />
+                  <Text style={styles.footerText}>Política de privacidad</Text>
+                </View>
+                <Ionicons name="chevron-forward-outline" size={20} color="#9CA3AF" />
+              </TouchableOpacity>
             </View>
           ) : null
         }
@@ -751,128 +589,359 @@ export default function ProfileScreen() {
 
           return (
             <TouchableOpacity
-              onPress={() =>
-                navigation.navigate("EventDetail", {
-                  event: item,
-                })
-              }
+              onPress={() => navigation.navigate("EventDetail", { event: item })}
               activeOpacity={0.85}
-              style={{
-                flexDirection: "row",
-                padding: 16,
-                borderRadius: 16,
-                backgroundColor: "#fff",
-                marginBottom: 16,
-                shadowColor: "#000",
-                shadowOpacity: 0.06,
-                shadowRadius: 8,
-                shadowOffset: { width: 0, height: 2 },
-                elevation: 3,
-                alignItems: "center",
-              }}
+              style={styles.eventCard}
             >
               <EventThumbImage
                 eventId={item.id}
                 serverImage={item.image}
-                style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: 12,
-                  marginRight: 16,
-                  backgroundColor: "#E5E7EB",
-                }}
+                style={styles.eventImage}
               />
 
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    fontWeight: "700",
-                    fontSize: 16,
-                    color: "#1F2937",
-                  }}
-                  numberOfLines={1}
-                >
+              <View style={styles.eventInfo}>
+                <Text style={styles.eventTitle} numberOfLines={1}>
                   {item.title}
                 </Text>
 
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginTop: 6,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <Ionicons
-                    name="calendar-outline"
-                    size={15}
-                    color="#2563EB"
-                    style={{ marginRight: 4 }}
-                  />
-                  <Text style={{ color: "#374151", fontSize: 14 }}>
-                    {formatEventDate(item.date)}
-                  </Text>
+                <View style={styles.eventMetaRow}>
+                  <Ionicons name="calendar-outline" size={15} color="#2563EB" />
+                  <Text style={styles.eventMetaText}>{formatEventDate(item.date)}</Text>
 
                   {timeLabel ? (
                     <>
-                      <Text style={{ color: "#374151", fontSize: 14 }}>
-                        {" · "}
-                      </Text>
-                      <Ionicons
-                        name="time-outline"
-                        size={15}
-                        color="#F59E42"
-                        style={{ marginRight: 4 }}
-                      />
-                      <Text style={{ color: "#374151", fontSize: 14 }}>
-                        {timeLabel}
-                      </Text>
+                      <Text style={styles.eventMetaText}> · </Text>
+                      <Ionicons name="time-outline" size={15} color="#F59E42" />
+                      <Text style={styles.eventMetaText}>{timeLabel}</Text>
                     </>
                   ) : null}
-
-                  {!!item.location && (
-                    <Text style={{ color: "#374151", fontSize: 14 }}>
-                      {" · "}
-                      {item.location}
-                    </Text>
-                  )}
                 </View>
+
+                {!!item.location && (
+                  <Text style={styles.eventLocation} numberOfLines={1}>
+                    {item.location}
+                  </Text>
+                )}
               </View>
 
-              <Ionicons
-                name="chevron-forward-outline"
-                size={22}
-                color="#9CA3AF"
-              />
+              <Ionicons name="chevron-forward-outline" size={20} color="#9CA3AF" />
             </TouchableOpacity>
           );
         }}
       />
-
-      {isMe && (
-        <TouchableOpacity
-          onPress={logout}
-          activeOpacity={0.85}
-          style={{
-            position: "absolute",
-            right: 24,
-            bottom: 16,
-            backgroundColor: "#EF4444",
-            width: 60,
-            height: 60,
-            borderRadius: 30,
-            justifyContent: "center",
-            alignItems: "center",
-            shadowColor: "#EF4444",
-            shadowOpacity: 0.22,
-            shadowRadius: 10,
-            shadowOffset: { width: 0, height: 4 },
-            elevation: 8,
-          }}
-        >
-          <Ionicons name="log-out-outline" size={28} color="#fff" />
-        </TouchableOpacity>
-      )}
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#f3f4f6",
+  },
+  emptyStateScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "#f3f4f6",
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 12,
+    color: "#374151",
+  },
+  loadingScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f3f4f6",
+  },
+  backLinkWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  backLink: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  backLinkText: {
+    marginLeft: 6,
+    color: "#2563EB",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  headerWrap: {
+    paddingTop: 8,
+  },
+  heroCard: {
+    borderRadius: 24,
+    overflow: "hidden",
+    shadowColor: "#111827",
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
+  },
+  heroGradient: {
+    padding: 20,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  heroTitleWrap: {
+    flex: 1,
+  },
+  heroEyebrow: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  heroName: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  heroEmail: {
+    marginTop: 4,
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 14,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.16)",
+  },
+  avatarBlock: {
+    marginTop: 18,
+    alignItems: "center",
+    alignSelf: "center",
+  },
+  avatarButton: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.24)",
+    overflow: "hidden",
+  },
+  avatar: {
+    width: 104,
+    height: 104,
+  },
+  avatarLoader: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(17,24,39,0.35)",
+  },
+  avatarBadge: {
+    position: "absolute",
+    right: 0,
+    bottom: 4,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#f59e0b",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  statsRow: {
+    flexDirection: "row",
+    marginTop: 18,
+    gap: 10,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  statValue: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  statLabel: {
+    marginTop: 2,
+    color: "rgba(255,255,255,0.82)",
+    fontSize: 12,
+  },
+  actionRow: {
+    flexDirection: "row",
+    marginTop: 16,
+    gap: 10,
+  },
+  primaryAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  primaryActionText: {
+    marginLeft: 6,
+    color: "#111827",
+    fontWeight: "700",
+  },
+  secondaryAction: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.16)",
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  secondaryActionText: {
+    marginLeft: 6,
+    color: "#fff",
+    fontWeight: "700",
+  },
+  tabsWrapper: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 10,
+  },
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#e5e7eb",
+    borderRadius: 999,
+    padding: 4,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 999,
+    alignItems: "center",
+  },
+  tabButtonActive: {
+    backgroundColor: "#2563EB",
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  tabTextActive: {
+    color: "#fff",
+  },
+  emptyStateCard: {
+    alignItems: "center",
+    marginTop: 22,
+    paddingVertical: 24,
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  emptyStateText: {
+    color: "#6B7280",
+    fontSize: 15,
+    marginTop: 8,
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
+  footerCard: {
+    marginTop: 12,
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  footerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  footerRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  footerText: {
+    marginLeft: 10,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+  eventCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  eventImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    marginRight: 14,
+    backgroundColor: "#E5E7EB",
+  },
+  eventInfo: {
+    flex: 1,
+  },
+  eventTitle: {
+    fontWeight: "700",
+    fontSize: 15,
+    color: "#111827",
+  },
+  eventMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    flexWrap: "wrap",
+  },
+  eventMetaText: {
+    color: "#6B7280",
+    fontSize: 13,
+    marginLeft: 4,
+  },
+  eventLocation: {
+    marginTop: 6,
+    color: "#6B7280",
+    fontSize: 13,
+  },
+});

@@ -24,17 +24,29 @@ export async function getUserAttendingEvents(userId) {
 }
 
 
-export async function updateProfile(userId, { name, email }) {
-  const r = await fetch(`${API_URL}/users/${userId}/profile`, {
+export async function updateProfile(userId, { name, email }, token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const r = await fetch(`${API_URL}/users/${userId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ name, email }),
   });
-  if (!r.ok) {
-    const txt = await r.text();
-    throw new Error(txt || 'Error actualizando perfil');
+
+  const txt = await r.text().catch(() => '');
+  let payload = null;
+  try {
+    payload = txt ? JSON.parse(txt) : null;
+  } catch {
+    payload = null;
   }
-  return r.json();
+
+  if (!r.ok) {
+    throw new Error(payload?.message || payload?.error || txt || 'Error actualizando perfil');
+  }
+
+  return payload || { id: userId, name, email, photo: null };
 }
 
 export async function changePassword(userId, currentPassword, newPassword) {

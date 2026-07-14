@@ -559,14 +559,42 @@ app.get("/users/:userId", async (req, res) => {
   res.json(rows[0]);
 });
 
-// Actualizar nombre de usuario
-app.put("/users/:userId", async (req, res) => {
+const updateProfileHandler = async (req, res) => {
   const { userId } = req.params;
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: "Nombre requerido" });
-  await pool.query("UPDATE users SET name = $1 WHERE id = $2", [name, userId]);
-  res.json({ success: true });
-});
+  const { name, email } = req.body;
+
+  const trimmedName = String(name || "").trim();
+  const trimmedEmail = String(email || "").trim().toLowerCase();
+
+  if (!trimmedName) return res.status(400).json({ error: "Nombre requerido" });
+  if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    return res.status(400).json({ error: "Email inválido" });
+  }
+
+  const existing = await pool.query(
+    "SELECT id FROM users WHERE email = $1 AND id <> $2",
+    [trimmedEmail, userId]
+  );
+
+  if (existing.rows.length) {
+    return res.status(409).json({ message: "Email en uso" });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE users
+     SET name = $1, email = $2
+     WHERE id = $3
+     RETURNING id, name, email, photo`,
+    [trimmedName, trimmedEmail, userId]
+  );
+
+  if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+  res.json(rows[0]);
+};
+
+// Actualizar datos del usuario
+app.put("/users/:userId", updateProfileHandler);
+app.put("/users/:userId/profile", updateProfileHandler);
 
 /* ==== FOTO PERFIL ==== */
 
