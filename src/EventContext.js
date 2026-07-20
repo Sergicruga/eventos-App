@@ -39,18 +39,23 @@ const normalizeTitleKey = (title = '') => {
   t = t.replace(/\s+/g, ' ').trim();
   return t;
 };
-// Remove duplicate API/Ticketmaster events by normalized title. Prefers non-VIP versions.
+const isExternalApiEvent = (ev) =>
+  String(ev?.type) === 'api' ||
+  ['ticketmaster', 'atrapalo'].includes(String(ev?.source));
+
+// Remove duplicate API/Ticketmaster/Atrápalo events by normalized title.
+// Local/database events are kept as-is.
 const dedupeApiEvents = (arr = []) => {
   const groups = {};
+  const localEvents = [];
   
   // Group events by normalized title
   (arr || []).forEach((ev) => {
-    if (
-      String(ev.type) !== 'api' &&
-      !['ticketmaster', 'atrapalo'].includes(String(ev.source))
-    ) {
-      return; // skip local events (but keep ticketmaster events)
+    if (!isExternalApiEvent(ev)) {
+      localEvents.push(ev);
+      return;
     }
+
     const key = normalizeTitleKey(ev.title);
     if (!key) return;
     
@@ -61,7 +66,7 @@ const dedupeApiEvents = (arr = []) => {
   });
   
   // For each group, prefer the event that doesn't have VIP indicators
-  const result = [];
+  const result = [...localEvents];
   Object.values(groups).forEach((group) => {
     if (group.length === 1) {
       result.push(group[0]);
@@ -539,8 +544,11 @@ export function EventProvider({ children }) {
             ev.image = ev.image ?? ev.imageUrl ?? ev.imageUri ?? null;
             ev.type = ev.type || 'local';
           });
-          // dedupe persisted API events as well
-          const cleaned = dedupeApiEvents(cached);
+          // La caché es solo una ayuda visual inicial. No mostramos externos
+          // cacheados porque cada dispositivo puede acumular una lista distinta.
+          const cleaned = dedupeApiEvents(cached).filter(
+            (ev) => !isExternalApiEvent(ev)
+          );
           setEvents(cleaned);
         }
       } catch (e) {}
@@ -697,9 +705,11 @@ export function EventProvider({ children }) {
           const mappedIds = new Set(
             mapped.map((m) => String(m.id))
           );
-          const localsToKeep = prevArrAll.filter(
-            (p) => !mappedIds.has(String(p.id))
-          );
+          const localsToKeep = prevArrAll.filter((p) => {
+            if (mappedIds.has(String(p.id))) return false;
+            if (isExternalApiEvent(p)) return false;
+            return !isNumericId(p.id);
+          });
           if (localsToKeep.length > 0) {
             const normalizedLocals = localsToKeep.map((p) => ({
               ...p,
@@ -1371,8 +1381,8 @@ export function EventProvider({ children }) {
   
   // Location-filtered events
   const locationFilteredEvents = useMemo(() => {
-    return filterEventsByRadius(communityEvents, coords, searchRadius, city);
-  }, [communityEvents, coords, searchRadius, city]);
+    return filterEventsByRadius(events, coords, searchRadius, city);
+  }, [events, coords, searchRadius, city]);
 
   const value = useMemo(
     () => ({
