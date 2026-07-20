@@ -1,202 +1,304 @@
 
-import React, { useState, useEffect } from "react";
-import { View, Text, Switch, TouchableOpacity, StyleSheet, Alert, Platform } from "react-native";
-import { Picker } from '@react-native-picker/picker';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  Switch,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  Platform,
+  ActivityIndicator,
+  ScrollView,
+  StatusBar,
+} from "react-native";
+import { Picker } from "@react-native-picker/picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Ionicons } from '@expo/vector-icons';
-import { sendTestNotification } from '../utils/notifications';
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { sendTestNotification } from "../utils/notifications";
+
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  advance: "1",
+};
 
 export default function NotificationSettingsScreen() {
-  const [enabled, setEnabled] = useState(true);
-  const [advance, setAdvance] = useState("1"); // 1 day
+  const [enabled, setEnabled] = useState(DEFAULT_SETTINGS.enabled);
+  const [advance, setAdvance] = useState(DEFAULT_SETTINGS.advance);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.getItem("notificationSettings").then(data => {
-      if (data) {
-        const { enabled, advance } = JSON.parse(data);
-        setEnabled(enabled);
-        setAdvance(advance);
+    let mounted = true;
+
+    const loadSettings = async () => {
+      try {
+        const raw = await AsyncStorage.getItem("notificationSettings");
+        if (!raw) return;
+
+        const parsed = JSON.parse(raw);
+        if (!mounted) return;
+
+        setEnabled(parsed?.enabled ?? DEFAULT_SETTINGS.enabled);
+        setAdvance(String(parsed?.advance ?? DEFAULT_SETTINGS.advance));
+      } catch (error) {
+        console.warn("Could not load notification settings", error);
+      } finally {
+        if (mounted) setLoading(false);
       }
-    });
+    };
+
+    loadSettings();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const saveSettings = async () => {
     setSaving(true);
-    await AsyncStorage.setItem("notificationSettings", JSON.stringify({ enabled, advance }));
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1200);
+    try {
+      await AsyncStorage.setItem(
+        "notificationSettings",
+        JSON.stringify({ enabled, advance })
+      );
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1400);
+    } catch (error) {
+      Alert.alert("Error", "No se pudieron guardar las preferencias.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleTestNotification = async () => {
     try {
       await sendTestNotification();
-    } catch (e) {
+      Alert.alert("Listo", "Se ha enviado una notificación de prueba.");
+    } catch (error) {
       Alert.alert("Error", "No se pudo enviar la notificación de prueba.");
     }
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerCard}>
-        <Ionicons name="notifications" size={32} color="#2563EB" style={{ marginBottom: 8 }} />
-        <Text style={styles.headerTitle}>Notificaciones de eventos</Text>
-        <Text style={styles.headerSubtitle}>Recibe recordatorios para no perderte tus eventos importantes.</Text>
-      </View>
-
-      <View style={styles.sectionCard}>
-        <View style={styles.rowBetween}>
-          <Text style={styles.label}>Recordatorios activados</Text>
-          <Switch
-            value={enabled}
-            onValueChange={setEnabled}
-            trackColor={{ false: '#bdbdbd', true: '#90caf9' }}
-            thumbColor={enabled ? '#fff' : '#bdbdbd'}
-            ios_backgroundColor="#bdbdbd"
-          />
-        </View>
-        <View style={{ marginTop: 18 }}>
-          <Text style={styles.label}>¿Cuánto antes quieres ser avisado?</Text>
-          <View style={styles.pickerWrap}>
-            <Picker
-              selectedValue={advance}
-              onValueChange={setAdvance}
-              style={[styles.picker, Platform.OS === 'ios' && styles.pickerIOS]}
-              itemStyle={Platform.OS === 'ios' ? { fontSize: 16, color: '#222' } : undefined}
-              mode="dropdown"
-            >
-              <Picker.Item label="1 hora antes" value="0.041" color={Platform.OS === 'ios' ? '#222' : undefined} />
-              <Picker.Item label="1 día antes" value="1" color={Platform.OS === 'ios' ? '#222' : undefined} />
-              <Picker.Item label="3 días antes" value="3" color={Platform.OS === 'ios' ? '#222' : undefined} />
-            </Picker>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <LinearGradient
+          colors={["#111827", "#4f46e5"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.hero}
+        >
+          <View style={styles.heroIconWrap}>
+            <Ionicons name="notifications-outline" size={28} color="#fff" />
           </View>
+          <Text style={styles.heroTitle}>Notificaciones</Text>
+          <Text style={styles.heroSubtitle}>
+            Mantén tus eventos a la vista con recordatorios precisos y sin ruido.
+          </Text>
+        </LinearGradient>
+
+        <View style={styles.card}>
+          <View style={styles.optionRow}>
+            <View style={styles.optionTextWrap}>
+              <Text style={styles.optionLabel}>Recordatorios activados</Text>
+              <Text style={styles.optionCaption}>
+                Activa o desactiva los avisos para tus próximos eventos.
+              </Text>
+            </View>
+            <Switch
+              value={enabled}
+              onValueChange={setEnabled}
+              trackColor={{ false: "#d1d5db", true: "#93c5fd" }}
+              thumbColor={enabled ? "#ffffff" : "#f3f4f6"}
+              ios_backgroundColor="#d1d5db"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <View style={styles.sectionBlock}>
+            <Text style={styles.optionLabel}>¿Cuánto antes quieres ser avisado?</Text>
+            <Text style={styles.optionCaption}>
+              Elige una ventana de aviso que se adapte a tu agenda.
+            </Text>
+            <View style={styles.pickerWrap}>
+              {loading ? (
+                <ActivityIndicator color="#4f46e5" />
+              ) : (
+                <Picker
+                  selectedValue={advance}
+                  onValueChange={(value) => setAdvance(String(value))}
+                  style={[styles.picker, Platform.OS === "ios" && styles.pickerIOS]}
+                  itemStyle={Platform.OS === "ios" ? { fontSize: 16, color: "#111827" } : undefined}
+                  mode="dropdown"
+                >
+                  <Picker.Item label="1 hora antes" value="0.041" />
+                  <Picker.Item label="1 día antes" value="1" />
+                  <Picker.Item label="3 días antes" value="3" />
+                </Picker>
+              )}
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, saving && styles.primaryBtnDisabled]}
+            onPress={saveSettings}
+            disabled={saving}
+            activeOpacity={0.9}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="save-outline" size={18} color="#fff" />
+                <Text style={styles.primaryBtnText}>
+                  {saved ? "¡Guardado!" : "Guardar preferencias"}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.secondaryBtn} onPress={handleTestNotification} activeOpacity={0.9}>
+            <Ionicons name="notifications-circle-outline" size={18} color="#4f46e5" />
+            <Text style={styles.secondaryBtnText}>Probar notificación</Text>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={[styles.saveBtn, saving && { opacity: 0.7 }]}
-          onPress={saveSettings}
-          disabled={saving}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="save-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={styles.saveBtnText}>{saving ? "Guardando..." : saved ? "¡Guardado!" : "Guardar"}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.testBtn}
-          onPress={handleTestNotification}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="notifications-circle-outline" size={20} color="#2563EB" style={{ marginRight: 8 }} />
-          <Text style={styles.testBtnText}>Probar notificación</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#f6f8fb',
-    padding: 0,
+    backgroundColor: "#f8fafc",
   },
-  headerCard: {
-    backgroundColor: '#fff',
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
-    paddingTop: 36,
-    paddingBottom: 18,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
+  container: {
+    padding: 16,
+    paddingBottom: 28,
+  },
+  hero: {
+    borderRadius: 24,
+    padding: 22,
+    marginBottom: 16,
+    shadowColor: "#111827",
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
+  },
+  heroIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  heroTitle: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  heroSubtitle: {
+    marginTop: 6,
+    color: "rgba(255,255,255,0.84)",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#eef2ff",
+    shadowColor: "#111827",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#2563EB',
-    marginBottom: 2,
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
-  headerSubtitle: {
-    color: '#607d8b',
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 2,
+  optionTextWrap: {
+    flex: 1,
   },
-  sectionCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 18,
-    marginTop: 24,
-    borderRadius: 14,
-    padding: 18,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  label: {
+  optionLabel: {
     fontSize: 16,
-    color: '#37474f',
-    fontWeight: '600',
+    fontWeight: "700",
+    color: "#111827",
+  },
+  optionCaption: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#6b7280",
+    lineHeight: 18,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#eef2ff",
+    marginVertical: 16,
+  },
+  sectionBlock: {
+    marginTop: 2,
   },
   pickerWrap: {
-    backgroundColor: '#f3f6fa',
-    borderRadius: 10,
-    marginTop: 8,
-    overflow: 'hidden',
+    marginTop: 10,
+    borderRadius: 14,
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: '#e3e6eb',
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f8fafc",
   },
   picker: {
-    height: 44,
-    width: '100%',
+    height: 48,
+    width: "100%",
   },
   pickerIOS: {
-    color: '#222',
-    backgroundColor: 'transparent',
+    color: "#111827",
+    backgroundColor: "transparent",
   },
-  saveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2563EB',
-    borderRadius: 10,
+  primaryBtn: {
+    marginTop: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#2563EB",
+    borderRadius: 14,
+    paddingVertical: 13,
+  },
+  primaryBtnDisabled: {
+    opacity: 0.75,
+  },
+  primaryBtnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  secondaryBtn: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#eff6ff",
+    borderRadius: 14,
     paddingVertical: 12,
-    paddingHorizontal: 18,
-    marginTop: 28,
-    justifyContent: 'center',
-    shadowColor: '#2563EB',
-    shadowOpacity: 0.10,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  saveBtnText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  testBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e3f2fd',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    marginTop: 14,
-    justifyContent: 'center',
-  },
-  testBtnText: {
-    color: '#2563EB',
-    fontWeight: '700',
+  secondaryBtnText: {
+    color: "#4f46e5",
+    fontWeight: "700",
     fontSize: 15,
   },
 });

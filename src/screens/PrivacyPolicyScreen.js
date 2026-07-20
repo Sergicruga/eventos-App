@@ -1,147 +1,169 @@
 import React from "react";
-import { ScrollView, Text, View, StyleSheet, Platform } from "react-native";
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-
-const COLORS = {
-  primary: '#3B5BA9',
-  secondary: '#6C757D',
-  accent: '#F5CBA7',
-  background: '#F8FAFC',
-  white: '#fff',
-  gray: '#888',
-  border: '#D1D5DB',
-  shadow: '#B0BEC5',
-  text: '#444',
-};
+import {
+  ScrollView,
+  Text,
+  View,
+  StyleSheet,
+  StatusBar,
+  SafeAreaView,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function PrivacyPolicyScreen() {
   return (
-    <LinearGradient
-      colors={[COLORS.background, '#e0e7ef', '#f5e8e4']}
-      style={{ flex: 1 }}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.card}>
-          <View style={styles.headerRow}>
-            <Ionicons name="shield-checkmark" size={32} color={COLORS.primary} style={{ marginRight: 10 }} />
-            <Text style={styles.title}>Política de Privacidad</Text>
-          </View>
-          <Text style={styles.updated}>Última actualización: 08/01/2026</Text>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>1. Responsable del Tratamiento</Text>
-            <Text style={styles.sectionText}>EventosApp (SergiCruga)</Text>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>2. Datos que Recopilamos</Text>
-            <Text style={styles.sectionText}>
-              • Correo electrónico y nombre de usuario {'\n'}
-              • Ubicación del evento (solo si la introduces) {'\n'}
-              • Fotografías subidas por el usuario {'\n'}
-              • Analítica y errores (Firebase, Sentry) {'\n'}
-              • Token de notificaciones push
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+      <LinearGradient
+        colors={["#111827", "#4f46e5", "#eef2ff"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.gradient}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.heroCard}>
+            <View style={styles.heroIconWrap}>
+              <Ionicons name="shield-checkmark-outline" size={26} color="#fff" />
+            </View>
+            <Text style={styles.heroTitle}>Política de privacidad</Text>
+            <Text style={styles.heroSubtitle}>
+              Tu privacidad importa. Aquí explicamos de forma clara qué datos usamos y cómo los protegemos.
             </Text>
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>3. Finalidad del Tratamiento</Text>
-            <Text style={styles.sectionText}>
-              Utilizamos tus datos para gestionar tu cuenta, crear y mostrar eventos, mejorar la seguridad, enviar notificaciones y analizar el funcionamiento de la app.
-            </Text>
-          </View>
+          <View style={styles.card}>
+            <Text style={styles.updated}>Última actualización: 20/07/2026</Text>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>4. Conservación de los Datos</Text>
-            <Text style={styles.sectionText}>
-              Conservamos tus datos mientras tu cuenta esté activa o hasta que solicites su eliminación.
-            </Text>
-          </View>
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Resumen</Text>
+              <Text style={styles.sectionText}>
+                Eventos App usa tus datos para gestionar tu cuenta, mostrar eventos relevantes y enviarte recordatorios cuando lo hayas activado. Nunca vendemos tu información personal a terceros.
+              </Text>
+            </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>5. Derechos del Usuario</Text>
-            <Text style={styles.sectionText}>
-              Puedes acceder, rectificar o eliminar tus datos en cualquier momento. También puedes oponerte al tratamiento o solicitar la portabilidad de tus datos.
-            </Text>
-          </View>
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>1. Información que tratamos</Text>
+              <Text style={styles.sectionText}>
+                Recopilamos datos básicos como tu nombre, correo electrónico, foto de perfil, los eventos que creas o sigues, y las preferencias que eliges en la app, como los recordatorios.
+              </Text>
+            </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>6. Contacto</Text>
-            <Text style={styles.sectionText}>
-              Si tienes dudas o deseas ejercer tus derechos, contacta con nosotros en:{'\n'}
-              <Text style={styles.email}>soporte@tudominio.com</Text>
-            </Text>
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>2. Cómo usamos tus datos</Text>
+              <Text style={styles.sectionText}>
+                Utilizamos esta información para crear tu cuenta, personalizar tu experiencia, mostrarte eventos relevantes, mantener la seguridad de la app y enviarte notificaciones cuando las hayas activado.
+              </Text>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>3. Compartir datos</Text>
+              <Text style={styles.sectionText}>
+                Solo compartimos datos con proveedores técnicos que nos ayudan a operar la app, como almacenamiento de imágenes o servicios de notificación, siempre bajo medidas de protección adecuadas.
+              </Text>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>4. Conservación</Text>
+              <Text style={styles.sectionText}>
+                Mantenemos tus datos mientras tu cuenta siga activa o durante el tiempo necesario para prestar el servicio y cumplir obligaciones legales.
+              </Text>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>5. Tus derechos</Text>
+              <Text style={styles.sectionText}>
+                Puedes pedir acceso, corrección o eliminación de tus datos en cualquier momento. Si lo deseas, también puedes solicitar información sobre cómo los tratamos.
+              </Text>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>6. Contacto</Text>
+              <Text style={styles.sectionText}>
+                Si tienes dudas, quieres ejercer algún derecho o simplemente necesitas ayuda, escríbenos a soporte@eventosapp.com.
+              </Text>
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </LinearGradient>
+        </ScrollView>
+      </LinearGradient>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#111827",
+  },
+  gradient: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: 'transparent',
+    padding: 16,
+    paddingBottom: 28,
+  },
+  heroCard: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  heroIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  heroTitle: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  heroSubtitle: {
+    marginTop: 6,
+    color: "rgba(255,255,255,0.86)",
+    fontSize: 14,
+    lineHeight: 20,
   },
   card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 22,
-    padding: 24,
-    width: '100%',
-    maxWidth: 500,
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.13,
-    shadowRadius: 18,
-    elevation: 8,
-    marginTop: 32,
-    marginBottom: 32,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    letterSpacing: 1.1,
-    fontFamily: Platform.OS === 'ios' ? 'AvenirNext-DemiBold' : 'sans-serif-medium',
-    textShadowColor: COLORS.shadow,
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#eef2ff",
+    shadowColor: "#111827",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   updated: {
-    color: COLORS.secondary,
-    fontSize: 14,
-    marginBottom: 18,
-    marginLeft: 2,
+    color: "#6b7280",
+    fontSize: 13,
+    marginBottom: 12,
   },
-  section: {
-    marginBottom: 18,
+  sectionCard: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#eef2ff",
   },
   sectionTitle: {
-    fontWeight: '700',
-    fontSize: 17,
-    color: COLORS.primary,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
     marginBottom: 4,
   },
   sectionText: {
-    fontSize: 15.5,
-    color: COLORS.text,
-    lineHeight: 22,
-    marginLeft: 2,
-  },
-  email: {
-    color: COLORS.accent,
-    fontWeight: 'bold',
-    fontSize: 15.5,
+    fontSize: 14,
+    color: "#4b5563",
+    lineHeight: 20,
   },
 });

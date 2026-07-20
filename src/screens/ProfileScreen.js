@@ -531,8 +531,17 @@ export default function ProfileScreen() {
               </LinearGradient>
             </View>
 
-            <View style={styles.tabsWrapper}>
-              <Text style={styles.sectionTitle}>{isMe ? "Mis eventos" : "Eventos"}</Text>
+            <View style={styles.contentSurface}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderTextWrap}>
+                  <Text style={styles.sectionEyebrow}>{isMe ? "Mi agenda" : "Agenda"}</Text>
+                  <Text style={styles.sectionTitle}>{isMe ? "Mis eventos" : "Eventos"}</Text>
+                </View>
+                <View style={styles.counterPill}>
+                  <Text style={styles.counterText}>{eventsData.length}</Text>
+                </View>
+              </View>
+
               <View style={styles.tabBar}>
                 <TouchableOpacity
                   style={[styles.tabButton, activeTab === "created" && styles.tabButtonActive]}
@@ -559,33 +568,38 @@ export default function ProfileScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyStateCard}>
-            <Ionicons name="calendar-outline" size={40} color="#9CA3AF" />
+            <View style={styles.emptyStateIconWrap}>
+              <Ionicons name="calendar-outline" size={26} color="#4f46e5" />
+            </View>
             <Text style={styles.emptyStateText}>
               {activeTab === "created"
                 ? isMe
-                  ? "No tienes eventos creados."
-                  : "No tiene eventos creados."
+                  ? "No tienes eventos creados todavía."
+                  : "No tiene eventos creados todavía."
                 : isMe
-                ? "No estás apuntado a ningún evento próximo."
+                ? "Aún no estás apuntado a ningún evento próximo."
                 : "No está apuntado a ningún evento próximo."}
             </Text>
           </View>
         }
         ListFooterComponent={
           isMe ? (
-            <View style={styles.footerCard}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate("PrivacyPolicy")}
-                activeOpacity={0.85}
-                style={styles.footerRow}
-              >
-                <View style={styles.footerRowLeft}>
-                  <Ionicons name="shield-checkmark-outline" size={20} color="#2563EB" />
-                  <Text style={styles.footerText}>Política de privacidad</Text>
-                </View>
-                <Ionicons name="chevron-forward-outline" size={20} color="#9CA3AF" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("PrivacyPolicy")}
+              activeOpacity={0.9}
+              style={styles.footerCard}
+            >
+              <View style={styles.footerIconWrap}>
+                <Ionicons name="shield-checkmark-outline" size={20} color="#2563EB" />
+              </View>
+              <View style={styles.footerContent}>
+                <Text style={styles.footerTitle}>Política de privacidad</Text>
+                <Text style={styles.footerSubtitle}>
+                  Tu información se gestiona de forma segura y transparente.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward-outline" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
           ) : null
         }
         renderItem={({ item }) => {
@@ -825,19 +839,59 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700",
   },
-  tabsWrapper: {
+  contentSurface: {
     marginTop: 16,
     marginBottom: 8,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eef2ff",
+    shadowColor: "#111827",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  sectionHeaderTextWrap: {
+    flex: 1,
+  },
+  sectionEyebrow: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    color: "#6366f1",
+    marginBottom: 3,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: "#111827",
-    marginBottom: 10,
+  },
+  counterPill: {
+    minWidth: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  counterText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#4f46e5",
   },
   tabBar: {
     flexDirection: "row",
-    backgroundColor: "#e5e7eb",
+    backgroundColor: "#f3f4f6",
     borderRadius: 999,
     padding: 4,
   },
@@ -853,56 +907,79 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#374151",
+    color: "#6b7280",
   },
   tabTextActive: {
     color: "#fff",
   },
   emptyStateCard: {
     alignItems: "center",
-    marginTop: 22,
-    paddingVertical: 24,
+    marginTop: 16,
+    paddingVertical: 22,
+    paddingHorizontal: 18,
     backgroundColor: "#fff",
-    borderRadius: 18,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#eef2ff",
+    shadowColor: "#111827",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
+  },
+  emptyStateIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
   },
   emptyStateText: {
     color: "#6B7280",
     fontSize: 15,
-    marginTop: 8,
     textAlign: "center",
-    paddingHorizontal: 20,
+    lineHeight: 22,
   },
   footerCard: {
     marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     backgroundColor: "#fff",
-    borderRadius: 18,
-    shadowColor: "#000",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#eef2ff",
+    shadowColor: "#111827",
     shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
-  footerRow: {
-    flexDirection: "row",
+  footerIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#eff6ff",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    justifyContent: "center",
+    marginRight: 12,
   },
-  footerRowLeft: {
-    flexDirection: "row",
-    alignItems: "center",
+  footerContent: {
+    flex: 1,
   },
-  footerText: {
-    marginLeft: 10,
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1F2937",
+  footerTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  footerSubtitle: {
+    marginTop: 2,
+    fontSize: 13,
+    color: "#6B7280",
+    lineHeight: 18,
   },
   eventCard: {
     flexDirection: "row",
@@ -911,7 +988,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "#fff",
     marginBottom: 12,
-    shadowColor: "#000",
+    borderWidth: 1,
+    borderColor: "#f3f4f6",
+    shadowColor: "#111827",
     shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
