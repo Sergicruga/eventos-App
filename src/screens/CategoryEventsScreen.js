@@ -13,6 +13,7 @@ import { EventContext } from '../EventContext';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
+import { AuthContext } from '../context/AuthContext';
 import { Image as ExpoImage } from 'expo-image';
 import { EVENT_CATEGORIES, eventMatchesCategory, findCategoryBySlug } from '../constants/categories';
 import { isUpcoming, formatDateDMY } from '../utils/dateHelpers';
@@ -100,16 +101,25 @@ export default function CategoryEventsScreen({ route }) {
     getEventImageSource = () => ({ uri: 'https://via.placeholder.com/800x450.png?text=Evento' }),
     getEffectiveEventImage = () => null,
   } = eventCtx;
+  const { user } = useContext(AuthContext);
   const [search, setSearch] = useState('');
   const [location, setLocation] = useState(null);
   const navigation = useNavigation();
+  const myUserId = user?.id != null ? String(user.id) : null;
+
+  const isCreatedByMe = (ev) => {
+    if (!myUserId) return false;
+    const createdByRaw = ev.created_by ?? ev.createdById ?? ev.createdBy ?? null;
+    return createdByRaw != null && String(createdByRaw) === myUserId;
+  };
 
   // Filter events by category
   const categoryEvents = useMemo(() => {
     return locationFilteredEvents
       .filter(ev => isUpcoming(ev.date))
+      .filter(ev => !isCreatedByMe(ev))
       .filter(ev => eventMatchesCategory(ev, activeSlug));
-  }, [locationFilteredEvents, activeSlug, favorites]);
+  }, [locationFilteredEvents, activeSlug, myUserId, favorites]);
 
   // Filter by search
   const filteredEvents = useMemo(() => {

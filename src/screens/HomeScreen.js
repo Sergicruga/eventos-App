@@ -12,6 +12,7 @@ import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
+import { AuthContext } from '../context/AuthContext';
 import { requestNotificationPermission } from '../utils/notifications';
 import { EVENT_CATEGORIES, eventMatchesCategory } from '../constants/categories';
 import { isUpcoming } from '../utils/dateHelpers';
@@ -48,10 +49,12 @@ function CategoryCard({ category, onPress, eventCount }) {
 export default function HomeScreen() {
   const eventCtx = useContext(EventContext) || {};
   const locationFilteredEvents = eventCtx.locationFilteredEvents ?? [];
+  const { user } = useContext(AuthContext);
   const [loadingLocation, setLoadingLocation] = useState(true);
   const navigation = useNavigation();
   const [adReady, setAdReady] = useState(false);
   const [showRadiusOptions, setShowRadiusOptions] = useState(false);
+  const myUserId = user?.id != null ? String(user.id) : null;
   
   const locLoading = eventCtx.locLoading ?? false;
   const coords = eventCtx.coords ?? null;
@@ -92,10 +95,18 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // Get upcoming events in the selected radius.
+  const isCreatedByMe = (ev) => {
+    if (!myUserId) return false;
+    const createdByRaw = ev.created_by ?? ev.createdById ?? ev.createdBy ?? null;
+    return createdByRaw != null && String(createdByRaw) === myUserId;
+  };
+
+  // Get upcoming community events in the selected radius.
   const upcomingEvents = useMemo(() => {
-    return locationFilteredEvents.filter((ev) => isUpcoming(ev.date));
-  }, [locationFilteredEvents]);
+    return locationFilteredEvents
+      .filter((ev) => isUpcoming(ev.date))
+      .filter((ev) => !isCreatedByMe(ev));
+  }, [locationFilteredEvents, myUserId]);
   const normalizeTitleKey = (title = '') => {
     let t = String(title || '').toLowerCase();
     t = t.split('|')[0].trim();
