@@ -48,7 +48,7 @@ export function filterEventsByRadius(events = [], userCoords, radiusKm = 25, use
       }
 
       const eventCity = String(event.city || event.location || '').trim().toLowerCase();
-      const isExternal = ['ticketmaster', 'atrapalo', 'madrid_open_data'].includes(
+      const isExternal = ['ticketmaster', 'atrapalo', 'madrid_open_data', 'barcelona_diba'].includes(
         String(event.source || '').toLowerCase()
       );
       const cityMatches = normalizedCity && eventCity && eventCity.includes(normalizedCity);

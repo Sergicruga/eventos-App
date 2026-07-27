@@ -19,6 +19,10 @@ import {
   fetchMadridOpenDataEvents,
   warmMadridOpenDataCache,
 } from "./services/madridOpenDataService.js";
+import {
+  fetchBarcelonaDibaEvents,
+  warmBarcelonaDibaCache,
+} from "./services/barcelonaDibaService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -236,18 +240,63 @@ app.get("/events", async (req, res) => {
     let ticketmasterEvents = [];
     let atrapaloEvents = [];
     let madridOpenDataEvents = [];
+    let barcelonaDibaEvents = [];
     const citiesToFetch = userCity
       ? [userCity, 'Madrid', 'Barcelona']
       : ['Madrid', 'Barcelona', 'Valencia'];
 
+    const normalizedUserCity = String(userCity || "").trim().toLowerCase();
     const shouldFetchMadridOpenData = userCity
-      ? String(userCity).trim().toLowerCase() === "madrid"
+      ? normalizedUserCity === "madrid"
+      : true;
+    const barcelonaAreaHints = [
+      "barcelona",
+      "badalona",
+      "hospitalet",
+      "l'hospitalet",
+      "sant cugat",
+      "terrassa",
+      "sabadell",
+      "mataró",
+      "mataro",
+      "sitges",
+      "vic",
+      "manresa",
+      "granollers",
+      "castelldefels",
+      "cornellà",
+      "cornella",
+      "gavà",
+      "gava",
+      "viladecans",
+      "sant boi",
+      "el prat",
+      "barcelonès",
+      "maresme",
+      "vallès",
+      "valles",
+      "baix llobregat",
+      "garraf",
+      "osona",
+      "bages",
+      "anoia",
+      "alt penedès",
+      "alt penedes",
+    ];
+    const shouldFetchBarcelonaDiba = userCity
+      ? barcelonaAreaHints.some((hint) => normalizedUserCity.includes(hint))
       : true;
 
-    const [ticketmasterResult, atrapaloResult, madridOpenDataResult] = await Promise.allSettled([
+    const [
+      ticketmasterResult,
+      atrapaloResult,
+      madridOpenDataResult,
+      barcelonaDibaResult,
+    ] = await Promise.allSettled([
       fetchMusicEventsMultipleCities(citiesToFetch),
       fetchAtrapaloEventsMultipleCities(citiesToFetch),
       shouldFetchMadridOpenData ? fetchMadridOpenDataEvents() : Promise.resolve([]),
+      shouldFetchBarcelonaDiba ? fetchBarcelonaDibaEvents() : Promise.resolve([]),
     ]);
 
     if (ticketmasterResult.status === "fulfilled") {
@@ -277,18 +326,29 @@ app.get("/events", async (req, res) => {
       );
     }
 
+    if (barcelonaDibaResult.status === "fulfilled") {
+      barcelonaDibaEvents = barcelonaDibaResult.value;
+    } else {
+      console.warn(
+        "Diputació Barcelona events fetch failed, continuing:",
+        barcelonaDibaResult.reason?.message || barcelonaDibaResult.reason
+      );
+    }
+
     // Combine and return events
     const allEvents = [
       ...events,
       ...ticketmasterEvents,
       ...atrapaloEvents,
       ...madridOpenDataEvents,
+      ...barcelonaDibaEvents,
     ];
     console.log("Eventos devueltos:", {
       local: events.length,
       ticketmaster: ticketmasterEvents.length,
       atrapalo: atrapaloEvents.length,
       madrid_open_data: madridOpenDataEvents.length,
+      barcelona_diba: barcelonaDibaEvents.length,
       total: allEvents.length,
     });
     return res.json(allEvents);
@@ -1356,6 +1416,7 @@ app.delete("/users/me", authMiddleware, async (req, res) => {
 
 void warmAtrapaloCache();
 void warmMadridOpenDataCache();
+void warmBarcelonaDibaCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);
