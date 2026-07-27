@@ -227,7 +227,7 @@ app.get("/events", async (req, res) => {
       events = []; // Continue with external events only
     }
 
-    // Fetch Ticketmaster music events (non-blocking, errors don't crash the response)
+    // Fetch external events (non-blocking, errors don't crash the response)
     // Prioritize user's city if provided, otherwise use default cities
     let ticketmasterEvents = [];
     let atrapaloEvents = [];
