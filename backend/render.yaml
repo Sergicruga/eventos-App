@@ -4,7 +4,7 @@ services:
     env: node
     plan: free
     region: frankfurt
-    buildCommand: "npm install"
+    buildCommand: "npm install && npx puppeteer browsers install chrome"
     startCommand: "node server.js"
     envVars:
       - key: DATABASE_URL
