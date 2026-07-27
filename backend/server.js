@@ -15,6 +15,10 @@ import {
   fetchAtrapaloEventsMultipleCities,
   warmAtrapaloCache,
 } from "./services/atrapaloService.js";
+import {
+  fetchMadridOpenDataEvents,
+  warmMadridOpenDataCache,
+} from "./services/madridOpenDataService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -231,13 +235,19 @@ app.get("/events", async (req, res) => {
     // Prioritize user's city if provided, otherwise use default cities
     let ticketmasterEvents = [];
     let atrapaloEvents = [];
+    let madridOpenDataEvents = [];
     const citiesToFetch = userCity
       ? [userCity, 'Madrid', 'Barcelona']
       : ['Madrid', 'Barcelona', 'Valencia'];
 
-    const [ticketmasterResult, atrapaloResult] = await Promise.allSettled([
+    const shouldFetchMadridOpenData = userCity
+      ? String(userCity).trim().toLowerCase() === "madrid"
+      : true;
+
+    const [ticketmasterResult, atrapaloResult, madridOpenDataResult] = await Promise.allSettled([
       fetchMusicEventsMultipleCities(citiesToFetch),
       fetchAtrapaloEventsMultipleCities(citiesToFetch),
+      shouldFetchMadridOpenData ? fetchMadridOpenDataEvents() : Promise.resolve([]),
     ]);
 
     if (ticketmasterResult.status === "fulfilled") {
@@ -258,8 +268,29 @@ app.get("/events", async (req, res) => {
       );
     }
 
+    if (madridOpenDataResult.status === "fulfilled") {
+      madridOpenDataEvents = madridOpenDataResult.value;
+    } else {
+      console.warn(
+        "Madrid Open Data events fetch failed, continuing:",
+        madridOpenDataResult.reason?.message || madridOpenDataResult.reason
+      );
+    }
+
     // Combine and return events
-    const allEvents = [...events, ...ticketmasterEvents, ...atrapaloEvents];
+    const allEvents = [
+      ...events,
+      ...ticketmasterEvents,
+      ...atrapaloEvents,
+      ...madridOpenDataEvents,
+    ];
+    console.log("Eventos devueltos:", {
+      local: events.length,
+      ticketmaster: ticketmasterEvents.length,
+      atrapalo: atrapaloEvents.length,
+      madrid_open_data: madridOpenDataEvents.length,
+      total: allEvents.length,
+    });
     return res.json(allEvents);
   } catch (e) {
     console.error("PG ERROR:", e);
@@ -1324,6 +1355,7 @@ app.delete("/users/me", authMiddleware, async (req, res) => {
    ========================== */
 
 void warmAtrapaloCache();
+void warmMadridOpenDataCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);
