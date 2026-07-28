@@ -130,6 +130,13 @@ const SEARCH_RADIUS_KEY = 'search_radius_km'; // user's search radius preference
 
 const storageKey = (base, uid) => `${base}:${uid ?? 'guest'}`;
 
+const countBySource = (arr = []) =>
+  (arr || []).reduce((acc, ev) => {
+    const source = ev?.source || ev?.type || 'unknown';
+    acc[source] = (acc[source] || 0) + 1;
+    return acc;
+  }, {});
+
 // ========= Fecha / futuros =========
 const toLocalMidnightMs = (d) => {
   if (!d) return NaN;
@@ -1381,7 +1388,17 @@ export function EventProvider({ children }) {
   
   // Location-filtered events
   const locationFilteredEvents = useMemo(() => {
-    return filterEventsByRadius(events, coords, searchRadius, city);
+    const filtered = filterEventsByRadius(events, coords, searchRadius, city);
+    console.log('Eventos por fuente:', {
+      city,
+      searchRadius,
+      coords: coords
+        ? { latitude: coords.latitude, longitude: coords.longitude }
+        : null,
+      raw: countBySource(events),
+      filtered: countBySource(filtered),
+    });
+    return filtered;
   }, [events, coords, searchRadius, city]);
 
   const value = useMemo(

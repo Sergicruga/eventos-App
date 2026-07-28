@@ -133,7 +133,7 @@ const categoryFromText = (...parts) => {
     return { slug: "arte", name: "Arte" };
   }
 
-  return { slug: "otro", name: "Otro" };
+  return { slug: "arte", name: "Arte" };
 };
 
 const firstArray = (...values) => values.find(Array.isArray) || [];
@@ -271,7 +271,13 @@ async function refreshBarcelonaDibaEvents() {
   }
 
   cache = { events, updatedAt: Date.now() };
+  const categories = events.reduce((acc, event) => {
+    const slug = event.category_slug || "sin_categoria";
+    acc[slug] = (acc[slug] || 0) + 1;
+    return acc;
+  }, {});
   console.log(`Diputacio Barcelona: ${events.length} eventos actualizados`);
+  console.log("Diputacio Barcelona categorias:", categories);
   return events;
 }
 

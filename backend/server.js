@@ -351,6 +351,19 @@ app.get("/events", async (req, res) => {
       barcelona_diba: barcelonaDibaEvents.length,
       total: allEvents.length,
     });
+    if (barcelonaDibaEvents.length) {
+      console.log(
+        "Diputacio Barcelona muestra:",
+        barcelonaDibaEvents.slice(0, 5).map((event) => ({
+          title: event.title,
+          city: event.city,
+          date: event.date,
+          category_slug: event.category_slug,
+          latitude: event.latitude,
+          longitude: event.longitude,
+        }))
+      );
+    }
     return res.json(allEvents);
   } catch (e) {
     console.error("PG ERROR:", e);
