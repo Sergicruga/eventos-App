@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -11,17 +10,21 @@ import {
   ActivityIndicator,
   ScrollView,
   StatusBar,
+  Modal,
+  Linking,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { sendTestNotification } from "../utils/notifications";
+import { sendTestNotification, requestNotificationPermission } from "../utils/notifications";
+import * as Notifications from "expo-notifications";
 
 const DEFAULT_SETTINGS = {
   enabled: true,
-  advance: "1",
+  // advance stored in minutes (60 = 1 hour)
+  advance: "60",
 };
 
 export default function NotificationSettingsScreen() {
@@ -30,6 +33,7 @@ export default function NotificationSettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -65,6 +69,16 @@ export default function NotificationSettingsScreen() {
         "notificationSettings",
         JSON.stringify({ enabled, advance })
       );
+
+      // if user disabled notifications, clear scheduled notifications
+      if (!enabled) {
+        try {
+          await Notifications.cancelAllScheduledNotificationsAsync();
+        } catch (e) {
+          console.warn("Could not cancel scheduled notifications", e);
+        }
+      }
+
       setSaved(true);
       setTimeout(() => setSaved(false), 1400);
     } catch (error) {
@@ -112,7 +126,26 @@ export default function NotificationSettingsScreen() {
             </View>
             <Switch
               value={enabled}
-              onValueChange={setEnabled}
+              onValueChange={async (value) => {
+                if (value) {
+                  const perms = await Notifications.getPermissionsAsync();
+                  if (perms.status !== "granted") {
+                    setShowPermissionModal(true);
+                    return;
+                  }
+                }
+
+                // if disabling, clear scheduled notifications
+                if (!value) {
+                  try {
+                    await Notifications.cancelAllScheduledNotificationsAsync();
+                  } catch (e) {
+                    console.warn("Could not cancel scheduled notifications", e);
+                  }
+                }
+
+                setEnabled(value);
+              }}
               trackColor={{ false: "#d1d5db", true: "#93c5fd" }}
               thumbColor={enabled ? "#ffffff" : "#f3f4f6"}
               ios_backgroundColor="#d1d5db"
@@ -137,9 +170,9 @@ export default function NotificationSettingsScreen() {
                   itemStyle={Platform.OS === "ios" ? { fontSize: 16, color: "#111827" } : undefined}
                   mode="dropdown"
                 >
-                  <Picker.Item label="1 hora antes" value="0.041" />
-                  <Picker.Item label="1 día antes" value="1" />
-                  <Picker.Item label="3 días antes" value="3" />
+                  <Picker.Item label="1 hora antes" value="60" />
+                  <Picker.Item label="1 día antes" value="1440" />
+                  <Picker.Item label="3 días antes" value="4320" />
                 </Picker>
               )}
             </View>
@@ -168,6 +201,50 @@ export default function NotificationSettingsScreen() {
             <Text style={styles.secondaryBtnText}>Probar notificación</Text>
           </TouchableOpacity>
         </View>
+
+        <Modal
+          visible={showPermissionModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowPermissionModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <LinearGradient
+                colors={["#4f46e5", "#6366f1"]}
+                style={{ borderRadius: 12, padding: 18 }}
+              >
+                <Text style={styles.modalTitle}>Habilitar notificaciones</Text>
+                <Text style={styles.modalBody}>
+                  Para recibir recordatorios necesitas permitir notificaciones en la configuración del dispositivo.
+                </Text>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={styles.modalButtonSecondary}
+                    onPress={() => setShowPermissionModal(false)}
+                  >
+                    <Text style={styles.modalButtonTextSecondary}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.modalButtonPrimary}
+                    onPress={async () => {
+                      setShowPermissionModal(false);
+                      const granted = await requestNotificationPermission();
+                      if (!granted) {
+                        // open settings as fallback
+                        Linking.openSettings();
+                      } else {
+                        setEnabled(true);
+                      }
+                    }}
+                  >
+                    <Text style={styles.modalButtonTextPrimary}>Solicitar permiso</Text>
+                  </TouchableOpacity>
+                </View>
+              </LinearGradient>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -300,5 +377,57 @@ const styles = StyleSheet.create({
     color: "#4f46e5",
     fontWeight: "700",
     fontSize: 15,
+  },
+
+  /* Modal styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  modalBody: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 14,
+    marginBottom: 14,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  modalButtonPrimary: {
+    backgroundColor: "#fff",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  modalButtonSecondary: {
+    backgroundColor: "transparent",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    marginRight: 8,
+  },
+  modalButtonTextPrimary: {
+    color: "#4f46e5",
+    fontWeight: "700",
+  },
+  modalButtonTextSecondary: {
+    color: "rgba(255,255,255,0.9)",
+    fontWeight: "700",
   },
 });

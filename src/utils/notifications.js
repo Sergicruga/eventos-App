@@ -40,16 +40,15 @@ export async function scheduleEventNotification(event) {
   const settings =
     JSON.parse(await AsyncStorage.getItem("notificationSettings")) || {
       enabled: true,
-      advance: "1",
+      // advance is stored in minutes
+      advance: "60",
     };
 
   if (!settings.enabled) return;
 
   const eventDate = new Date(event.date);
-  const advanceDays = parseFloat(settings.advance);
-  const notifyDate = new Date(
-    eventDate.getTime() - advanceDays * 24 * 60 * 60 * 1000
-  );
+  const advanceMinutes = parseFloat(settings.advance);
+  const notifyDate = new Date(eventDate.getTime() - advanceMinutes * 60 * 1000);
 
   if (notifyDate < new Date()) return;
 
