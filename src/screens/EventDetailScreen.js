@@ -435,17 +435,34 @@ export default function EventDetailScreen({ route, navigation }) {
 
   const sendComment = useCallback(async () => {
     if (!newComment.trim()) return;
+    if (!user?.id) {
+      Alert.alert('Inicia sesión', 'Debes iniciar sesión para guardar un comentario.');
+      return;
+    }
+
     setSending(true);
     try {
-      await fetch(`${API_URL}/events/${current.id}/comments`, {
+      const res = await fetch(`${API_URL}/events/${current.id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, comment: newComment }),
       });
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        console.log('❌ POST comment error:', res.status, errorText);
+        Alert.alert('Error', 'No se pudo guardar el comentario. Intenta de nuevo.');
+        return;
+      }
+
       setNewComment('');
       fetchComments();
-    } catch {}
-    setSending(false);
+    } catch (e) {
+      console.log('❌ POST comment exception:', e);
+      Alert.alert('Error', 'No se pudo guardar el comentario. Intenta de nuevo.');
+    } finally {
+      setSending(false);
+    }
   }, [current.id, user?.id, newComment, fetchComments]);
   const deleteComment = useCallback((commentId) => {
     if (!commentId || !user?.id) return;
