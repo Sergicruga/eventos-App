@@ -236,14 +236,17 @@ app.get("/events", async (req, res) => {
     }
 
     // Fetch external events (non-blocking, errors don't crash the response)
-    // Prioritize user's city if provided, otherwise use default cities
+    // If the app knows the user's city, only fetch external events for that city.
+    // This keeps users in Murcia, Sevilla, Malaga, etc. from receiving Madrid/Barcelona
+    // events unless they are actually near those cities and the client asks for them.
     let ticketmasterEvents = [];
     let atrapaloEvents = [];
     let madridOpenDataEvents = [];
     let barcelonaDibaEvents = [];
     const citiesToFetch = userCity
-      ? [userCity, 'Madrid', 'Barcelona']
+      ? [userCity]
       : ['Madrid', 'Barcelona', 'Valencia'];
+    console.log("Ciudades externas consultadas:", citiesToFetch);
 
     const normalizedUserCity = String(userCity || "").trim().toLowerCase();
     const shouldFetchMadridOpenData = userCity
