@@ -158,10 +158,53 @@ app.param("eventId", async (req, res, next, rawId) => {
       [source, externalId]
     );
     if (!r.rows.length || !r.rows[0].event_id) {
-      return res.status(404).json({
-        error: "evento_externo_no_enlazado",
-        detail: `No existe mapeo en api_events(source='${source}', external_id='${externalId}')`,
-      });
+      // Intentar crear un evento local mínimo y enlazarlo en api_events
+      try {
+        const title = req.body?.title || req.query?.title || `Imported event ${externalId}`;
+        const description = req.body?.description || req.body?.desc || null;
+        const image = req.body?.image || null;
+        const eventAt = req.body?.event_at || req.body?.eventAt || null;
+        const venueName = req.body?.venueName || req.body?.venue_name || null;
+        const city = req.body?.city || null;
+        const country = req.body?.country || null;
+        const latitude = req.body?.latitude || null;
+        const longitude = req.body?.longitude || null;
+        const url = req.body?.url || req.query?.url || null;
+
+        console.log(`Auto-creating event for externalId=${externalId} source=${source}`);
+        const ins = await pool.query(
+          `INSERT INTO events (title, description, image, event_at, venue_name, city, country, latitude, longitude, url)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           RETURNING id`,
+          [title, description, image, eventAt, venueName, city, country, latitude, longitude, url]
+        );
+        const newEventId = ins.rows[0].id;
+
+        // Upsert mapping in api_events so future requests resolve
+        try {
+          console.log(`Upserting api_events mapping ${source}/${externalId} -> ${newEventId}`);
+          const up = await pool.query(
+            `INSERT INTO api_events (source, external_id, event_id, title, description, image, event_at, venue_name, city, country, latitude, longitude, url)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+             ON CONFLICT (source, external_id) DO UPDATE SET event_id = EXCLUDED.event_id
+             RETURNING event_id`,
+            [source, externalId, newEventId, title, description, image, eventAt, venueName, city, country, latitude, longitude, url]
+          );
+          req.eventId = up.rows[0]?.event_id || newEventId;
+          return next();
+        } catch (eUp) {
+          console.error('error upserting api_events mapping:', eUp.message || eUp);
+          // fallback: still use created event id
+          req.eventId = newEventId;
+          return next();
+        }
+      } catch (eCreate) {
+        console.error('error creating local event for externalId:', eCreate.message || eCreate);
+        return res.status(404).json({
+          error: "evento_externo_no_enlazado",
+          detail: `No existe mapeo en api_events(source='${source}', external_id='${externalId}')`,
+        });
+      }
     }
 
     req.eventId = r.rows[0].event_id;

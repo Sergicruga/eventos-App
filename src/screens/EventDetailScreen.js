@@ -420,18 +420,39 @@ export default function EventDetailScreen({ route, navigation }) {
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [sending, setSending] = useState(false);
+  const isNumericIdLocal = (v) => typeof v === 'number' || (/^\d+$/.test(String(v ?? '')));
+
+  const buildEventUrl = (subpath = '', extraParams = {}) => {
+    const base = `${API_URL}/events/${current.id}${subpath}`;
+    const params = new URLSearchParams();
+    Object.entries(extraParams || {}).forEach(([k, val]) => {
+      if (val != null) params.set(k, String(val));
+    });
+
+    if (!isNumericIdLocal(current.id)) {
+      params.set('source', current.source || 'ticketmaster');
+      params.set(
+        'externalId',
+        current.externalId ?? current.tm_id ?? current.sourceId ?? current.id
+      );
+    }
+
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
+  };
 
   const fetchComments = useCallback(async () => {
     setLoadingComments(true);
     try {
-      const res = await fetch(`${API_URL}/events/${current.id}/comments`);
+      const res = await fetch(buildEventUrl('/comments'));
       const data = await res.json();
       setComments(Array.isArray(data) ? data : []);
-    } catch {
+    } catch (e) {
+      console.log('❌ fetchComments error:', e);
       setComments([]);
     }
     setLoadingComments(false);
-  }, [current.id]);
+  }, [current.id, current.source, current.externalId]);
 
   const sendComment = useCallback(async () => {
     if (!newComment.trim()) return;
@@ -442,10 +463,27 @@ export default function EventDetailScreen({ route, navigation }) {
 
     setSending(true);
     try {
-      const res = await fetch(`${API_URL}/events/${current.id}/comments`, {
+      const body = {
+        userId: user.id,
+        comment: newComment,
+        title: current.title || current.name || '',
+        description: current.description || current.desc || '',
+        image: current.image || null,
+        event_at: current.date || current.event_at || null,
+        venue_name: current.venue_name || current.venueName || current.location || null,
+        city: current.city || null,
+        country: current.country || null,
+        latitude: current.latitude ?? null,
+        longitude: current.longitude ?? null,
+        url: current.url || current.purchaseUrl || current.externalUrl || null,
+        source: current.source || 'ticketmaster',
+        externalId: current.externalId ?? current.tm_id ?? current.sourceId ?? current.id,
+      };
+
+      const res = await fetch(buildEventUrl('/comments'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, comment: newComment }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -463,38 +501,40 @@ export default function EventDetailScreen({ route, navigation }) {
     } finally {
       setSending(false);
     }
-  }, [current.id, user?.id, newComment, fetchComments]);
-  const deleteComment = useCallback((commentId) => {
-    if (!commentId || !user?.id) return;
+  }, [current.id, current.source, current.externalId, user?.id, newComment, fetchComments]);
 
-    Alert.alert('Eliminar comentario', '¿Seguro que quieres eliminar este comentario?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Eliminar',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const res = await fetch(
-              `${API_URL}/events/${current.id}/comments/${commentId}?userId=${user.id}`,
-              { method: 'DELETE' }
-            );
+  const deleteComment = useCallback(
+    (commentId) => {
+      if (!commentId || !user?.id) return;
 
-            if (!res.ok) {
-              const txt = await res.text().catch(() => '');
-              console.log('❌ DELETE comment:', res.status, txt);
+      Alert.alert('Eliminar comentario', '¿Seguro que quieres eliminar este comentario?', [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const url = buildEventUrl(`/comments/${commentId}`, { userId: user.id });
+              const res = await fetch(url, { method: 'DELETE' });
+
+              if (!res.ok) {
+                const txt = await res.text().catch(() => '');
+                console.log('❌ DELETE comment:', res.status, txt);
+                Alert.alert('Error', 'No se pudo eliminar.');
+                return;
+              }
+
+              fetchComments();
+            } catch (e) {
+              console.log('❌ DELETE comment exception:', e);
               Alert.alert('Error', 'No se pudo eliminar.');
-              return;
             }
-
-            fetchComments();
-          } catch (e) {
-            console.log('❌ DELETE comment exception:', e);
-            Alert.alert('Error', 'No se pudo eliminar.');
-          }
+          },
         },
-      },
-    ]);
-  }, [current.id, user?.id, fetchComments]);
+      ]);
+    },
+    [current.id, current.source, current.externalId, user?.id, fetchComments]
+  );
 
   useEffect(() => { fetchComments(); }, [fetchComments]);
 
