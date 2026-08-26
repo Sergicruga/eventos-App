@@ -224,6 +224,111 @@ app.param("eventId", async (req, res, next, rawId) => {
 app.get("/", (_req, res) => res.json({ ok: true, msg: "API viva" }));
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+const toNumberOrNull = (value) => {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const toRad = (degrees) => (degrees * Math.PI) / 180;
+
+const distanceKm = (from, to) => {
+  if (
+    !from ||
+    !to ||
+    from.latitude == null ||
+    from.longitude == null ||
+    to.latitude == null ||
+    to.longitude == null
+  ) {
+    return Infinity;
+  }
+
+  const R = 6371;
+  const dLat = toRad(to.latitude - from.latitude);
+  const dLon = toRad(to.longitude - from.longitude);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(from.latitude)) *
+      Math.cos(toRad(to.latitude)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+};
+
+const nearbyCityCatalog = [
+  { name: "Madrid", latitude: 40.4168, longitude: -3.7038 },
+  { name: "Barcelona", latitude: 41.3874, longitude: 2.1686 },
+  { name: "Valencia", latitude: 39.4699, longitude: -0.3763 },
+  { name: "Sevilla", latitude: 37.3891, longitude: -5.9845 },
+  { name: "Zaragoza", latitude: 41.6488, longitude: -0.8891 },
+  { name: "Málaga", latitude: 36.7213, longitude: -4.4214 },
+  { name: "Murcia", latitude: 37.9922, longitude: -1.1307 },
+  { name: "Palma", latitude: 39.5696, longitude: 2.6502 },
+  { name: "Las Palmas de Gran Canaria", latitude: 28.1235, longitude: -15.4363 },
+  { name: "Bilbao", latitude: 43.2630, longitude: -2.9350 },
+  { name: "Alicante", latitude: 38.3452, longitude: -0.4810 },
+  { name: "Córdoba", latitude: 37.8882, longitude: -4.7794 },
+  { name: "Valladolid", latitude: 41.6523, longitude: -4.7245 },
+  { name: "Vigo", latitude: 42.2406, longitude: -8.7207 },
+  { name: "Gijón", latitude: 43.5322, longitude: -5.6611 },
+  { name: "A Coruña", latitude: 43.3623, longitude: -8.4115 },
+  { name: "Granada", latitude: 37.1773, longitude: -3.5986 },
+  { name: "Vitoria-Gasteiz", latitude: 42.8467, longitude: -2.6727 },
+  { name: "Elche", latitude: 38.2699, longitude: -0.7126 },
+  { name: "Oviedo", latitude: 43.3619, longitude: -5.8494 },
+  { name: "Santa Cruz de Tenerife", latitude: 28.4636, longitude: -16.2518 },
+  { name: "Badalona", latitude: 41.4500, longitude: 2.2474 },
+  { name: "L'Hospitalet de Llobregat", latitude: 41.3596, longitude: 2.0997 },
+  { name: "Girona", latitude: 41.9794, longitude: 2.8214 },
+  { name: "Lloret de Mar", latitude: 41.6999, longitude: 2.8456 },
+  { name: "Blanes", latitude: 41.6759, longitude: 2.7902 },
+  { name: "Mataró", latitude: 41.5381, longitude: 2.4445 },
+  { name: "Sabadell", latitude: 41.5463, longitude: 2.1086 },
+  { name: "Terrassa", latitude: 41.5632, longitude: 2.0089 },
+  { name: "Tarragona", latitude: 41.1189, longitude: 1.2445 },
+  { name: "Lleida", latitude: 41.6176, longitude: 0.6200 },
+  { name: "Reus", latitude: 41.1498, longitude: 1.1055 },
+  { name: "Castellón de la Plana", latitude: 39.9864, longitude: -0.0513 },
+  { name: "Cartagena", latitude: 37.6257, longitude: -0.9966 },
+  { name: "Santander", latitude: 43.4623, longitude: -3.8099 },
+  { name: "San Sebastián", latitude: 43.3183, longitude: -1.9812 },
+  { name: "Pamplona", latitude: 42.8125, longitude: -1.6458 },
+  { name: "Logroño", latitude: 42.4627, longitude: -2.4449 },
+  { name: "Burgos", latitude: 42.3439, longitude: -3.6969 },
+  { name: "Salamanca", latitude: 40.9701, longitude: -5.6635 },
+  { name: "Toledo", latitude: 39.8628, longitude: -4.0273 },
+  { name: "Albacete", latitude: 38.9943, longitude: -1.8585 },
+  { name: "Almería", latitude: 36.8340, longitude: -2.4637 },
+  { name: "Cádiz", latitude: 36.5271, longitude: -6.2886 },
+  { name: "Huelva", latitude: 37.2614, longitude: -6.9447 },
+  { name: "Jaén", latitude: 37.7796, longitude: -3.7849 },
+  { name: "León", latitude: 42.5987, longitude: -5.5671 },
+  { name: "Ourense", latitude: 42.3358, longitude: -7.8639 },
+  { name: "Pontevedra", latitude: 42.4336, longitude: -8.6479 },
+  { name: "Lugo", latitude: 43.0097, longitude: -7.5568 },
+  { name: "Badajoz", latitude: 38.8794, longitude: -6.9707 },
+  { name: "Cáceres", latitude: 39.4753, longitude: -6.3724 },
+];
+
+const buildCitiesToFetch = ({ userCity, userCoords, radiusKm }) => {
+  if (!userCity && !userCoords) return ["Madrid", "Barcelona", "Valencia"];
+
+  const cities = [];
+  if (userCity) cities.push(userCity);
+
+  if (userCoords) {
+    nearbyCityCatalog
+      .map((city) => ({ ...city, distance: distanceKm(userCoords, city) }))
+      .filter((city) => city.distance <= radiusKm + 5)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 8)
+      .forEach((city) => cities.push(city.name));
+  }
+
+  return [...new Set(cities.map((city) => String(city).trim()).filter(Boolean))];
+};
+
 /* ==========================
    EVENTS
    ========================== */
@@ -233,6 +338,14 @@ app.get("/events", async (req, res) => {
   try {
     const userId = req.query.userId ? Number(req.query.userId) : null;
     const userCity = req.query.city ? String(req.query.city).trim() : null;
+    const userLatitude = toNumberOrNull(req.query.latitude ?? req.query.lat);
+    const userLongitude = toNumberOrNull(req.query.longitude ?? req.query.lon ?? req.query.lng);
+    const requestedRadiusKm = toNumberOrNull(req.query.radius ?? req.query.radiusKm);
+    const radiusKm = requestedRadiusKm && requestedRadiusKm > 0 ? requestedRadiusKm : 25;
+    const userCoords =
+      userLatitude != null && userLongitude != null
+        ? { latitude: userLatitude, longitude: userLongitude }
+        : null;
 
     // Fetch local events from database
     let events = [];
@@ -286,14 +399,20 @@ app.get("/events", async (req, res) => {
     let atrapaloEvents = [];
     let madridOpenDataEvents = [];
     let barcelonaDibaEvents = [];
-    const citiesToFetch = userCity
-      ? [userCity]
-      : ['Madrid', 'Barcelona', 'Valencia'];
-    console.log("Ciudades externas consultadas:", citiesToFetch);
+    const citiesToFetch = buildCitiesToFetch({ userCity, userCoords, radiusKm });
+    console.log("Ciudades externas consultadas:", {
+      userCity,
+      radiusKm,
+      userCoords,
+      citiesToFetch,
+    });
 
     const normalizedUserCity = String(userCity || "").trim().toLowerCase();
+    const nearMadrid = userCoords
+      ? distanceKm(userCoords, { latitude: 40.4168, longitude: -3.7038 }) <= radiusKm + 5
+      : false;
     const shouldFetchMadridOpenData = userCity
-      ? normalizedUserCity === "madrid"
+      ? normalizedUserCity === "madrid" || nearMadrid
       : true;
     const barcelonaAreaHints = [
       "barcelona",
@@ -331,6 +450,9 @@ app.get("/events", async (req, res) => {
     ];
     const shouldFetchBarcelonaDiba = userCity
       ? barcelonaAreaHints.some((hint) => normalizedUserCity.includes(hint))
+        || (userCoords
+          ? distanceKm(userCoords, { latitude: 41.3874, longitude: 2.1686 }) <= radiusKm + 5
+          : false)
       : true;
 
     const [

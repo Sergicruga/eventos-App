@@ -571,6 +571,9 @@ export function EventProvider({ children }) {
           const params = [];
           if (uid) params.push(`userId=${uid}`);
           if (city) params.push(`city=${encodeURIComponent(city)}`);
+          if (coords?.latitude != null) params.push(`latitude=${encodeURIComponent(coords.latitude)}`);
+          if (coords?.longitude != null) params.push(`longitude=${encodeURIComponent(coords.longitude)}`);
+          if (searchRadius) params.push(`radius=${encodeURIComponent(searchRadius)}`);
           const queryString = params.length > 0 ? `?${params.join('&')}` : '';
           const url = `${base.replace(/\/$/, '')}/events${queryString}`;
           try {
@@ -751,7 +754,7 @@ export function EventProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [uid, authToken, city]);
+  }, [uid, authToken, city, coords?.latitude, coords?.longitude, searchRadius]);
 
   // Persistir eventos por-usuario ante cambios
   useEffect(() => {
