@@ -31,6 +31,10 @@ import {
   fetchValencianaIvcEvents,
   warmValencianaIvcCache,
 } from "./services/valencianaIvcService.js";
+import {
+  fetchMurciaAyuntamientoEvents,
+  warmMurciaAyuntamientoCache,
+} from "./services/murciaAyuntamientoService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -408,6 +412,41 @@ const isNearValencianaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) =>
   return valencianaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
 };
 
+const murciaAreaHints = [
+  "murcia",
+  "cartagena",
+  "lorca",
+  "san javier",
+  "san pedro del pinatar",
+  "torre pacheco",
+  "jumilla",
+  "águilas",
+  "aguilas",
+  "mazarrón",
+  "mazarron",
+  "moratalla",
+  "totana",
+  "yecla",
+  "bullas",
+  "los alcázares",
+  "los alcazares",
+];
+
+const murciaAnchors = [
+  { latitude: 37.9922, longitude: -1.1307 },
+  { latitude: 37.6257, longitude: -0.9966 },
+  { latitude: 37.6713, longitude: -1.7017 },
+  { latitude: 37.8063, longitude: -0.8374 },
+];
+
+const isNearMurciaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && murciaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return murciaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
 /* ==========================
    EVENTS
    ========================== */
@@ -480,6 +519,7 @@ app.get("/events", async (req, res) => {
     let barcelonaDibaEvents = [];
     let catalunyaAgendaEvents = [];
     let valencianaIvcEvents = [];
+    let murciaAyuntamientoEvents = [];
     const citiesToFetch = buildCitiesToFetch({ userCity, userCoords, radiusKm });
     console.log("Ciudades externas consultadas:", {
       userCity,
@@ -541,6 +581,9 @@ app.get("/events", async (req, res) => {
     const shouldFetchValencianaIvc = userCity || userCoords
       ? isNearValencianaAgenda({ normalizedUserCity, userCoords, radiusKm })
       : true;
+    const shouldFetchMurciaAyuntamiento = userCity || userCoords
+      ? isNearMurciaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
 
     const [
       ticketmasterResult,
@@ -549,6 +592,7 @@ app.get("/events", async (req, res) => {
       barcelonaDibaResult,
       catalunyaAgendaResult,
       valencianaIvcResult,
+      murciaAyuntamientoResult,
     ] = await Promise.allSettled([
       fetchMusicEventsMultipleCities(citiesToFetch),
       fetchAtrapaloEventsMultipleCities(citiesToFetch),
@@ -556,6 +600,7 @@ app.get("/events", async (req, res) => {
       shouldFetchBarcelonaDiba ? fetchBarcelonaDibaEvents() : Promise.resolve([]),
       shouldFetchCatalunyaAgenda ? fetchCatalunyaAgendaEvents() : Promise.resolve([]),
       shouldFetchValencianaIvc ? fetchValencianaIvcEvents() : Promise.resolve([]),
+      shouldFetchMurciaAyuntamiento ? fetchMurciaAyuntamientoEvents() : Promise.resolve([]),
     ]);
 
     if (ticketmasterResult.status === "fulfilled") {
@@ -612,6 +657,15 @@ app.get("/events", async (req, res) => {
       );
     }
 
+    if (murciaAyuntamientoResult.status === "fulfilled") {
+      murciaAyuntamientoEvents = murciaAyuntamientoResult.value;
+    } else {
+      console.warn(
+        "Ayuntamiento Murcia events fetch failed, continuing:",
+        murciaAyuntamientoResult.reason?.message || murciaAyuntamientoResult.reason
+      );
+    }
+
     // Combine and return events
     const allEvents = [
       ...events,
@@ -621,6 +675,7 @@ app.get("/events", async (req, res) => {
       ...barcelonaDibaEvents,
       ...catalunyaAgendaEvents,
       ...valencianaIvcEvents,
+      ...murciaAyuntamientoEvents,
     ];
     console.log("Eventos devueltos:", {
       local: events.length,
@@ -630,6 +685,7 @@ app.get("/events", async (req, res) => {
       barcelona_diba: barcelonaDibaEvents.length,
       catalunya_agenda: catalunyaAgendaEvents.length,
       valenciana_ivc: valencianaIvcEvents.length,
+      murcia_ayuntamiento: murciaAyuntamientoEvents.length,
       total: allEvents.length,
     });
     if (barcelonaDibaEvents.length) {
@@ -1713,6 +1769,7 @@ void warmMadridOpenDataCache();
 void warmBarcelonaDibaCache();
 void warmCatalunyaAgendaCache();
 void warmValencianaIvcCache();
+void warmMurciaAyuntamientoCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);
