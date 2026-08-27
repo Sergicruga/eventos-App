@@ -3,7 +3,7 @@
     "name": "GoPlan",
     "slug": "evento-app",
     "owner": "sergicruga",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "default",
     "icon": "./assets/goplan-logo.png",
     "userInterfaceStyle": "light",
@@ -34,6 +34,7 @@
         }
       },
       "package": "com.sergicruga.eventoapp",
+      "versionCode": 100,
       "usesCleartextTraffic": true
     },
     "web": {
