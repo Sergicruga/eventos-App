@@ -23,6 +23,10 @@ import {
   fetchBarcelonaDibaEvents,
   warmBarcelonaDibaCache,
 } from "./services/barcelonaDibaService.js";
+import {
+  fetchCatalunyaAgendaEvents,
+  warmCatalunyaAgendaCache,
+} from "./services/catalunyaAgendaService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -329,6 +333,42 @@ const buildCitiesToFetch = ({ userCity, userCoords, radiusKm }) => {
   return [...new Set(cities.map((city) => String(city).trim()).filter(Boolean))];
 };
 
+const catalunyaAreaHints = [
+  "catalunya",
+  "cataluña",
+  "barcelona",
+  "girona",
+  "gerona",
+  "tarragona",
+  "lleida",
+  "lerida",
+  "lloret",
+  "blanes",
+  "mataró",
+  "mataro",
+  "badalona",
+  "hospitalet",
+  "sabadell",
+  "terrassa",
+  "reus",
+  "figueres",
+];
+
+const catalunyaAnchors = [
+  { latitude: 41.3874, longitude: 2.1686 },
+  { latitude: 41.9794, longitude: 2.8214 },
+  { latitude: 41.1189, longitude: 1.2445 },
+  { latitude: 41.6176, longitude: 0.6200 },
+];
+
+const isNearCatalunyaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && catalunyaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return catalunyaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
 /* ==========================
    EVENTS
    ========================== */
@@ -399,6 +439,7 @@ app.get("/events", async (req, res) => {
     let atrapaloEvents = [];
     let madridOpenDataEvents = [];
     let barcelonaDibaEvents = [];
+    let catalunyaAgendaEvents = [];
     const citiesToFetch = buildCitiesToFetch({ userCity, userCoords, radiusKm });
     console.log("Ciudades externas consultadas:", {
       userCity,
@@ -454,17 +495,22 @@ app.get("/events", async (req, res) => {
           ? distanceKm(userCoords, { latitude: 41.3874, longitude: 2.1686 }) <= radiusKm + 5
           : false)
       : true;
+    const shouldFetchCatalunyaAgenda = userCity || userCoords
+      ? isNearCatalunyaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
 
     const [
       ticketmasterResult,
       atrapaloResult,
       madridOpenDataResult,
       barcelonaDibaResult,
+      catalunyaAgendaResult,
     ] = await Promise.allSettled([
       fetchMusicEventsMultipleCities(citiesToFetch),
       fetchAtrapaloEventsMultipleCities(citiesToFetch),
       shouldFetchMadridOpenData ? fetchMadridOpenDataEvents() : Promise.resolve([]),
       shouldFetchBarcelonaDiba ? fetchBarcelonaDibaEvents() : Promise.resolve([]),
+      shouldFetchCatalunyaAgenda ? fetchCatalunyaAgendaEvents() : Promise.resolve([]),
     ]);
 
     if (ticketmasterResult.status === "fulfilled") {
@@ -503,6 +549,15 @@ app.get("/events", async (req, res) => {
       );
     }
 
+    if (catalunyaAgendaResult.status === "fulfilled") {
+      catalunyaAgendaEvents = catalunyaAgendaResult.value;
+    } else {
+      console.warn(
+        "Generalitat Catalunya events fetch failed, continuing:",
+        catalunyaAgendaResult.reason?.message || catalunyaAgendaResult.reason
+      );
+    }
+
     // Combine and return events
     const allEvents = [
       ...events,
@@ -510,6 +565,7 @@ app.get("/events", async (req, res) => {
       ...atrapaloEvents,
       ...madridOpenDataEvents,
       ...barcelonaDibaEvents,
+      ...catalunyaAgendaEvents,
     ];
     console.log("Eventos devueltos:", {
       local: events.length,
@@ -517,6 +573,7 @@ app.get("/events", async (req, res) => {
       atrapalo: atrapaloEvents.length,
       madrid_open_data: madridOpenDataEvents.length,
       barcelona_diba: barcelonaDibaEvents.length,
+      catalunya_agenda: catalunyaAgendaEvents.length,
       total: allEvents.length,
     });
     if (barcelonaDibaEvents.length) {
@@ -1598,6 +1655,7 @@ app.delete("/users/me", authMiddleware, async (req, res) => {
 void warmAtrapaloCache();
 void warmMadridOpenDataCache();
 void warmBarcelonaDibaCache();
+void warmCatalunyaAgendaCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);
