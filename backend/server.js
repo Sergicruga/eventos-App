@@ -27,6 +27,10 @@ import {
   fetchCatalunyaAgendaEvents,
   warmCatalunyaAgendaCache,
 } from "./services/catalunyaAgendaService.js";
+import {
+  fetchValencianaIvcEvents,
+  warmValencianaIvcCache,
+} from "./services/valencianaIvcService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -369,6 +373,41 @@ const isNearCatalunyaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => 
   return catalunyaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
 };
 
+const valencianaAreaHints = [
+  "comunitat valenciana",
+  "comunidad valenciana",
+  "valencia",
+  "valència",
+  "alicante",
+  "alacant",
+  "castellon",
+  "castelló",
+  "elche",
+  "elx",
+  "peñiscola",
+  "peniscola",
+  "benidorm",
+  "gandia",
+  "torrevieja",
+  "oriola",
+  "orihuela",
+];
+
+const valencianaAnchors = [
+  { latitude: 39.4699, longitude: -0.3763 },
+  { latitude: 38.3452, longitude: -0.4810 },
+  { latitude: 39.9864, longitude: -0.0513 },
+  { latitude: 40.3574, longitude: 0.4069 },
+];
+
+const isNearValencianaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && valencianaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return valencianaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
 /* ==========================
    EVENTS
    ========================== */
@@ -440,6 +479,7 @@ app.get("/events", async (req, res) => {
     let madridOpenDataEvents = [];
     let barcelonaDibaEvents = [];
     let catalunyaAgendaEvents = [];
+    let valencianaIvcEvents = [];
     const citiesToFetch = buildCitiesToFetch({ userCity, userCoords, radiusKm });
     console.log("Ciudades externas consultadas:", {
       userCity,
@@ -498,6 +538,9 @@ app.get("/events", async (req, res) => {
     const shouldFetchCatalunyaAgenda = userCity || userCoords
       ? isNearCatalunyaAgenda({ normalizedUserCity, userCoords, radiusKm })
       : true;
+    const shouldFetchValencianaIvc = userCity || userCoords
+      ? isNearValencianaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
 
     const [
       ticketmasterResult,
@@ -505,12 +548,14 @@ app.get("/events", async (req, res) => {
       madridOpenDataResult,
       barcelonaDibaResult,
       catalunyaAgendaResult,
+      valencianaIvcResult,
     ] = await Promise.allSettled([
       fetchMusicEventsMultipleCities(citiesToFetch),
       fetchAtrapaloEventsMultipleCities(citiesToFetch),
       shouldFetchMadridOpenData ? fetchMadridOpenDataEvents() : Promise.resolve([]),
       shouldFetchBarcelonaDiba ? fetchBarcelonaDibaEvents() : Promise.resolve([]),
       shouldFetchCatalunyaAgenda ? fetchCatalunyaAgendaEvents() : Promise.resolve([]),
+      shouldFetchValencianaIvc ? fetchValencianaIvcEvents() : Promise.resolve([]),
     ]);
 
     if (ticketmasterResult.status === "fulfilled") {
@@ -558,6 +603,15 @@ app.get("/events", async (req, res) => {
       );
     }
 
+    if (valencianaIvcResult.status === "fulfilled") {
+      valencianaIvcEvents = valencianaIvcResult.value;
+    } else {
+      console.warn(
+        "Generalitat Valenciana IVC events fetch failed, continuing:",
+        valencianaIvcResult.reason?.message || valencianaIvcResult.reason
+      );
+    }
+
     // Combine and return events
     const allEvents = [
       ...events,
@@ -566,6 +620,7 @@ app.get("/events", async (req, res) => {
       ...madridOpenDataEvents,
       ...barcelonaDibaEvents,
       ...catalunyaAgendaEvents,
+      ...valencianaIvcEvents,
     ];
     console.log("Eventos devueltos:", {
       local: events.length,
@@ -574,6 +629,7 @@ app.get("/events", async (req, res) => {
       madrid_open_data: madridOpenDataEvents.length,
       barcelona_diba: barcelonaDibaEvents.length,
       catalunya_agenda: catalunyaAgendaEvents.length,
+      valenciana_ivc: valencianaIvcEvents.length,
       total: allEvents.length,
     });
     if (barcelonaDibaEvents.length) {
@@ -1656,6 +1712,7 @@ void warmAtrapaloCache();
 void warmMadridOpenDataCache();
 void warmBarcelonaDibaCache();
 void warmCatalunyaAgendaCache();
+void warmValencianaIvcCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);
