@@ -5,11 +5,11 @@
     "owner": "sergicruga",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/iconoApp.png",
+    "icon": "./assets/goplan-logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/iconoApp.png",
+      "image": "./assets/goplan-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -24,7 +24,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/iconoApp.png",
+        "foregroundImage": "./assets/goplan-logo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
