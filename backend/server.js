@@ -35,6 +35,10 @@ import {
   fetchMurciaAyuntamientoEvents,
   warmMurciaAyuntamientoCache,
 } from "./services/murciaAyuntamientoService.js";
+import {
+  fetchAndaluciaJuntaEvents,
+  warmAndaluciaJuntaCache,
+} from "./services/andaluciaJuntaService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -447,6 +451,49 @@ const isNearMurciaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
   return murciaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
 };
 
+const andaluciaAreaHints = [
+  "andalucia",
+  "andalucía",
+  "sevilla",
+  "malaga",
+  "málaga",
+  "granada",
+  "cordoba",
+  "córdoba",
+  "cadiz",
+  "cádiz",
+  "huelva",
+  "jaen",
+  "jaén",
+  "almeria",
+  "almería",
+  "jerez",
+  "marbella",
+  "algeciras",
+  "ronda",
+  "antequera",
+  "motril",
+];
+
+const andaluciaAnchors = [
+  { latitude: 37.3891, longitude: -5.9845 },
+  { latitude: 36.7213, longitude: -4.4214 },
+  { latitude: 37.1773, longitude: -3.5986 },
+  { latitude: 37.8882, longitude: -4.7794 },
+  { latitude: 36.5271, longitude: -6.2886 },
+  { latitude: 37.2614, longitude: -6.9447 },
+  { latitude: 37.7796, longitude: -3.7849 },
+  { latitude: 36.8340, longitude: -2.4637 },
+];
+
+const isNearAndaluciaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && andaluciaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return andaluciaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
 /* ==========================
    EVENTS
    ========================== */
@@ -520,6 +567,7 @@ app.get("/events", async (req, res) => {
     let catalunyaAgendaEvents = [];
     let valencianaIvcEvents = [];
     let murciaAyuntamientoEvents = [];
+    let andaluciaJuntaEvents = [];
     const citiesToFetch = buildCitiesToFetch({ userCity, userCoords, radiusKm });
     console.log("Ciudades externas consultadas:", {
       userCity,
@@ -584,6 +632,9 @@ app.get("/events", async (req, res) => {
     const shouldFetchMurciaAyuntamiento = userCity || userCoords
       ? isNearMurciaAgenda({ normalizedUserCity, userCoords, radiusKm })
       : true;
+    const shouldFetchAndaluciaJunta = userCity || userCoords
+      ? isNearAndaluciaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
 
     const [
       ticketmasterResult,
@@ -593,6 +644,7 @@ app.get("/events", async (req, res) => {
       catalunyaAgendaResult,
       valencianaIvcResult,
       murciaAyuntamientoResult,
+      andaluciaJuntaResult,
     ] = await Promise.allSettled([
       fetchMusicEventsMultipleCities(citiesToFetch),
       fetchAtrapaloEventsMultipleCities(citiesToFetch),
@@ -601,6 +653,7 @@ app.get("/events", async (req, res) => {
       shouldFetchCatalunyaAgenda ? fetchCatalunyaAgendaEvents() : Promise.resolve([]),
       shouldFetchValencianaIvc ? fetchValencianaIvcEvents() : Promise.resolve([]),
       shouldFetchMurciaAyuntamiento ? fetchMurciaAyuntamientoEvents() : Promise.resolve([]),
+      shouldFetchAndaluciaJunta ? fetchAndaluciaJuntaEvents() : Promise.resolve([]),
     ]);
 
     if (ticketmasterResult.status === "fulfilled") {
@@ -666,6 +719,15 @@ app.get("/events", async (req, res) => {
       );
     }
 
+    if (andaluciaJuntaResult.status === "fulfilled") {
+      andaluciaJuntaEvents = andaluciaJuntaResult.value;
+    } else {
+      console.warn(
+        "Junta Andalucia events fetch failed, continuing:",
+        andaluciaJuntaResult.reason?.message || andaluciaJuntaResult.reason
+      );
+    }
+
     // Combine and return events
     const allEvents = [
       ...events,
@@ -676,6 +738,7 @@ app.get("/events", async (req, res) => {
       ...catalunyaAgendaEvents,
       ...valencianaIvcEvents,
       ...murciaAyuntamientoEvents,
+      ...andaluciaJuntaEvents,
     ];
     console.log("Eventos devueltos:", {
       local: events.length,
@@ -686,6 +749,7 @@ app.get("/events", async (req, res) => {
       catalunya_agenda: catalunyaAgendaEvents.length,
       valenciana_ivc: valencianaIvcEvents.length,
       murcia_ayuntamiento: murciaAyuntamientoEvents.length,
+      andalucia_junta: andaluciaJuntaEvents.length,
       total: allEvents.length,
     });
     if (barcelonaDibaEvents.length) {
@@ -1770,6 +1834,7 @@ void warmBarcelonaDibaCache();
 void warmCatalunyaAgendaCache();
 void warmValencianaIvcCache();
 void warmMurciaAyuntamientoCache();
+void warmAndaluciaJuntaCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);
