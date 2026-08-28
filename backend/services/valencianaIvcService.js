@@ -1,3 +1,5 @@
+import { categoryFromText } from "./categoryUtils.js";
+
 const IVC_EVENTS_URL =
   "https://dadesobertes.gva.es/dataset/25cc4d21-e1dd-4d05-b057-dbcc44d4338c/resource/15084e00-c416-4b4d-b229-7a06f4bf07b0/download/lista-de-actividades-culturales-programadas-por-el-ivc.json";
 
@@ -49,27 +51,6 @@ const parseTime = (value) => {
   const match = raw.match(/(\d{1,2})(?:[:.]\s?|\s*h\s*)(\d{2})?/i);
   if (!match) return "20:00";
   return `${match[1].padStart(2, "0")}:${(match[2] || "00").padStart(2, "0")}`;
-};
-
-const categoryFromText = (...parts) => {
-  const text = normalizeText(parts.filter(Boolean).join(" "));
-
-  if (/musica|concert|festival|jazz|rock|pop|opera|cant|orquestra/.test(text)) {
-    return { slug: "musica", name: "Música" };
-  }
-  if (/cine|filmoteca|pelicula|audiovisual|documental|curtmetratge|cortometraje/.test(text)) {
-    return { slug: "cine", name: "Cine" };
-  }
-  if (/taller|curso|curs|didactic|educa|infantil|familia/.test(text)) {
-    return { slug: "educacion", name: "Educación" };
-  }
-  if (/gastronom|mercado|mercat|comida|cuina|cocina|vino|vi\b/.test(text)) {
-    return { slug: "gastronomia", name: "Gastronomía" };
-  }
-  if (/deporte|esport|carrera|cursa|futbol|basket|running/.test(text)) {
-    return { slug: "deportes", name: "Deportes" };
-  }
-  return { slug: "arte", name: "Arte" };
 };
 
 const normalizeIvcRows = (data) => {

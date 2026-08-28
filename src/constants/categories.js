@@ -59,12 +59,11 @@ export const eventMatchesCategory = (event, categorySlug) => {
   const text = `${event.title || ''} ${event.description || ''}`.toLowerCase();
 
   const musicWords = [
-    'music',
+    ' music ',
     'música',
     'musica',
     'concert',
     'concierto',
-    'festival',
     'dj',
     'rock',
     'pop',
@@ -75,8 +74,34 @@ export const eventMatchesCategory = (event, categorySlug) => {
     'jazz',
   ];
 
+  const artWords = [
+    'exposición',
+    'exposicion',
+    'exposici',
+    'museo',
+    'museu',
+    'arte',
+    'teatro',
+    'teatre',
+    'danza',
+    'dansa',
+    'literatura',
+    'poesia',
+    'poesía',
+    'galería',
+    'galeria',
+    'cultural',
+  ];
+
   if (wanted === 'musica') {
+    if (artWords.some(word => text.includes(word))) {
+      return false;
+    }
     return musicWords.some(word => text.includes(word));
+  }
+
+  if (wanted === 'arte') {
+    return artWords.some(word => text.includes(word));
   }
 
   if (wanted === 'otro') {

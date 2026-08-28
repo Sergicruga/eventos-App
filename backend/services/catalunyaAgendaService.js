@@ -1,3 +1,5 @@
+import { categoryFromText } from "./categoryUtils.js";
+
 const CATALUNYA_AGENDA_URL =
   "https://analisi.transparenciacatalunya.cat/resource/rhpv-yr4f.json";
 
@@ -69,35 +71,6 @@ const locationNameFromSlug = (value) => {
   const raw = String(value);
   const last = raw.split("/").filter(Boolean).pop() || raw;
   return titleCase(last.replace(/-/g, " "));
-};
-
-const categoryFromText = (...parts) => {
-  const text = normalizeText(parts.filter(Boolean).join(" "));
-
-  if (/musica|concert|festival|jazz|rock|pop|dj|flamenc|opera|cant|coral/.test(text)) {
-    return { slug: "musica", name: "Música" };
-  }
-  if (/esport|deporte|cursa|carrera|futbol|basquet|basket|tennis|running/.test(text)) {
-    return { slug: "deportes", name: "Deportes" };
-  }
-  if (/cine|cinema|pelicula|film|projeccio|proyeccion|documental/.test(text)) {
-    return { slug: "cine", name: "Cine" };
-  }
-  if (/taller|curso|curs|xerrada|charla|conferencia|formacio|educa|infantil|familia/.test(text)) {
-    return { slug: "educacion", name: "Educación" };
-  }
-  if (/gastronom|mercat|mercado|menjar|comida|vi\b|vino|tapa|cuina|cocina/.test(text)) {
-    return { slug: "gastronomia", name: "Gastronomía" };
-  }
-  if (
-    /teatre|teatro|dansa|danza|exposicio|exposicion|museu|museo|art|literatura|poesia|circ|circo|comedia|patrimoni|cultura|espectacle/.test(
-      text,
-    )
-  ) {
-    return { slug: "arte", name: "Arte" };
-  }
-
-  return { slug: "arte", name: "Arte" };
 };
 
 const firstImageUrl = (item) => {

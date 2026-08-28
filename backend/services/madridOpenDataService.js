@@ -1,3 +1,5 @@
+import { categoryFromText } from "./categoryUtils.js";
+
 const MADRID_EVENTS_URL =
   "https://datos.madrid.es/dataset/206974-0-agenda-eventos-culturales-100/resource/206974-0-agenda-eventos-culturales-100-json/download/206974-0-agenda-eventos-culturales-100.json";
 
@@ -45,33 +47,6 @@ const parseTime = (value) => {
   const match = raw.match(/(\d{1,2})[:.](\d{2})/);
   if (!match) return "20:00";
   return `${match[1].padStart(2, "0")}:${match[2]}`;
-};
-
-const categoryFromText = (...parts) => {
-  const text = parts.join(" ").toLowerCase();
-  if (/concierto|música|musica|festival|flamenco|jazz|rock|pop|dj/.test(text)) {
-    return { slug: "musica", name: "Música" };
-  }
-  if (/deporte|carrera|fútbol|futbol|basket|tenis|yoga|running/.test(text)) {
-    return { slug: "deportes", name: "Deportes" };
-  }
-  if (/cine|película|pelicula|film|proyección|proyeccion/.test(text)) {
-    return { slug: "cine", name: "Cine" };
-  }
-  if (/taller|curso|charla|conferencia|formación|formacion|educa/.test(text)) {
-    return { slug: "educacion", name: "Educación" };
-  }
-  if (/gastronom|mercado|comida|vino|tapa/.test(text)) {
-    return { slug: "gastronomia", name: "Gastronomía" };
-  }
-  if (
-    /teatro|danza|exposici|museo|arte|literatura|poesía|poesia|circo|comedia|infantil|visita/.test(
-      text,
-    )
-  ) {
-    return { slug: "arte", name: "Arte" };
-  }
-  return { slug: "otro", name: "Otro" };
 };
 
 const pickImage = (item) => {

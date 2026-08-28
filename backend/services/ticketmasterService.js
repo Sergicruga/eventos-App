@@ -1,4 +1,6 @@
 // services/ticketmasterService.js
+import { categoryFromText } from "./categoryUtils.js";
+
 const TICKETMASTER_API_URL = "https://app.ticketmaster.com/discovery/v2/events";
 
 const CACHE_TTL_MS = Number(
@@ -20,26 +22,7 @@ const categoryFromClassification = (classifications = []) => {
   const segment = String(primary.segment?.name || "").toLowerCase();
   const genre = String(primary.genre?.name || primary.subGenre?.name || "").toLowerCase();
   const type = String(primary.type?.name || "").toLowerCase();
-  const text = `${segment} ${genre} ${type}`;
-
-  if (/music|música|musica|concert|concierto|festival/.test(text)) {
-    return { slug: "musica", name: "Música" };
-  }
-  if (/sport|deporte|football|soccer|basket|tennis|motor|running/.test(text)) {
-    return { slug: "deportes", name: "Deportes" };
-  }
-  if (
-    /arts|theatre|theater|teatro|dance|danza|comedy|comedia|circus|circo|opera|ópera|musical/.test(
-      text,
-    )
-  ) {
-    return { slug: "arte", name: "Arte" };
-  }
-  if (/film|movie|cinema|cine/.test(text)) {
-    return { slug: "cine", name: "Cine" };
-  }
-
-  return { slug: "otro", name: "Otro" };
+  return categoryFromText(segment, genre, type);
 };
 
 /**

@@ -1,3 +1,5 @@
+import { categoryFromText } from "./categoryUtils.js";
+
 const MURCIA_EVENTS_RSS_URL = "https://eventos.murcia.es/rss.html";
 
 const CACHE_TTL_MS = Number(process.env.MURCIA_AYUNTAMIENTO_CACHE_TTL_MS || 3 * 60 * 60 * 1000);
@@ -89,27 +91,6 @@ const parseTime = (value) => {
     return parsed.toISOString().slice(11, 16);
   }
   return "20:00";
-};
-
-const categoryFromText = (...parts) => {
-  const text = normalizeText(parts.filter(Boolean).join(" "));
-
-  if (/musica|concierto|concert|festival|jazz|rock|pop|swing|opera|lirica|banda|duo/.test(text)) {
-    return { slug: "musica", name: "Música" };
-  }
-  if (/deporte|deportes|carrera|running|cicloturismo|futbol|basket|senderismo|ruta/.test(text)) {
-    return { slug: "deportes", name: "Deportes" };
-  }
-  if (/cine|pelicula|film|documental|audiovisual/.test(text)) {
-    return { slug: "cine", name: "Cine" };
-  }
-  if (/taller|curso|charla|conferencia|infantil|ninos|niños|visita guiada|museo/.test(text)) {
-    return { slug: "educacion", name: "Educación" };
-  }
-  if (/gastronom|cata|vino|bodega|foodtruck|comida|cena|sabores|tapa/.test(text)) {
-    return { slug: "gastronomia", name: "Gastronomía" };
-  }
-  return { slug: "arte", name: "Arte" };
 };
 
 const firstParagraphText = (value = "") => {

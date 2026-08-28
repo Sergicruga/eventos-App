@@ -1,3 +1,5 @@
+import { categoryFromText } from "./categoryUtils.js";
+
 const ANDALUCIA_EVENTS_URL =
   "https://datos.juntadeandalucia.es/api/v0/schedule/all?format=json";
 
@@ -109,27 +111,6 @@ const usableWgs84Coords = (coordinates = []) => {
 
 const provinceFrom = (item) =>
   stripHtml(item.province?.[0]?.province || item.province || "");
-
-const categoryFromText = (...parts) => {
-  const text = normalizeText(parts.filter(Boolean).join(" "));
-
-  if (/musica|concierto|festival|jazz|rock|pop|flamenco|opera|orquesta|banda/.test(text)) {
-    return { slug: "musica", name: "Música" };
-  }
-  if (/deporte|deportivo|carrera|sendero|senderismo|futbol|baloncesto|caballo/.test(text)) {
-    return { slug: "deportes", name: "Deportes" };
-  }
-  if (/cine|pelicula|film|documental|audiovisual/.test(text)) {
-    return { slug: "cine", name: "Cine" };
-  }
-  if (/taller|curso|jornada|formacion|biblioteca|lectura|conferencia|seminario|visita guiada/.test(text)) {
-    return { slug: "educacion", name: "Educación" };
-  }
-  if (/gastronom|food|comida|vino|cata|mercado|agritech|fruit|producto/.test(text)) {
-    return { slug: "gastronomia", name: "Gastronomía" };
-  }
-  return { slug: "arte", name: "Arte" };
-};
 
 const firstImageUrl = (images = []) => {
   const image = Array.isArray(images) ? images[0] : null;
