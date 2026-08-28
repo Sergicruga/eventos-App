@@ -226,6 +226,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoBust, setPhotoBust] = useState(0);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
 
   const absolutePhoto = (photoPath) => resolveImageUrl(photoPath);
 
@@ -367,7 +368,7 @@ export default function ProfileScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.45,
       });
 
       if (res.canceled || !res.assets?.[0]?.uri) return;
@@ -427,7 +428,14 @@ export default function ProfileScreen() {
     ? absolutePhoto(authUser.photo)
     : null;
 
-  const avatarUri = basePhoto ? `${basePhoto}?t=${photoBust}` : null;
+  const avatarUri =
+    basePhoto && /^https?:\/\//i.test(basePhoto)
+      ? `${basePhoto}?t=${photoBust}`
+      : basePhoto;
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [avatarUri]);
 
   const eventsData = activeTab === "created" ? myEvents : attendingEvents;
 
@@ -483,10 +491,18 @@ export default function ProfileScreen() {
                     style={styles.avatarButton}
                     activeOpacity={0.85}
                   >
-                    <Image
-                      source={avatarUri ? { uri: avatarUri } : require("../../assets/icon.png")}
-                      style={styles.avatar}
-                    />
+                    {avatarUri && !avatarLoadFailed ? (
+                      <Image
+                        source={{ uri: avatarUri }}
+                        style={styles.avatar}
+                        resizeMode="cover"
+                        onError={() => setAvatarLoadFailed(true)}
+                      />
+                    ) : (
+                      <View style={styles.avatarFallback}>
+                        <Ionicons name="person" size={46} color="#CBD5E1" />
+                      </View>
+                    )}
                     {photoUploading ? (
                       <ActivityIndicator style={styles.avatarLoader} color="#fff" />
                     ) : null}
@@ -762,6 +778,13 @@ const styles = StyleSheet.create({
   avatar: {
     width: 104,
     height: 104,
+  },
+  avatarFallback: {
+    width: 104,
+    height: 104,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.14)",
   },
   avatarLoader: {
     position: "absolute",

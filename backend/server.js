@@ -1111,14 +1111,36 @@ const profileStorage = multer.diskStorage({
     cb(null, `profile_${req.params.userId}${ext}`);
   },
 });
-const uploadProfile = multer({ storage: profileStorage });
+const uploadProfile = multer({
+  storage: profileStorage,
+  limits: { fileSize: 4 * 1024 * 1024 },
+});
 
 // Subir foto de perfil
 app.post("/users/:userId/photo", uploadProfile.single("photo"), async (req, res) => {
-  const { userId } = req.params;
-  const photoUrl = `/uploads/${req.file.filename}`;
-  await pool.query("UPDATE users SET photo = $1 WHERE id = $2", [photoUrl, userId]);
-  res.json({ photo: photoUrl });
+  try {
+    const { userId } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No se subió ninguna foto" });
+    }
+
+    const mimeType = req.file.mimetype || "image/jpeg";
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const photoDataUrl = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
+
+    await pool.query("UPDATE users SET photo = $1 WHERE id = $2", [
+      photoDataUrl,
+      userId,
+    ]);
+
+    fs.unlink(req.file.path, () => {});
+
+    res.json({ photo: photoDataUrl });
+  } catch (e) {
+    console.error("POST /users/:userId/photo ERROR:", e);
+    res.status(500).json({ error: "No se pudo subir la foto" });
+  }
 });
 
 /* ==== AMIGOS ==== */
