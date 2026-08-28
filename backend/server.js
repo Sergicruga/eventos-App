@@ -198,13 +198,15 @@ app.param("eventId", async (req, res, next, rawId) => {
         const latitude = req.body?.latitude || req.query?.latitude || null;
         const longitude = req.body?.longitude || req.query?.longitude || null;
         const url = req.body?.url || req.query?.url || null;
+        const location = [venueName, city, country].filter(Boolean).join(", ") || req.body?.location || req.query?.location || null;
+        const type = req.body?.type || req.query?.type || "api";
 
         console.log(`Auto-creating event for externalId=${externalId} source=${source}`);
         const ins = await pool.query(
-          `INSERT INTO events (title, description, image, event_at, venue_name, city, country, latitude, longitude, url)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          `INSERT INTO events (title, description, image, event_at, location, type, latitude, longitude)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
            RETURNING id`,
-          [title, description, image, eventAt, venueName, city, country, latitude, longitude, url]
+          [title, description, image, eventAt, location, type, latitude, longitude]
         );
         const newEventId = ins.rows[0].id;
 
@@ -222,9 +224,22 @@ app.param("eventId", async (req, res, next, rawId) => {
           return next();
         } catch (eUp) {
           console.error('error upserting api_events mapping:', eUp.message || eUp);
-          // fallback: still use created event id
-          req.eventId = newEventId;
-          return next();
+          try {
+            const minimal = await pool.query(
+              `INSERT INTO api_events (source, external_id, event_id)
+               VALUES ($1,$2,$3)
+               ON CONFLICT (source, external_id) DO UPDATE SET event_id = EXCLUDED.event_id
+               RETURNING event_id`,
+              [source, externalId, newEventId]
+            );
+            req.eventId = minimal.rows[0]?.event_id || newEventId;
+            return next();
+          } catch (eMinimal) {
+            console.error('error upserting minimal api_events mapping:', eMinimal.message || eMinimal);
+            // fallback: still use created event id for this request
+            req.eventId = newEventId;
+            return next();
+          }
         }
       } catch (eCreate) {
         console.error('error creating local event for externalId:', eCreate.message || eCreate);
