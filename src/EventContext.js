@@ -1158,7 +1158,12 @@ export function EventProvider({ children }) {
   };
 
   // ===== Asistir / no asistir (núcleo) =====
-  const attend = async (eventId, attending = true) => {
+  const attend = async (eventOrId, attending = true) => {
+    const eventId =
+      typeof eventOrId === 'object' && eventOrId !== null
+        ? eventOrId.id
+        : eventOrId;
+
     if (!eventId) return;
     if (!effectiveUser?.id) {
       Alert.alert(
@@ -1171,9 +1176,10 @@ export function EventProvider({ children }) {
     try {
       // Asegurarnos de tener un ID válido para el servidor
       let dbId = dbIdFrom(eventId);
-      let eventObj = events.find(
-        (e) => String(e.id) === String(eventId)
-      );
+      let eventObj =
+        typeof eventOrId === 'object' && eventOrId !== null
+          ? eventOrId
+          : events.find((e) => String(e.id) === String(eventId));
 
       if (!dbId && eventObj) {
         // Evento de API: intentamos crearlo/enlazarlo en el backend
@@ -1261,19 +1267,11 @@ export function EventProvider({ children }) {
 
   // ===== Wrappers que usa la UI: joinEvent / leaveEvent =====
   const joinEvent = async (eventOrId) => {
-    const eventId =
-      typeof eventOrId === 'object' && eventOrId !== null
-        ? eventOrId.id
-        : eventOrId;
-    return attend(eventId, true);
+    return attend(eventOrId, true);
   };
 
   const leaveEvent = async (eventOrId) => {
-    const eventId =
-      typeof eventOrId === 'object' && eventOrId !== null
-        ? eventOrId.id
-        : eventOrId;
-    return attend(eventId, false);
+    return attend(eventOrId, false);
   };
 
   // ===== Forzar actualización de evento =====

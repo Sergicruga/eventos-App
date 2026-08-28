@@ -177,14 +177,14 @@ app.param("eventId", async (req, res, next, rawId) => {
       // Intentar crear un evento local mínimo y enlazarlo en api_events
       try {
         const title = req.body?.title || req.query?.title || `Imported event ${externalId}`;
-        const description = req.body?.description || req.body?.desc || null;
-        const image = req.body?.image || null;
-        const eventAt = req.body?.event_at || req.body?.eventAt || null;
-        const venueName = req.body?.venueName || req.body?.venue_name || null;
-        const city = req.body?.city || null;
-        const country = req.body?.country || null;
-        const latitude = req.body?.latitude || null;
-        const longitude = req.body?.longitude || null;
+        const description = req.body?.description || req.query?.description || req.body?.desc || req.query?.desc || null;
+        const image = req.body?.image || req.query?.image || null;
+        const eventAt = req.body?.event_at || req.query?.event_at || req.body?.eventAt || req.query?.eventAt || null;
+        const venueName = req.body?.venueName || req.query?.venueName || req.body?.venue_name || req.query?.venue_name || null;
+        const city = req.body?.city || req.query?.city || null;
+        const country = req.body?.country || req.query?.country || null;
+        const latitude = req.body?.latitude || req.query?.latitude || null;
+        const longitude = req.body?.longitude || req.query?.longitude || null;
         const url = req.body?.url || req.query?.url || null;
 
         console.log(`Auto-creating event for externalId=${externalId} source=${source}`);
@@ -1529,7 +1529,7 @@ app.delete("/attendees", async (req, res) => {
 
 // Obtener asistentes de un evento
 app.get("/events/:eventId/attendees", async (req, res) => {
-  const { eventId } = req.params; // ✅ CORREGIDO
+  const eventId = req.eventId;
 
   try {
     const { rows } = await pool.query(
@@ -1551,7 +1551,7 @@ app.get("/events/:eventId/attendees", async (req, res) => {
 
 // Comprobar si un usuario asiste
 app.get("/events/:eventId/attendees/:userId", async (req, res) => {
-  const { eventId } = req.params; // ✅ CORREGIDO
+  const eventId = req.eventId;
   const { userId } = req.params;
 
   try {
@@ -1600,7 +1600,7 @@ app.post("/events/:eventId/comments", async (req, res) => {
   res.status(201).json(rows[0]);
 });
 app.delete("/events/:eventId/comments/:commentId", async (req, res) => {
-  const eventId = req.params.eventId;
+  const eventId = req.eventId;
   const commentId = req.params.commentId;
 
   // Sin JWT: userId por query o body

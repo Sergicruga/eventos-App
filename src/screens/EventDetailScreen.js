@@ -336,6 +336,36 @@ export default function EventDetailScreen({ route, navigation }) {
     }, [computedBuyUrl]);
 
   const buyUrl = computedBuyUrl || stableBuyUrlRef.current;
+  const isNumericIdLocal = (v) => typeof v === 'number' || (/^\d+$/.test(String(v ?? '')));
+
+  const buildEventUrl = useCallback((subpath = '', extraParams = {}) => {
+    const base = `${API_URL}/events/${current.id}${subpath}`;
+    const params = new URLSearchParams();
+    Object.entries(extraParams || {}).forEach(([k, val]) => {
+      if (val != null) params.set(k, String(val));
+    });
+
+    if (!isNumericIdLocal(current.id)) {
+      params.set('source', current.source || 'ticketmaster');
+      params.set(
+        'externalId',
+        current.externalId ?? current.tm_id ?? current.sourceId ?? current.id
+      );
+      params.set('title', current.title || current.name || '');
+      params.set('description', current.description || current.desc || '');
+      params.set('event_at', current.date || current.event_at || current.starts_at || '');
+      params.set('venue_name', current.venue_name || current.venueName || current.location || '');
+      params.set('city', current.city || '');
+      params.set('country', current.country || '');
+      params.set('url', current.url || current.purchaseUrl || current.externalUrl || current.buyUrl || '');
+      if (current.image) params.set('image', current.image);
+      if (current.latitude != null) params.set('latitude', String(current.latitude));
+      if (current.longitude != null) params.set('longitude', String(current.longitude));
+    }
+
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
+  }, [current]);
 
   // ----- Asistentes -----
   const [attendees, setAttendees] = useState([]);
@@ -347,7 +377,7 @@ export default function EventDetailScreen({ route, navigation }) {
     const fetchAttendees = async () => {
       if (!current?.id) return;
       try {
-        const res = await fetch(`${API_URL}/events/${current.id}/attendees`);
+        const res = await fetch(buildEventUrl('/attendees'));
         if (res.ok) {
           const data = await res.json();
           if (cancelled) return;
@@ -367,7 +397,7 @@ export default function EventDetailScreen({ route, navigation }) {
     };
     fetchAttendees();
     return () => { cancelled = true; };
-  }, [current.id, user?.id]);
+  }, [current.id, current.source, current.externalId, buildEventUrl, user?.id]);
 
   const handleJoinOrLeave = useCallback(async () => {
     if (!user?.id) {
@@ -383,7 +413,7 @@ export default function EventDetailScreen({ route, navigation }) {
       setIsJoined(true);
       setAttendees(prev => [...prev, { id: user.id, name: user.name, photo: user.photo }]);
       try {
-        await joinEvent(current.id);
+        await joinEvent(current);
         await scheduleEventNotification(current);
       } catch (e) {
         setIsJoined(false);
@@ -394,7 +424,7 @@ export default function EventDetailScreen({ route, navigation }) {
       setIsJoined(false);
       setAttendees(prev => prev.filter(a => String(getAttendeeUserId(a)) !== uidStr));
       try {
-        await leaveEvent(current.id);
+        await leaveEvent(current);
       } catch (e) {
         setIsJoined(true);
         setAttendees(prev => [...prev, { id: user.id, name: user.name, photo: user.photo }]);
@@ -403,7 +433,7 @@ export default function EventDetailScreen({ route, navigation }) {
     }
 
     try {
-      const res = await fetch(`${API_URL}/events/${current.id}/attendees`);
+      const res = await fetch(buildEventUrl('/attendees'));
       if (res.ok) {
         const data = await res.json();
         setAttendees(Array.isArray(data) ? data : []);
@@ -413,33 +443,13 @@ export default function EventDetailScreen({ route, navigation }) {
     } catch {}
 
     setJoining(false);
-  }, [user, joining, isJoined, current.id, joinEvent, leaveEvent]);
+  }, [user, joining, isJoined, current, joinEvent, leaveEvent, buildEventUrl]);
 
   // ----- Comentarios -----
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [sending, setSending] = useState(false);
-  const isNumericIdLocal = (v) => typeof v === 'number' || (/^\d+$/.test(String(v ?? '')));
-
-  const buildEventUrl = (subpath = '', extraParams = {}) => {
-    const base = `${API_URL}/events/${current.id}${subpath}`;
-    const params = new URLSearchParams();
-    Object.entries(extraParams || {}).forEach(([k, val]) => {
-      if (val != null) params.set(k, String(val));
-    });
-
-    if (!isNumericIdLocal(current.id)) {
-      params.set('source', current.source || 'ticketmaster');
-      params.set(
-        'externalId',
-        current.externalId ?? current.tm_id ?? current.sourceId ?? current.id
-      );
-    }
-
-    const qs = params.toString();
-    return qs ? `${base}?${qs}` : base;
-  };
 
   const fetchComments = useCallback(async () => {
     setLoadingComments(true);
