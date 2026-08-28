@@ -402,23 +402,6 @@ export default function ProfileScreen() {
     }
   };
 
-  if (!authUid) {
-    return (
-      <SafeAreaView style={styles.emptyStateScreen}>
-        <Ionicons name="person-circle-outline" size={64} color="#9CA3AF" />
-        <Text style={styles.emptyStateTitle}>Inicia sesión para ver tu perfil.</Text>
-      </SafeAreaView>
-    );
-  }
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.loadingScreen}>
-        <ActivityIndicator size="large" color="#2563EB" />
-      </SafeAreaView>
-    );
-  }
-
   const displayName = me?.name ?? authUser?.name ?? "-";
   const displayEmail = me?.email ?? authUser?.email ?? "-";
 
@@ -438,6 +421,23 @@ export default function ProfileScreen() {
   }, [avatarUri]);
 
   const eventsData = activeTab === "created" ? myEvents : attendingEvents;
+
+  if (!authUid) {
+    return (
+      <SafeAreaView style={styles.emptyStateScreen}>
+        <Ionicons name="person-circle-outline" size={64} color="#9CA3AF" />
+        <Text style={styles.emptyStateTitle}>Inicia sesión para ver tu perfil.</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color="#2563EB" />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>

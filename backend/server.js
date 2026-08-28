@@ -159,7 +159,12 @@ app.param("eventId", async (req, res, next, rawId) => {
     }
 
     const source = req.query.source || req.body?.source;
-    const externalId = req.query.externalId || req.body?.externalId || rawId;
+    const externalId =
+      req.query.externalId ||
+      req.query.external_id ||
+      req.body?.externalId ||
+      req.body?.external_id ||
+      rawId;
 
     if (!source || !externalId) {
       return res.status(400).json({
@@ -179,7 +184,14 @@ app.param("eventId", async (req, res, next, rawId) => {
         const title = req.body?.title || req.query?.title || `Imported event ${externalId}`;
         const description = req.body?.description || req.query?.description || req.body?.desc || req.query?.desc || null;
         const image = req.body?.image || req.query?.image || null;
-        const eventAt = req.body?.event_at || req.query?.event_at || req.body?.eventAt || req.query?.eventAt || null;
+        const eventAt =
+          req.body?.event_at ||
+          req.query?.event_at ||
+          req.body?.eventAt ||
+          req.query?.eventAt ||
+          req.body?.startsAt ||
+          req.query?.startsAt ||
+          new Date().toISOString().slice(0, 10);
         const venueName = req.body?.venueName || req.query?.venueName || req.body?.venue_name || req.query?.venue_name || null;
         const city = req.body?.city || req.query?.city || null;
         const country = req.body?.country || req.query?.country || null;
