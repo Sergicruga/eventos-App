@@ -39,6 +39,18 @@ import {
   fetchAndaluciaJuntaEvents,
   warmAndaluciaJuntaCache,
 } from "./services/andaluciaJuntaService.js";
+import {
+  fetchEuskadiKulturklikEvents,
+  warmEuskadiKulturklikCache,
+} from "./services/euskadiKulturklikService.js";
+import {
+  fetchGaliciaAxendaEvents,
+  warmGaliciaAxendaCache,
+} from "./services/galiciaAxendaService.js";
+import {
+  fetchZaragozaAgendaEvents,
+  warmZaragozaAgendaCache,
+} from "./services/zaragozaAgendaService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -521,6 +533,94 @@ const isNearAndaluciaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => 
   return andaluciaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
 };
 
+const euskadiAreaHints = [
+  "euskadi",
+  "país vasco",
+  "pais vasco",
+  "bilbao",
+  "donostia",
+  "san sebastian",
+  "san sebastián",
+  "vitoria",
+  "gasteiz",
+  "barakaldo",
+  "getxo",
+  "irun",
+  "eibar",
+  "zarautz",
+];
+
+const euskadiAnchors = [
+  { latitude: 43.2630, longitude: -2.9350 },
+  { latitude: 43.3183, longitude: -1.9812 },
+  { latitude: 42.8467, longitude: -2.6727 },
+];
+
+const isNearEuskadiAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && euskadiAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return euskadiAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const galiciaAreaHints = [
+  "galicia",
+  "a coruña",
+  "coruña",
+  "coruna",
+  "vigo",
+  "santiago",
+  "santiago de compostela",
+  "pontevedra",
+  "ourense",
+  "orense",
+  "lugo",
+  "ferrol",
+];
+
+const galiciaAnchors = [
+  { latitude: 43.3623, longitude: -8.4115 },
+  { latitude: 42.2406, longitude: -8.7207 },
+  { latitude: 42.8782, longitude: -8.5448 },
+  { latitude: 42.4336, longitude: -8.6479 },
+  { latitude: 42.3358, longitude: -7.8639 },
+  { latitude: 43.0097, longitude: -7.5568 },
+];
+
+const isNearGaliciaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && galiciaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return galiciaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const aragonAreaHints = [
+  "aragón",
+  "aragon",
+  "zaragoza",
+  "huesca",
+  "teruel",
+  "calatayud",
+  "ejea",
+  "jaca",
+];
+
+const aragonAnchors = [
+  { latitude: 41.6488, longitude: -0.8891 },
+  { latitude: 42.1401, longitude: -0.4089 },
+  { latitude: 40.3457, longitude: -1.1065 },
+];
+
+const isNearAragonAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && aragonAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return aragonAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
 /* ==========================
    EVENTS
    ========================== */
@@ -595,6 +695,9 @@ app.get("/events", async (req, res) => {
     let valencianaIvcEvents = [];
     let murciaAyuntamientoEvents = [];
     let andaluciaJuntaEvents = [];
+    let euskadiKulturklikEvents = [];
+    let galiciaAxendaEvents = [];
+    let zaragozaAgendaEvents = [];
     const citiesToFetch = buildCitiesToFetch({ userCity, userCoords, radiusKm });
     console.log("Ciudades externas consultadas:", {
       userCity,
@@ -662,6 +765,15 @@ app.get("/events", async (req, res) => {
     const shouldFetchAndaluciaJunta = userCity || userCoords
       ? isNearAndaluciaAgenda({ normalizedUserCity, userCoords, radiusKm })
       : true;
+    const shouldFetchEuskadiKulturklik = userCity || userCoords
+      ? isNearEuskadiAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchGaliciaAxenda = userCity || userCoords
+      ? isNearGaliciaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchZaragozaAgenda = userCity || userCoords
+      ? isNearAragonAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
 
     const [
       ticketmasterResult,
@@ -672,6 +784,9 @@ app.get("/events", async (req, res) => {
       valencianaIvcResult,
       murciaAyuntamientoResult,
       andaluciaJuntaResult,
+      euskadiKulturklikResult,
+      galiciaAxendaResult,
+      zaragozaAgendaResult,
     ] = await Promise.allSettled([
       fetchMusicEventsMultipleCities(citiesToFetch),
       fetchAtrapaloEventsMultipleCities(citiesToFetch),
@@ -681,6 +796,9 @@ app.get("/events", async (req, res) => {
       shouldFetchValencianaIvc ? fetchValencianaIvcEvents() : Promise.resolve([]),
       shouldFetchMurciaAyuntamiento ? fetchMurciaAyuntamientoEvents() : Promise.resolve([]),
       shouldFetchAndaluciaJunta ? fetchAndaluciaJuntaEvents() : Promise.resolve([]),
+      shouldFetchEuskadiKulturklik ? fetchEuskadiKulturklikEvents() : Promise.resolve([]),
+      shouldFetchGaliciaAxenda ? fetchGaliciaAxendaEvents() : Promise.resolve([]),
+      shouldFetchZaragozaAgenda ? fetchZaragozaAgendaEvents() : Promise.resolve([]),
     ]);
 
     if (ticketmasterResult.status === "fulfilled") {
@@ -755,6 +873,33 @@ app.get("/events", async (req, res) => {
       );
     }
 
+    if (euskadiKulturklikResult.status === "fulfilled") {
+      euskadiKulturklikEvents = euskadiKulturklikResult.value;
+    } else {
+      console.warn(
+        "Euskadi Kulturklik events fetch failed, continuing:",
+        euskadiKulturklikResult.reason?.message || euskadiKulturklikResult.reason
+      );
+    }
+
+    if (galiciaAxendaResult.status === "fulfilled") {
+      galiciaAxendaEvents = galiciaAxendaResult.value;
+    } else {
+      console.warn(
+        "Galicia Axenda events fetch failed, continuing:",
+        galiciaAxendaResult.reason?.message || galiciaAxendaResult.reason
+      );
+    }
+
+    if (zaragozaAgendaResult.status === "fulfilled") {
+      zaragozaAgendaEvents = zaragozaAgendaResult.value;
+    } else {
+      console.warn(
+        "Zaragoza Agenda events fetch failed, continuing:",
+        zaragozaAgendaResult.reason?.message || zaragozaAgendaResult.reason
+      );
+    }
+
     // Combine and return events
     const allEvents = [
       ...events,
@@ -766,6 +911,9 @@ app.get("/events", async (req, res) => {
       ...valencianaIvcEvents,
       ...murciaAyuntamientoEvents,
       ...andaluciaJuntaEvents,
+      ...euskadiKulturklikEvents,
+      ...galiciaAxendaEvents,
+      ...zaragozaAgendaEvents,
     ];
     console.log("Eventos devueltos:", {
       local: events.length,
@@ -777,6 +925,9 @@ app.get("/events", async (req, res) => {
       valenciana_ivc: valencianaIvcEvents.length,
       murcia_ayuntamiento: murciaAyuntamientoEvents.length,
       andalucia_junta: andaluciaJuntaEvents.length,
+      euskadi_kulturklik: euskadiKulturklikEvents.length,
+      galicia_axenda: galiciaAxendaEvents.length,
+      zaragoza_agenda: zaragozaAgendaEvents.length,
       total: allEvents.length,
     });
     if (barcelonaDibaEvents.length) {
@@ -1884,6 +2035,9 @@ void warmCatalunyaAgendaCache();
 void warmValencianaIvcCache();
 void warmMurciaAyuntamientoCache();
 void warmAndaluciaJuntaCache();
+void warmEuskadiKulturklikCache();
+void warmGaliciaAxendaCache();
+void warmZaragozaAgendaCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);
