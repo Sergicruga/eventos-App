@@ -51,6 +51,22 @@ import {
   fetchZaragozaAgendaEvents,
   warmZaragozaAgendaCache,
 } from "./services/zaragozaAgendaService.js";
+import {
+  fetchCastillaLeonAgendaEvents,
+  warmCastillaLeonAgendaCache,
+} from "./services/castillaLeonAgendaService.js";
+import {
+  fetchGijonAgendaEvents,
+  warmGijonAgendaCache,
+} from "./services/gijonAgendaService.js";
+import {
+  fetchCastillaManchaAgendaEvents,
+  fetchPamplonaAgendaEvents,
+  fetchRiojaTeatrosEvents,
+  warmCastillaManchaAgendaCache,
+  warmPamplonaAgendaCache,
+  warmRiojaTeatrosCache,
+} from "./services/regionalHtmlAgendaService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -621,6 +637,157 @@ const isNearAragonAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
   return aragonAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
 };
 
+const castillaLeonAreaHints = [
+  "castilla y leon",
+  "castilla y león",
+  "valladolid",
+  "burgos",
+  "leon",
+  "león",
+  "salamanca",
+  "avila",
+  "ávila",
+  "segovia",
+  "soria",
+  "palencia",
+  "zamora",
+  "ponferrada",
+];
+
+const castillaLeonAnchors = [
+  { latitude: 41.6523, longitude: -4.7245 },
+  { latitude: 42.3439, longitude: -3.6969 },
+  { latitude: 42.5987, longitude: -5.5671 },
+  { latitude: 40.9701, longitude: -5.6635 },
+  { latitude: 40.6565, longitude: -4.6818 },
+  { latitude: 40.9429, longitude: -4.1088 },
+  { latitude: 41.7636, longitude: -2.4649 },
+  { latitude: 42.0097, longitude: -4.5288 },
+  { latitude: 41.5035, longitude: -5.7446 },
+];
+
+const isNearCastillaLeonAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && castillaLeonAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return castillaLeonAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const asturiasAreaHints = [
+  "asturias",
+  "gijon",
+  "gijón",
+  "xixon",
+  "xixón",
+  "oviedo",
+  "aviles",
+  "avilés",
+  "langreo",
+  "mieres",
+  "llanes",
+];
+
+const asturiasAnchors = [
+  { latitude: 43.5322, longitude: -5.6611 },
+  { latitude: 43.3619, longitude: -5.8494 },
+  { latitude: 43.5560, longitude: -5.9247 },
+];
+
+const isNearAsturiasAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && asturiasAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return asturiasAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const castillaManchaAreaHints = [
+  "castilla la mancha",
+  "castilla-la mancha",
+  "castilla-la-mancha",
+  "toledo",
+  "albacete",
+  "ciudad real",
+  "cuenca",
+  "guadalajara",
+  "talavera",
+  "puertollano",
+  "almansa",
+];
+
+const castillaManchaAnchors = [
+  { latitude: 39.8628, longitude: -4.0273 },
+  { latitude: 38.9943, longitude: -1.8585 },
+  { latitude: 38.9848, longitude: -3.9274 },
+  { latitude: 40.0704, longitude: -2.1374 },
+  { latitude: 40.6325, longitude: -3.1602 },
+];
+
+const isNearCastillaManchaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && castillaManchaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return castillaManchaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const navarraAreaHints = [
+  "navarra",
+  "pamplona",
+  "iruña",
+  "iruna",
+  "tudela",
+  "estella",
+  "tafalla",
+  "burlada",
+  "barañain",
+  "baranain",
+];
+
+const navarraAnchors = [
+  { latitude: 42.8125, longitude: -1.6458 },
+  { latitude: 42.0617, longitude: -1.6045 },
+  { latitude: 42.6718, longitude: -2.0323 },
+];
+
+const isNearNavarraAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && navarraAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return navarraAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const riojaAreaHints = [
+  "la rioja",
+  "rioja",
+  "logroño",
+  "logrono",
+  "calahorra",
+  "arnedo",
+  "alfaro",
+  "ezcaray",
+  "autol",
+  "najera",
+  "nájera",
+];
+
+const riojaAnchors = [
+  { latitude: 42.4627, longitude: -2.4449 },
+  { latitude: 42.3051, longitude: -1.9654 },
+  { latitude: 42.2280, longitude: -2.1009 },
+  { latitude: 42.3254, longitude: -3.0136 },
+];
+
+const isNearRiojaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && riojaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return riojaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
 /* ==========================
    EVENTS
    ========================== */
@@ -698,6 +865,11 @@ app.get("/events", async (req, res) => {
     let euskadiKulturklikEvents = [];
     let galiciaAxendaEvents = [];
     let zaragozaAgendaEvents = [];
+    let castillaLeonAgendaEvents = [];
+    let gijonAgendaEvents = [];
+    let castillaManchaAgendaEvents = [];
+    let pamplonaAgendaEvents = [];
+    let riojaTeatrosEvents = [];
     const citiesToFetch = buildCitiesToFetch({ userCity, userCoords, radiusKm });
     console.log("Ciudades externas consultadas:", {
       userCity,
@@ -774,6 +946,21 @@ app.get("/events", async (req, res) => {
     const shouldFetchZaragozaAgenda = userCity || userCoords
       ? isNearAragonAgenda({ normalizedUserCity, userCoords, radiusKm })
       : true;
+    const shouldFetchCastillaLeonAgenda = userCity || userCoords
+      ? isNearCastillaLeonAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchGijonAgenda = userCity || userCoords
+      ? isNearAsturiasAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchCastillaManchaAgenda = userCity || userCoords
+      ? isNearCastillaManchaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchPamplonaAgenda = userCity || userCoords
+      ? isNearNavarraAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchRiojaTeatros = userCity || userCoords
+      ? isNearRiojaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
 
     const [
       ticketmasterResult,
@@ -787,6 +974,11 @@ app.get("/events", async (req, res) => {
       euskadiKulturklikResult,
       galiciaAxendaResult,
       zaragozaAgendaResult,
+      castillaLeonAgendaResult,
+      gijonAgendaResult,
+      castillaManchaAgendaResult,
+      pamplonaAgendaResult,
+      riojaTeatrosResult,
     ] = await Promise.allSettled([
       fetchMusicEventsMultipleCities(citiesToFetch),
       fetchAtrapaloEventsMultipleCities(citiesToFetch),
@@ -799,6 +991,11 @@ app.get("/events", async (req, res) => {
       shouldFetchEuskadiKulturklik ? fetchEuskadiKulturklikEvents() : Promise.resolve([]),
       shouldFetchGaliciaAxenda ? fetchGaliciaAxendaEvents() : Promise.resolve([]),
       shouldFetchZaragozaAgenda ? fetchZaragozaAgendaEvents() : Promise.resolve([]),
+      shouldFetchCastillaLeonAgenda ? fetchCastillaLeonAgendaEvents() : Promise.resolve([]),
+      shouldFetchGijonAgenda ? fetchGijonAgendaEvents() : Promise.resolve([]),
+      shouldFetchCastillaManchaAgenda ? fetchCastillaManchaAgendaEvents() : Promise.resolve([]),
+      shouldFetchPamplonaAgenda ? fetchPamplonaAgendaEvents() : Promise.resolve([]),
+      shouldFetchRiojaTeatros ? fetchRiojaTeatrosEvents() : Promise.resolve([]),
     ]);
 
     if (ticketmasterResult.status === "fulfilled") {
@@ -900,6 +1097,51 @@ app.get("/events", async (req, res) => {
       );
     }
 
+    if (castillaLeonAgendaResult.status === "fulfilled") {
+      castillaLeonAgendaEvents = castillaLeonAgendaResult.value;
+    } else {
+      console.warn(
+        "Castilla y Leon Agenda events fetch failed, continuing:",
+        castillaLeonAgendaResult.reason?.message || castillaLeonAgendaResult.reason
+      );
+    }
+
+    if (gijonAgendaResult.status === "fulfilled") {
+      gijonAgendaEvents = gijonAgendaResult.value;
+    } else {
+      console.warn(
+        "Gijon Agenda events fetch failed, continuing:",
+        gijonAgendaResult.reason?.message || gijonAgendaResult.reason
+      );
+    }
+
+    if (castillaManchaAgendaResult.status === "fulfilled") {
+      castillaManchaAgendaEvents = castillaManchaAgendaResult.value;
+    } else {
+      console.warn(
+        "Castilla-La Mancha Agenda events fetch failed, continuing:",
+        castillaManchaAgendaResult.reason?.message || castillaManchaAgendaResult.reason
+      );
+    }
+
+    if (pamplonaAgendaResult.status === "fulfilled") {
+      pamplonaAgendaEvents = pamplonaAgendaResult.value;
+    } else {
+      console.warn(
+        "Pamplona Agenda events fetch failed, continuing:",
+        pamplonaAgendaResult.reason?.message || pamplonaAgendaResult.reason
+      );
+    }
+
+    if (riojaTeatrosResult.status === "fulfilled") {
+      riojaTeatrosEvents = riojaTeatrosResult.value;
+    } else {
+      console.warn(
+        "Red Teatros La Rioja events fetch failed, continuing:",
+        riojaTeatrosResult.reason?.message || riojaTeatrosResult.reason
+      );
+    }
+
     // Combine and return events
     const allEvents = [
       ...events,
@@ -914,6 +1156,11 @@ app.get("/events", async (req, res) => {
       ...euskadiKulturklikEvents,
       ...galiciaAxendaEvents,
       ...zaragozaAgendaEvents,
+      ...castillaLeonAgendaEvents,
+      ...gijonAgendaEvents,
+      ...castillaManchaAgendaEvents,
+      ...pamplonaAgendaEvents,
+      ...riojaTeatrosEvents,
     ];
     console.log("Eventos devueltos:", {
       local: events.length,
@@ -928,6 +1175,11 @@ app.get("/events", async (req, res) => {
       euskadi_kulturklik: euskadiKulturklikEvents.length,
       galicia_axenda: galiciaAxendaEvents.length,
       zaragoza_agenda: zaragozaAgendaEvents.length,
+      castilla_leon_agenda: castillaLeonAgendaEvents.length,
+      gijon_agenda: gijonAgendaEvents.length,
+      clm_agenda: castillaManchaAgendaEvents.length,
+      pamplona_agenda: pamplonaAgendaEvents.length,
+      rioja_teatros: riojaTeatrosEvents.length,
       total: allEvents.length,
     });
     if (barcelonaDibaEvents.length) {
@@ -2038,6 +2290,11 @@ void warmAndaluciaJuntaCache();
 void warmEuskadiKulturklikCache();
 void warmGaliciaAxendaCache();
 void warmZaragozaAgendaCache();
+void warmCastillaLeonAgendaCache();
+void warmGijonAgendaCache();
+void warmCastillaManchaAgendaCache();
+void warmPamplonaAgendaCache();
+void warmRiojaTeatrosCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);

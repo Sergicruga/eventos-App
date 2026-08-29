@@ -36,7 +36,7 @@ const FOOD_RE =
   /\b(gastronom|mercado|mercat|comida|menjar|food|vino|vi\b|tapa|cata|cuina|cocina|producto)\b/;
 
 const TECH_RE =
-  /\b(tecnologia|technology|digital|robot|ia|inteligencia artificial|programacion|software|startup|videojuego|gaming)\b/;
+  /\b(tecnologia|technology|digital|robot|inteligencia artificial|software|startup|videojuego|gaming)\b/;
 
 function categoryFromText(...parts) {
   const text = normalizeText(parts.filter(Boolean).join(" "));
