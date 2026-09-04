@@ -5,9 +5,8 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
-  Dimensions,
   ScrollView,
+  StyleSheet,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventContext } from '../EventContext';
@@ -17,7 +16,6 @@ import styles from './HomeScreen.styles';
 import { AuthContext } from '../context/AuthContext';
 import { Image as ExpoImage } from 'expo-image';
 import {
-  EVENT_CATEGORIES,
   eventMatchesCategory,
   eventMatchesSubcategory,
   findCategoryBySlug,
@@ -111,7 +109,6 @@ export default function CategoryEventsScreen({ route }) {
   const { user } = useContext(AuthContext);
   const [search, setSearch] = useState('');
   const [activeSubcategory, setActiveSubcategory] = useState('todos');
-  const [location, setLocation] = useState(null);
   const navigation = useNavigation();
   const myUserId = user?.id != null ? String(user.id) : null;
 
@@ -217,7 +214,8 @@ export default function CategoryEventsScreen({ route }) {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 10, gap: 8 }}
+          style={subcategoryStyles.scroll}
+          contentContainerStyle={subcategoryStyles.scrollContent}
         >
           {[{ slug: 'todos', name: 'Todos' }, ...subcategories].map((sub) => {
             const selected = activeSubcategory === sub.slug;
@@ -227,21 +225,27 @@ export default function CategoryEventsScreen({ route }) {
                 key={sub.slug}
                 onPress={() => setActiveSubcategory(sub.slug)}
                 activeOpacity={0.85}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingVertical: 8,
-                  paddingHorizontal: 12,
-                  borderRadius: 999,
-                  backgroundColor: selected ? '#3B5BA9' : '#fff',
-                  borderWidth: 1,
-                  borderColor: selected ? '#3B5BA9' : '#D8E0F0',
-                }}
+                style={[
+                  subcategoryStyles.chip,
+                  selected && subcategoryStyles.chipSelected,
+                ]}
               >
-                <Text style={{ color: selected ? '#fff' : '#27496D', fontWeight: '700' }}>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    subcategoryStyles.chipText,
+                    selected && subcategoryStyles.chipTextSelected,
+                  ]}
+                >
                   {sub.name}
                 </Text>
-                <Text style={{ color: selected ? '#E7EEFF' : '#8AA0BF', marginLeft: 6 }}>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    subcategoryStyles.chipCount,
+                    selected && subcategoryStyles.chipCountSelected,
+                  ]}
+                >
                   {count}
                 </Text>
               </TouchableOpacity>
@@ -269,3 +273,51 @@ export default function CategoryEventsScreen({ route }) {
     </View>
   );
 }
+
+const subcategoryStyles = StyleSheet.create({
+  scroll: {
+    flexGrow: 0,
+    marginBottom: 8,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    minWidth: 88,
+    maxWidth: 190,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    marginRight: 8,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#D8E0F0',
+  },
+  chipSelected: {
+    backgroundColor: '#3B5BA9',
+    borderColor: '#3B5BA9',
+  },
+  chipText: {
+    flexShrink: 1,
+    color: '#27496D',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  chipTextSelected: {
+    color: '#fff',
+  },
+  chipCount: {
+    flexShrink: 0,
+    color: '#8AA0BF',
+    marginLeft: 6,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  chipCountSelected: {
+    color: '#E7EEFF',
+  },
+});
