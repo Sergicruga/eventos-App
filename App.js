@@ -1,11 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { EventProvider } from './src/EventContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import AuthProvider from './src/context/AuthContext';
+import AuthProvider, { AuthContext } from './src/context/AuthContext';
 import * as Notifications from 'expo-notifications';
-import { requestNotificationPermission } from './src/utils/notifications';
+import {
+  registerPushTokenForUser,
+  requestNotificationPermission,
+} from './src/utils/notifications';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -16,13 +19,19 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export default function App() {
+function NotificationBootstrap() {
+  const { user } = useContext(AuthContext);
+
   useEffect(() => {
     let subscription;
 
     const initNotifications = async () => {
       try {
-        await requestNotificationPermission();
+        if (user?.id) {
+          await registerPushTokenForUser(user.id);
+        } else {
+          await requestNotificationPermission();
+        }
       } catch (error) {
         console.warn('Notification permission init failed:', error);
       }
@@ -43,11 +52,17 @@ export default function App() {
     return () => {
       subscription?.remove?.();
     };
-  }, []);
+  }, [user?.id]);
+
+  return null;
+}
+
+export default function App() {
 
   return (
     <SafeAreaProvider>
       <AuthProvider>
+        <NotificationBootstrap />
         <EventProvider>
           <NavigationContainer>
             <AppNavigator />

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
 import { Alert, Platform } from 'react-native';
 
+const EXPO_PROJECT_ID = 'ec7b6a65-2245-4b94-9f89-7183cae09276';
+
 export function usePushToken() {
   const [expoPushToken, setExpoPushToken] = useState('');
 
@@ -21,7 +23,9 @@ export function usePushToken() {
         }
         // Solo para physical device
         if (Platform.OS === 'android' || Platform.OS === 'ios') {
-          const tokenData = await Notifications.getExpoPushTokenAsync();
+          const tokenData = await Notifications.getExpoPushTokenAsync({
+            projectId: EXPO_PROJECT_ID,
+          });
           setExpoPushToken(tokenData.data);
         }
       } catch (e) {

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password TEXT, -- optional now, for migration
   photo TEXT,
+  expo_push_token TEXT,
   privacy_accepted_at TIMESTAMP,
   privacy_version TEXT
 );

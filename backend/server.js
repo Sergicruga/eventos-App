@@ -119,9 +119,16 @@ const pool = new Pool({
 
 pool
   .connect()
-  .then((c) => {
+  .then(async (c) => {
     console.log("✅ Conectado a PostgreSQL (Render)");
-    c.release();
+    try {
+      await c.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token TEXT");
+      console.log("✅ Columna users.expo_push_token lista");
+    } catch (err) {
+      console.warn("⚠️ No se pudo asegurar expo_push_token:", err.message);
+    } finally {
+      c.release();
+    }
   })
   .catch((err) => {
     console.error("❌ Error conectando a PostgreSQL:", err.message);
@@ -1531,6 +1538,32 @@ const updateProfileHandler = async (req, res) => {
 app.put("/users/:userId", updateProfileHandler);
 app.put("/users/:userId/profile", updateProfileHandler);
 
+// Guardar token push Expo del dispositivo para notificaciones remotas
+app.post("/users/:userId/push-token", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { expoPushToken } = req.body || {};
+
+    if (!isExpoPushToken(expoPushToken)) {
+      return res.status(400).json({ error: "expoPushToken inválido" });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE users
+       SET expo_push_token = $1
+       WHERE id = $2
+       RETURNING id`,
+      [expoPushToken, userId]
+    );
+
+    if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("POST /users/:userId/push-token ERROR:", e);
+    return res.status(500).json({ error: "No se pudo guardar el token push" });
+  }
+});
+
 /* ==== FOTO PERFIL ==== */
 
 // Configuración multer para fotos de perfil (reusa uploadsBaseDir)
@@ -1545,6 +1578,43 @@ const uploadProfile = multer({
   storage: profileStorage,
   limits: { fileSize: 4 * 1024 * 1024 },
 });
+
+const isExpoPushToken = (token) =>
+  typeof token === "string" &&
+  (/^ExponentPushToken\[[^\]]+\]$/.test(token) || /^ExpoPushToken\[[^\]]+\]$/.test(token));
+
+async function sendExpoPushNotification({ to, title, body, data = {} }) {
+  if (!isExpoPushToken(to)) return false;
+
+  try {
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to,
+        sound: "default",
+        title,
+        body,
+        data,
+      }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      console.warn("Expo push error:", response.status, payload);
+      return false;
+    }
+    console.log("Expo push enviado:", payload);
+    return true;
+  } catch (error) {
+    console.warn("No se pudo enviar Expo push:", error.message);
+    return false;
+  }
+}
 
 // Subir foto de perfil
 app.post("/users/:userId/photo", uploadProfile.single("photo"), async (req, res) => {
@@ -1673,15 +1743,47 @@ app.post("/friend-requests", async (req, res) => {
       return res.status(400).json({ error: "senderId/receiverId inválidos" });
     }
 
-    await pool.query(
+    const insertResult = await pool.query(
       `INSERT INTO friend_requests (sender_id, receiver_id)
        VALUES ($1, $2)
-       ON CONFLICT (sender_id, receiver_id) DO NOTHING`,
+       ON CONFLICT (sender_id, receiver_id) DO NOTHING
+       RETURNING id`,
       [senderId, receiverId]
     );
 
-    console.log("[friend-requests] solicitud creada", { senderId, receiverId });
-    return res.json({ success: true });
+    const createdRequestId = insertResult.rows[0]?.id || null;
+
+    if (createdRequestId) {
+      console.log("[friend-requests] solicitud creada", { senderId, receiverId });
+
+      const { rows } = await pool.query(
+        `SELECT
+           sender.name AS sender_name,
+           receiver.expo_push_token AS receiver_push_token
+         FROM users sender
+         CROSS JOIN users receiver
+         WHERE sender.id = $1 AND receiver.id = $2`,
+        [senderId, receiverId]
+      );
+
+      const notification = rows[0];
+      if (notification?.receiver_push_token) {
+        void sendExpoPushNotification({
+          to: notification.receiver_push_token,
+          title: "Nueva solicitud de amistad",
+          body: `${notification.sender_name || "Alguien"} quiere conectar contigo en GoPlan`,
+          data: {
+            type: "friend_request",
+            requestId: createdRequestId,
+            senderId,
+          },
+        });
+      }
+    } else {
+      console.log("[friend-requests] solicitud ya existente", { senderId, receiverId });
+    }
+
+    return res.json({ success: true, created: Boolean(createdRequestId) });
   } catch (e) {
     console.error("POST /friend-requests ERROR:", e);
     return res.status(500).json({ error: "Error creando solicitud" });

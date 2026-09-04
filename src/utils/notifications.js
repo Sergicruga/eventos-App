@@ -1,5 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import { API_URL } from '../config';
+
+const EXPO_PROJECT_ID = 'ec7b6a65-2245-4b94-9f89-7183cae09276';
 
 export async function requestNotificationPermission() {
   const { status, canAskAgain } = await Notifications.getPermissionsAsync();
@@ -62,4 +66,33 @@ export async function scheduleEventNotification(event) {
       date: notifyDate,
     },
   });
+}
+
+export async function registerPushTokenForUser(userId) {
+  if (!userId) return null;
+
+  const granted = await requestNotificationPermission();
+  if (!granted) return null;
+
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.DEFAULT,
+    });
+  }
+
+  const tokenData = await Notifications.getExpoPushTokenAsync({
+    projectId: EXPO_PROJECT_ID,
+  });
+  const expoPushToken = tokenData?.data;
+
+  if (!expoPushToken) return null;
+
+  await fetch(`${API_URL}/users/${userId}/push-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expoPushToken }),
+  });
+
+  return expoPushToken;
 }
