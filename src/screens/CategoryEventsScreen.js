@@ -211,54 +211,57 @@ export default function CategoryEventsScreen({ route }) {
         />
       </View>
       {subcategories.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={subcategoryStyles.scroll}
-          contentContainerStyle={subcategoryStyles.scrollContent}
-        >
-          {[{ slug: 'todos', name: 'Todos' }, ...subcategories].map((sub) => {
-            const selected = activeSubcategory === sub.slug;
-            const count = subcategoryCounts[sub.slug] || 0;
-            return (
-              <TouchableOpacity
-                key={sub.slug}
-                onPress={() => setActiveSubcategory(sub.slug)}
-                activeOpacity={0.85}
-                style={[
-                  subcategoryStyles.chip,
-                  selected && subcategoryStyles.chipSelected,
-                ]}
-              >
-                <Text
-                  numberOfLines={1}
+        <View style={subcategoryStyles.bar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={subcategoryStyles.scroll}
+            contentContainerStyle={subcategoryStyles.scrollContent}
+          >
+            {[{ slug: 'todos', name: 'Todos' }, ...subcategories].map((sub) => {
+              const selected = activeSubcategory === sub.slug;
+              const count = subcategoryCounts[sub.slug] || 0;
+              return (
+                <TouchableOpacity
+                  key={sub.slug}
+                  onPress={() => setActiveSubcategory(sub.slug)}
+                  activeOpacity={0.85}
                   style={[
-                    subcategoryStyles.chipText,
-                    selected && subcategoryStyles.chipTextSelected,
+                    subcategoryStyles.chip,
+                    selected && subcategoryStyles.chipSelected,
                   ]}
                 >
-                  {sub.name}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    subcategoryStyles.chipCount,
-                    selected && subcategoryStyles.chipCountSelected,
-                  ]}
-                >
-                  {count}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      subcategoryStyles.chipText,
+                      selected && subcategoryStyles.chipTextSelected,
+                    ]}
+                  >
+                    {sub.name}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      subcategoryStyles.chipCount,
+                      selected && subcategoryStyles.chipCountSelected,
+                    ]}
+                  >
+                    {count}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
       )}
       <FlatList
         data={deduped}
         keyExtractor={item => String(item.id)}
         renderItem={renderItem}
         numColumns={2}
-        contentContainerStyle={[styles.listContent, { alignItems: 'center' }]}
+        style={subcategoryStyles.list}
+        contentContainerStyle={[styles.listContent, subcategoryStyles.listContent]}
         columnWrapperStyle={{ justifyContent: 'center' }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
@@ -275,13 +278,30 @@ export default function CategoryEventsScreen({ route }) {
 }
 
 const subcategoryStyles = StyleSheet.create({
+  bar: {
+    height: 52,
+    justifyContent: 'center',
+    marginBottom: 14,
+    backgroundColor: '#f3f6fc',
+    zIndex: 5,
+    elevation: 5,
+  },
   scroll: {
+    height: 44,
     flexGrow: 0,
-    marginBottom: 8,
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 6,
+    alignItems: 'center',
+  },
+  list: {
+    flex: 1,
+    zIndex: 0,
+    elevation: 0,
+  },
+  listContent: {
+    alignItems: 'center',
+    paddingTop: 4,
   },
   chip: {
     flexDirection: 'row',
