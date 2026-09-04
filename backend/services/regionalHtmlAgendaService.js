@@ -152,6 +152,8 @@ const parseClmEvents = (html, baseUrl) => {
         purchaseUrl: url,
         category_slug: category.slug,
         category_name: category.name,
+    subcategory_slug: category.subcategory_slug || null,
+    subcategory_name: category.subcategory_name || null,
         genre: category.name,
       };
     })
@@ -196,6 +198,8 @@ const parsePamplonaEvents = (html, baseUrl) => {
         purchaseUrl: url,
         category_slug: category.slug,
         category_name: category.name,
+    subcategory_slug: category.subcategory_slug || null,
+    subcategory_name: category.subcategory_name || null,
         genre: category.name,
       };
     })
@@ -243,6 +247,8 @@ const parseRiojaEvents = (html, baseUrl) => {
         purchaseUrl: url,
         category_slug: category.slug,
         category_name: category.name,
+    subcategory_slug: category.subcategory_slug || null,
+    subcategory_name: category.subcategory_name || null,
         genre: category.name,
       };
     })
@@ -332,3 +338,4 @@ export {
   warmPamplonaAgendaCache,
   warmRiojaTeatrosCache,
 };
+

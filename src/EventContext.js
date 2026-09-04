@@ -528,6 +528,8 @@ export function EventProvider({ children }) {
       date: ev.date ?? '',
       category_slug: ev.category_slug ?? null,
       category_name: ev.category_name ?? null,
+      subcategory_slug: ev.subcategory_slug ?? null,
+      subcategory_name: ev.subcategory_name ?? null,
       latitude: ev.latitude != null ? Number(ev.latitude) : null,
       longitude: ev.longitude != null ? Number(ev.longitude) : null,
       image: ev.image ?? null,
@@ -635,6 +637,8 @@ export function EventProvider({ children }) {
             city: ev.city || null,
             category_slug: ev.category_slug || null,  // ← ADD THIS
             category_name: ev.category_name || null,  // ← ADD THIS
+            subcategory_slug: ev.subcategory_slug || null,
+            subcategory_name: ev.subcategory_name || null,
             image:
               ev.image && String(ev.image).trim() !== ''
                 ? ev.image
@@ -862,6 +866,8 @@ export function EventProvider({ children }) {
       event_at: ev.date ?? '',
       location: ev.location ?? '',
       type: ev.type || 'local',
+      subcategory_slug: ev.subcategory_slug || null,
+      subcategory_name: ev.subcategory_name || null,
       latitude: ev.latitude ?? null,
       longitude: ev.longitude ?? null,
     };
@@ -941,6 +947,8 @@ export function EventProvider({ children }) {
         starts_at: event.startsAt ?? null,
         location: event.location ?? '',
         type: event.type || 'local',
+        subcategory_slug: event.subcategory_slug || null,
+        subcategory_name: event.subcategory_name || null,
         image:
           event.image &&
           !isLocalUri(event.image) &&
@@ -1015,6 +1023,8 @@ export function EventProvider({ children }) {
         type: saved.type || 'local',
         category_slug: saved.category_slug ?? null,
         category_name: saved.category_name ?? null,
+        subcategory_slug: saved.subcategory_slug ?? event.subcategory_slug ?? null,
+        subcategory_name: saved.subcategory_name ?? event.subcategory_name ?? null,
         image:
           (saved.image &&
           String(saved.image).trim() !== ''
@@ -1123,6 +1133,8 @@ export function EventProvider({ children }) {
             null,
           category_slug: json?.category_slug ?? prevEv.category_slug ?? null,
           category_name: json?.category_name ?? prevEv.category_name ?? null,
+          subcategory_slug: json?.subcategory_slug ?? prevEv.subcategory_slug ?? null,
+          subcategory_name: json?.subcategory_name ?? prevEv.subcategory_name ?? null,
         };
 
         const next = [...prev];

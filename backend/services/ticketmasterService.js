@@ -160,6 +160,8 @@ function formatTicketmasterEvents(events) {
       purchaseUrl: eventUrl,
       category_slug: category.slug,
       category_name: category.name,
+    subcategory_slug: category.subcategory_slug || null,
+    subcategory_name: category.subcategory_name || null,
       genre,
     };
   });
@@ -171,3 +173,4 @@ export {
   fetchMusicEventsMultipleCities,
   formatTicketmasterEvents,
 };
+

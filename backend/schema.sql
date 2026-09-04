@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS events (
   location TEXT,
   type TEXT,
   category_id INTEGER REFERENCES event_categories(id) ON DELETE SET NULL,
+  subcategory_slug TEXT,
+  subcategory_name TEXT,
   image TEXT,
   latitude FLOAT,
   longitude FLOAT,

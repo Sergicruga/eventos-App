@@ -122,6 +122,8 @@ const formatValencianaIvcEvent = (item) => {
     purchaseUrl: url,
     category_slug: category.slug,
     category_name: category.name,
+    subcategory_slug: category.subcategory_slug || null,
+    subcategory_name: category.subcategory_name || null,
     genre: category.name,
     price: /grat/i.test(String(item.precio || "")) ? 0 : null,
     currency: "EUR",
@@ -185,3 +187,4 @@ export {
   formatValencianaIvcEvent,
   warmValencianaIvcCache,
 };
+

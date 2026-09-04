@@ -147,6 +147,8 @@ const formatMadridEvent = (item) => {
     purchaseUrl: url,
     category_slug: category.slug,
     category_name: category.name,
+    subcategory_slug: category.subcategory_slug || null,
+    subcategory_name: category.subcategory_name || null,
     genre: category.name,
     price: item.free === 1 || item.free === "1" || item.free === true ? 0 : null,
     currency: "EUR",
@@ -209,3 +211,4 @@ export {
   formatMadridEvent,
   warmMadridOpenDataCache,
 };
+

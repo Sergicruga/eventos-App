@@ -3,15 +3,140 @@
  * These should match the database event_categories table
  */
 export const EVENT_CATEGORIES = [
-  { id: 'musica', slug: 'musica', name: 'Música', label: 'Música', icon: 'musical-notes', color: '#FF6B6B' },
-  { id: 'deportes', slug: 'deportes', name: 'Deportes', label: 'Deportes', icon: 'football', color: '#4ECDC4' },
-  { id: 'arte', slug: 'arte', name: 'Arte', label: 'Arte', icon: 'brush', color: '#FFE66D' },
-  { id: 'tecnologia', slug: 'tecnologia', name: 'Tecnología', label: 'Tecnología', icon: 'laptop', color: '#95E1D3' },
-  { id: 'educacion', slug: 'educacion', name: 'Educación', label: 'Educación', icon: 'school', color: '#A8E6CF' },
-  { id: 'gastronomia', slug: 'gastronomia', name: 'Gastronomía', label: 'Gastronomía', icon: 'restaurant', color: '#FF8C94' },
-  { id: 'cine', slug: 'cine', name: 'Cine', label: 'Cine', icon: 'film', color: '#A29BFE' },
-  { id: 'otro', slug: 'otro', name: 'Otro', label: 'Otro', icon: 'star', color: '#DDA0DD' },
+  {
+    id: 'musica',
+    slug: 'musica',
+    name: 'Música',
+    label: 'Música',
+    icon: 'musical-notes',
+    color: '#FF6B6B',
+    subcategories: [
+      { slug: 'conciertos', name: 'Conciertos' },
+      { slug: 'festivales', name: 'Festivales' },
+      { slug: 'dj-electronica', name: 'DJ / electrónica' },
+      { slug: 'flamenco', name: 'Flamenco' },
+      { slug: 'jazz-blues', name: 'Jazz / blues' },
+      { slug: 'clasica-opera', name: 'Clásica / ópera' },
+      { slug: 'musica-otros', name: 'Otros música' },
+    ],
+  },
+  {
+    id: 'deportes',
+    slug: 'deportes',
+    name: 'Deportes',
+    label: 'Deportes',
+    icon: 'football',
+    color: '#4ECDC4',
+    subcategories: [
+      { slug: 'futbol', name: 'Fútbol' },
+      { slug: 'running', name: 'Running / carreras' },
+      { slug: 'fitness-yoga', name: 'Fitness / yoga' },
+      { slug: 'senderismo', name: 'Senderismo' },
+      { slug: 'motor', name: 'Motor' },
+      { slug: 'baloncesto', name: 'Baloncesto' },
+      { slug: 'deportes-otros', name: 'Otros deportes' },
+    ],
+  },
+  {
+    id: 'arte',
+    slug: 'arte',
+    name: 'Arte',
+    label: 'Arte',
+    icon: 'brush',
+    color: '#FFE66D',
+    subcategories: [
+      { slug: 'teatro', name: 'Teatro' },
+      { slug: 'exposiciones', name: 'Exposiciones' },
+      { slug: 'danza', name: 'Danza' },
+      { slug: 'circo', name: 'Circo' },
+      { slug: 'comedia-monologos', name: 'Comedia / monólogos' },
+      { slug: 'museos-visitas', name: 'Museos / visitas' },
+      { slug: 'arte-otros', name: 'Otros arte' },
+    ],
+  },
+  {
+    id: 'tecnologia',
+    slug: 'tecnologia',
+    name: 'Tecnología',
+    label: 'Tecnología',
+    icon: 'laptop',
+    color: '#95E1D3',
+    subcategories: [
+      { slug: 'gaming', name: 'Gaming' },
+      { slug: 'startups', name: 'Startups' },
+      { slug: 'ia-software', name: 'IA / software' },
+      { slug: 'robotica', name: 'Robótica' },
+      { slug: 'tecnologia-otros', name: 'Otros tecnología' },
+    ],
+  },
+  {
+    id: 'educacion',
+    slug: 'educacion',
+    name: 'Educación',
+    label: 'Educación',
+    icon: 'school',
+    color: '#A8E6CF',
+    subcategories: [
+      { slug: 'talleres', name: 'Talleres' },
+      { slug: 'charlas', name: 'Charlas' },
+      { slug: 'cursos', name: 'Cursos' },
+      { slug: 'infantil-familiar', name: 'Infantil / familiar' },
+      { slug: 'educacion-otros', name: 'Otros educación' },
+    ],
+  },
+  {
+    id: 'gastronomia',
+    slug: 'gastronomia',
+    name: 'Gastronomía',
+    label: 'Gastronomía',
+    icon: 'restaurant',
+    color: '#FF8C94',
+    subcategories: [
+      { slug: 'ferias-gastronomicas', name: 'Ferias gastronómicas' },
+      { slug: 'catas', name: 'Catas' },
+      { slug: 'mercados', name: 'Mercados' },
+      { slug: 'talleres-cocina', name: 'Talleres de cocina' },
+      { slug: 'gastronomia-otros', name: 'Otros gastronomía' },
+    ],
+  },
+  {
+    id: 'cine',
+    slug: 'cine',
+    name: 'Cine',
+    label: 'Cine',
+    icon: 'film',
+    color: '#A29BFE',
+    subcategories: [
+      { slug: 'peliculas', name: 'Películas' },
+      { slug: 'documentales', name: 'Documentales' },
+      { slug: 'ciclos-proyecciones', name: 'Ciclos / proyecciones' },
+      { slug: 'cine-otros', name: 'Otros cine' },
+    ],
+  },
+  {
+    id: 'otro',
+    slug: 'otro',
+    name: 'Otro',
+    label: 'Otro',
+    icon: 'star',
+    color: '#DDA0DD',
+    subcategories: [
+      { slug: 'fiestas-populares', name: 'Fiestas populares' },
+      { slug: 'ferias', name: 'Ferias' },
+      { slug: 'mercadillos', name: 'Mercadillos' },
+      { slug: 'familia', name: 'Familia' },
+      { slug: 'otros', name: 'Otros' },
+    ],
+  },
 ];
+
+export const EVENT_SUBCATEGORIES = EVENT_CATEGORIES.flatMap((category) =>
+  (category.subcategories || []).map((subcategory) => ({
+    ...subcategory,
+    categorySlug: category.slug,
+    categoryName: category.name,
+  }))
+);
 
 export const findCategoryBySlug = (slug) => {
   if (!slug) return null;
@@ -109,4 +234,25 @@ export const eventMatchesCategory = (event, categorySlug) => {
   }
 
   return false;
+};
+
+export const getSubcategoriesForCategory = (categorySlug) =>
+  findCategoryBySlug(categorySlug)?.subcategories || [];
+
+export const findSubcategoryBySlug = (slug) => {
+  if (!slug) return null;
+
+  const normalized = String(slug).toLowerCase().trim();
+  return EVENT_SUBCATEGORIES.find((sub) => sub.slug === normalized) || null;
+};
+
+export const eventMatchesSubcategory = (event, subcategorySlug) => {
+  if (!event || !subcategorySlug || subcategorySlug === 'todos') return true;
+
+  const wanted = String(subcategorySlug).toLowerCase().trim();
+  return (
+    String(event.subcategory_slug || event.subcategorySlug || '')
+      .toLowerCase()
+      .trim() === wanted
+  );
 };

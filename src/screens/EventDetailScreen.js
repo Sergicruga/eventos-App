@@ -714,6 +714,12 @@ export default function EventDetailScreen({ route, navigation }) {
                 <Text style={styles.typeTagText}>{getCategoryDisplayName(current)}</Text>
               </View>
             )}
+            {current.subcategory_name && (
+              <View style={[styles.typeTag, { marginTop: 6 }]}>
+                <Ionicons name="albums-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.typeTagText}>{current.subcategory_name}</Text>
+              </View>
+            )}
             {current?.source && (
               <View style={[styles.typeTag, { marginTop: 6 }]}>
                 <Ionicons name="link-outline" size={16} color={COLORS.primary} />

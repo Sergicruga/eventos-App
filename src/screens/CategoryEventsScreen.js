@@ -7,6 +7,7 @@ import {
   TextInput,
   ActivityIndicator,
   Dimensions,
+  ScrollView,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventContext } from '../EventContext';
@@ -15,7 +16,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
 import { AuthContext } from '../context/AuthContext';
 import { Image as ExpoImage } from 'expo-image';
-import { EVENT_CATEGORIES, eventMatchesCategory, findCategoryBySlug } from '../constants/categories';
+import {
+  EVENT_CATEGORIES,
+  eventMatchesCategory,
+  eventMatchesSubcategory,
+  findCategoryBySlug,
+  getSubcategoriesForCategory,
+} from '../constants/categories';
 import { isUpcoming, formatDateDMY } from '../utils/dateHelpers';
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
@@ -103,6 +110,7 @@ export default function CategoryEventsScreen({ route }) {
   } = eventCtx;
   const { user } = useContext(AuthContext);
   const [search, setSearch] = useState('');
+  const [activeSubcategory, setActiveSubcategory] = useState('todos');
   const [location, setLocation] = useState(null);
   const navigation = useNavigation();
   const myUserId = user?.id != null ? String(user.id) : null;
@@ -121,13 +129,28 @@ export default function CategoryEventsScreen({ route }) {
       .filter(ev => eventMatchesCategory(ev, activeSlug));
   }, [locationFilteredEvents, activeSlug, myUserId, favorites]);
 
+  const subcategories = useMemo(() => getSubcategoriesForCategory(activeSlug), [activeSlug]);
+
+  const subcategoryCounts = useMemo(() => {
+    const counts = { todos: categoryEvents.length };
+    subcategories.forEach((sub) => {
+      counts[sub.slug] = categoryEvents.filter((event) =>
+        eventMatchesSubcategory(event, sub.slug)
+      ).length;
+    });
+    return counts;
+  }, [categoryEvents, subcategories]);
+
   // Filter by search
   const filteredEvents = useMemo(() => {
-    return categoryEvents.filter(e =>
-      (e.title || '').toLowerCase().includes(search.toLowerCase()) ||
-      (e.location || '').toLowerCase().includes(search.toLowerCase())
-    );
-  }, [categoryEvents, search]);
+    return categoryEvents
+      .filter(e => eventMatchesSubcategory(e, activeSubcategory))
+      .filter(e =>
+        (e.title || '').toLowerCase().includes(search.toLowerCase()) ||
+        (e.location || '').toLowerCase().includes(search.toLowerCase()) ||
+        (e.subcategory_name || '').toLowerCase().includes(search.toLowerCase())
+      );
+  }, [categoryEvents, search, activeSubcategory]);
 
   // Remove duplicates; for API / Ticketmaster events we collapse
   // variants (VIP, GA, etc.) by normalizing their title so only the first
@@ -190,6 +213,42 @@ export default function CategoryEventsScreen({ route }) {
           onChangeText={setSearch}
         />
       </View>
+      {subcategories.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 10, gap: 8 }}
+        >
+          {[{ slug: 'todos', name: 'Todos' }, ...subcategories].map((sub) => {
+            const selected = activeSubcategory === sub.slug;
+            const count = subcategoryCounts[sub.slug] || 0;
+            return (
+              <TouchableOpacity
+                key={sub.slug}
+                onPress={() => setActiveSubcategory(sub.slug)}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                  borderRadius: 999,
+                  backgroundColor: selected ? '#3B5BA9' : '#fff',
+                  borderWidth: 1,
+                  borderColor: selected ? '#3B5BA9' : '#D8E0F0',
+                }}
+              >
+                <Text style={{ color: selected ? '#fff' : '#27496D', fontWeight: '700' }}>
+                  {sub.name}
+                </Text>
+                <Text style={{ color: selected ? '#E7EEFF' : '#8AA0BF', marginLeft: 6 }}>
+                  {count}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
       <FlatList
         data={deduped}
         keyExtractor={item => String(item.id)}

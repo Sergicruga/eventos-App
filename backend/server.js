@@ -123,9 +123,11 @@ pool
     console.log("✅ Conectado a PostgreSQL (Render)");
     try {
       await c.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token TEXT");
+      await c.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS subcategory_slug TEXT");
+      await c.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS subcategory_name TEXT");
       console.log("✅ Columna users.expo_push_token lista");
     } catch (err) {
-      console.warn("⚠️ No se pudo asegurar expo_push_token:", err.message);
+      console.warn("⚠️ No se pudo asegurar migraciones automáticas:", err.message);
     } finally {
       c.release();
     }
@@ -820,6 +822,7 @@ app.get("/events", async (req, res) => {
       if (!userId) {
         const { rows } = await pool.query(
           `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+                  e.subcategory_slug, e.subcategory_name,
                   e.latitude, e.longitude, e.created_by, e.category_id,
                   ec.slug as category_slug, ec.name as category_name
              FROM events e
@@ -1222,6 +1225,8 @@ app.post("/events", async (req, res) => {
       latitude,
       longitude,
       created_by,
+      subcategory_slug,
+      subcategory_name,
     } = req.body;
 
     const DEFAULT_EVENT_IMAGE = "/assets/iconoApp.png";
@@ -1249,9 +1254,9 @@ app.post("/events", async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      `INSERT INTO events (title, description, event_at, location, type, category_id, image, latitude, longitude, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       RETURNING id, title, description, event_at, location, type, category_id, image, latitude, longitude, created_by`,
+      `INSERT INTO events (title, description, event_at, location, type, category_id, subcategory_slug, subcategory_name, image, latitude, longitude, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       RETURNING id, title, description, event_at, location, type, category_id, subcategory_slug, subcategory_name, image, latitude, longitude, created_by`,
       [
         title,
         description,
@@ -1259,6 +1264,8 @@ app.post("/events", async (req, res) => {
         location,
         type,
         categoryId,
+        subcategory_slug || null,
+        subcategory_name || null,
         image,
         latitude,
         longitude,
@@ -1353,6 +1360,8 @@ app.patch("/events/:eventId", async (req, res) => {
     image,
     latitude,
     longitude,
+    subcategory_slug,
+    subcategory_name,
   } = req.body || {};
 
   const set = [];
@@ -1380,6 +1389,8 @@ app.patch("/events/:eventId", async (req, res) => {
   pushIfDefined("image", image);
   pushIfDefined("latitude", latitude);
   pushIfDefined("longitude", longitude);
+  pushIfDefined("subcategory_slug", subcategory_slug);
+  pushIfDefined("subcategory_name", subcategory_name);
 
   if (set.length === 0) {
     return res.status(400).json({ error: "No hay campos para actualizar" });
@@ -1407,7 +1418,7 @@ app.patch("/events/:eventId", async (req, res) => {
       UPDATE events
          SET ${set.join(", ")}
        WHERE id = $${i}
-       RETURNING id, title, description, event_at, location, type, category_id, image, latitude, longitude, created_by
+       RETURNING id, title, description, event_at, location, type, category_id, subcategory_slug, subcategory_name, image, latitude, longitude, created_by
       `,
       values
     );
@@ -1877,7 +1888,7 @@ app.delete("/friend-requests/:requestId", async (req, res) => {
 app.get("/users/:userId/events-created", async (req, res) => {
   const { userId } = req.params;
   const { rows } = await pool.query(
-    `SELECT id, title, description, event_at, location, type, image, latitude, longitude
+    `SELECT id, title, description, event_at, location, type, subcategory_slug, subcategory_name, image, latitude, longitude
        FROM events
       WHERE created_by = $1
       ORDER BY event_at DESC`,
@@ -1890,7 +1901,7 @@ app.get("/users/:userId/events-created", async (req, res) => {
 app.get("/users/:friendId/events", async (req, res) => {
   const { friendId } = req.params;
   const { rows } = await pool.query(
-    `SELECT id, title, description, event_at, location, type, image
+    `SELECT id, title, description, event_at, location, type, subcategory_slug, subcategory_name, image
        FROM events
       WHERE created_by = $1
       ORDER BY event_at DESC`,
@@ -1904,7 +1915,7 @@ app.get("/users/:userId/events-attending", async (req, res) => {
   const { userId } = req.params;
   try {
     const { rows } = await pool.query(
-      `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+      `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.subcategory_slug, e.subcategory_name, e.image,
               e.latitude, e.longitude
          FROM event_attendees ea
          JOIN events e ON e.id = ea.event_id
@@ -1964,7 +1975,7 @@ app.get("/users/:userId/favorites", async (req, res) => {
 app.get("/users/:userId/favorites/events", async (req, res) => {
   const { userId } = req.params;
   const result = await pool.query(
-    `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+    `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.subcategory_slug, e.subcategory_name, e.image,
             e.latitude, e.longitude
        FROM event_favorites f
        JOIN events e ON e.id = f.event_id
