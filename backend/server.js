@@ -1556,6 +1556,7 @@ app.post("/users/:userId/push-token", async (req, res) => {
     const { expoPushToken } = req.body || {};
 
     if (!isExpoPushToken(expoPushToken)) {
+      console.warn("[push-token] token inválido", { userId, expoPushToken });
       return res.status(400).json({ error: "expoPushToken inválido" });
     }
 
@@ -1568,10 +1569,36 @@ app.post("/users/:userId/push-token", async (req, res) => {
     );
 
     if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+    console.log("[push-token] guardado", {
+      userId,
+      tokenPrefix: expoPushToken.slice(0, 24),
+    });
     return res.json({ success: true });
   } catch (e) {
     console.error("POST /users/:userId/push-token ERROR:", e);
     return res.status(500).json({ error: "No se pudo guardar el token push" });
+  }
+});
+
+// Diagnóstico: permite comprobar si un usuario ya tiene token push guardado sin exponerlo completo
+app.get("/users/:userId/push-token/status", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT expo_push_token FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+
+    const token = rows[0].expo_push_token;
+    return res.json({
+      hasToken: isExpoPushToken(token),
+      tokenPrefix: token ? String(token).slice(0, 24) : null,
+    });
+  } catch (e) {
+    console.error("GET /users/:userId/push-token/status ERROR:", e);
+    return res.status(500).json({ error: "No se pudo consultar el token push" });
   }
 });
 
@@ -1764,6 +1791,8 @@ app.post("/friend-requests", async (req, res) => {
 
     const createdRequestId = insertResult.rows[0]?.id || null;
 
+    let pushStatus = "not_created";
+
     if (createdRequestId) {
       console.log("[friend-requests] solicitud creada", { senderId, receiverId });
 
@@ -1779,7 +1808,7 @@ app.post("/friend-requests", async (req, res) => {
 
       const notification = rows[0];
       if (notification?.receiver_push_token) {
-        void sendExpoPushNotification({
+        const pushSent = await sendExpoPushNotification({
           to: notification.receiver_push_token,
           title: "Nueva solicitud de amistad",
           body: `${notification.sender_name || "Alguien"} quiere conectar contigo en GoPlan`,
@@ -1789,12 +1818,17 @@ app.post("/friend-requests", async (req, res) => {
             senderId,
           },
         });
+        pushStatus = pushSent ? "sent" : "failed";
+      } else {
+        pushStatus = "receiver_without_token";
+        console.warn("[friend-requests] receptor sin token push", { receiverId });
       }
     } else {
+      pushStatus = "already_exists";
       console.log("[friend-requests] solicitud ya existente", { senderId, receiverId });
     }
 
-    return res.json({ success: true, created: Boolean(createdRequestId) });
+    return res.json({ success: true, created: Boolean(createdRequestId), pushStatus });
   } catch (e) {
     console.error("POST /friend-requests ERROR:", e);
     return res.status(500).json({ error: "Error creando solicitud" });

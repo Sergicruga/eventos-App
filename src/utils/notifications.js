@@ -77,7 +77,9 @@ export async function registerPushTokenForUser(userId) {
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
-      importance: Notifications.AndroidImportance.DEFAULT,
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#3B5BA9',
     });
   }
 
@@ -88,11 +90,19 @@ export async function registerPushTokenForUser(userId) {
 
   if (!expoPushToken) return null;
 
-  await fetch(`${API_URL}/users/${userId}/push-token`, {
+  const response = await fetch(`${API_URL}/users/${userId}/push-token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ expoPushToken }),
   });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    console.warn('No se pudo guardar el token push:', response.status, text);
+    return null;
+  }
+
+  console.log('Expo push token registrado para usuario', userId);
 
   return expoPushToken;
 }
