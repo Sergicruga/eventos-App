@@ -352,13 +352,13 @@ export default function FriendsScreen() {
       {loadingRequests ? (
         <ActivityIndicator style={{ marginVertical: 12 }} />
       ) : friendRequests.length > 0 ? (
-        <FlatList
-          data={friendRequests}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderFriendRequest}
-          style={{ marginHorizontal: 16 }}
-          contentContainerStyle={{ paddingBottom: 6 }}
-        />
+        <View style={styles.requestList}>
+          {friendRequests.map((request) => (
+            <React.Fragment key={String(request.id)}>
+              {renderFriendRequest({ item: request })}
+            </React.Fragment>
+          ))}
+        </View>
       ) : (
         <Text style={styles.emptyText}>No tienes solicitudes pendientes.</Text>
       )}
@@ -605,6 +605,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.02,
     shadowRadius: 6,
     elevation: 1,
+  },
+  requestList: {
+    marginHorizontal: 16,
   },
   requestAvatar: {
     width: 48,
