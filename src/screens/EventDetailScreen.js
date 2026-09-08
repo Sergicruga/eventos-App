@@ -1,7 +1,7 @@
 // src/screens/EventDetailScreen.js
 import React, { useContext, useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, Image, StyleSheet, Alert, Linking, ScrollView, TouchableOpacity,
+  View, Text, Image, StyleSheet, Alert, Linking, Share, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Platform, KeyboardAvoidingView, Dimensions,
 } from 'react-native';
 import { EventContext } from '../EventContext';
@@ -261,7 +261,17 @@ const getCommentAvatar = (c) => {
 // ======================================
 
 export default function EventDetailScreen({ route, navigation }) {
-  const { event } = route.params;
+  const event = route?.params?.event || {
+    id: route?.params?.eventId,
+    title: route?.params?.title || '',
+    description: route?.params?.description || '',
+    date: route?.params?.date || '',
+    location: route?.params?.location || '',
+    image: route?.params?.image || null,
+    type: route?.params?.type || 'local',
+    source: route?.params?.source || null,
+    externalId: route?.params?.externalId || null,
+  };
   const {
     events, favorites, toggleFavorite, joinEvent, leaveEvent, deleteEvent,
     getEventImageSource, getEffectiveEventImage
@@ -381,6 +391,27 @@ export default function EventDetailScreen({ route, navigation }) {
 
   const buyUrl = computedBuyUrl || stableBuyUrlRef.current;
   const isNumericIdLocal = (v) => typeof v === 'number' || (/^\d+$/.test(String(v ?? '')));
+
+  const shareUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    const shareFields = {
+      title: current?.title,
+      description: current?.description,
+      date: current?.date,
+      location: current?.location,
+      image: current?.image,
+      type: current?.type,
+      source: current?.source,
+      externalId: current?.externalId ?? current?.external_id,
+    };
+
+    Object.entries(shareFields).forEach(([key, value]) => {
+      if (value != null && String(value).trim()) params.set(key, String(value));
+    });
+
+    const query = params.toString();
+    return `goplan://event/${encodeURIComponent(String(current?.id ?? ''))}${query ? `?${query}` : ''}`;
+  }, [current]);
 
   const buildEventUrl = useCallback((subpath = '', extraParams = {}) => {
     const base = `${API_URL}/events/${current.id}${subpath}`;
@@ -639,6 +670,27 @@ export default function EventDetailScreen({ route, navigation }) {
     return null;
   }, [current?.timeStart, current?.time_start, current?.startsAt, current?.starts_at, current?.date, route?.params?.event]);
 
+  const handleShare = useCallback(async () => {
+    if (!current?.id) return;
+
+    const details = [
+      current.title,
+      dateLabel,
+      startTimeLabel ? `${startTimeLabel} h` : null,
+      current.location,
+    ].filter(Boolean).join(' · ');
+
+    try {
+      await Share.share({
+        title: current.title || 'Evento en GoPlan',
+        message: `${details}\n\nAbre este evento en GoPlan:\n${shareUrl}`,
+        url: shareUrl,
+      });
+    } catch (error) {
+      if (error?.message) Alert.alert('No se pudo compartir', error.message);
+    }
+  }, [current, dateLabel, startTimeLabel, shareUrl]);
+
   return (
     <LinearGradient
       colors={['#f8fafc', '#e0e7ef', '#f5e8e4']}
@@ -683,6 +735,16 @@ export default function EventDetailScreen({ route, navigation }) {
                 size={28}
                 color={COLORS.primary}
               />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleShare}
+              style={styles.shareBtn}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              accessibilityLabel="Compartir evento"
+              activeOpacity={0.85}
+            >
+              <Ionicons name="share-outline" size={26} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
 
@@ -1034,6 +1096,24 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 20,
     padding: 6,
+    ...Platform.select({
+      android: { elevation: 3 },
+      ios: {
+        shadowColor: COLORS.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.16,
+        shadowRadius: 6,
+      },
+    }),
+  },
+  shareBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 62,
+    zIndex: 10,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 7,
     ...Platform.select({
       android: { elevation: 3 },
       ios: {

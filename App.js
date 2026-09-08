@@ -1,5 +1,6 @@
 import React, { useContext, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
 import AppNavigator from './src/navigation/AppNavigator';
 import { EventProvider } from './src/EventContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -59,12 +60,21 @@ function NotificationBootstrap() {
 
 export default function App() {
 
+  const linking = {
+    prefixes: [Linking.createURL('/'), 'goplan://'],
+    config: {
+      screens: {
+        EventDetail: 'event/:eventId',
+      },
+    },
+  };
+
   return (
     <SafeAreaProvider>
       <AuthProvider>
         <NotificationBootstrap />
         <EventProvider>
-          <NavigationContainer>
+          <NavigationContainer linking={linking}>
             <AppNavigator />
           </NavigationContainer>
         </EventProvider>
