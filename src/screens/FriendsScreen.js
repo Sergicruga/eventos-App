@@ -173,15 +173,28 @@ export default function FriendsScreen() {
   // Send friend request
   const sendFriendRequest = async (friendId) => {
     try {
-      await fetch(`${API_URL}/friend-requests`, {
+      const res = await fetch(`${API_URL}/friend-requests`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ senderId: user.id, receiverId: friendId }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || "No se pudo enviar la solicitud.");
+      }
       setQuery("");
       setSearchResults([]);
       Keyboard.dismiss();
-      alert("¡Solicitud enviada!");
+
+      if (data.pushStatus === "receiver_without_token") {
+        alert("Solicitud enviada. La otra persona aún no tiene notificaciones activadas en este dispositivo.");
+      } else if (data.pushStatus === "failed") {
+        alert("Solicitud enviada, pero la notificación push ha fallado. Revisa los logs de Render.");
+      } else if (data.pushStatus === "already_exists") {
+        alert("Ya había una solicitud pendiente para esta persona.");
+      } else {
+        alert("¡Solicitud enviada!");
+      }
     } catch (e) {
       alert("No se pudo enviar la solicitud.");
     }

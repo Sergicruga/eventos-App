@@ -1602,6 +1602,43 @@ app.get("/users/:userId/push-token/status", async (req, res) => {
   }
 });
 
+// Diagnóstico: enviar una push de prueba al usuario indicado
+app.post("/users/:userId/push-token/test", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT expo_push_token FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+
+    const token = rows[0].expo_push_token;
+    if (!isExpoPushToken(token)) {
+      return res.status(400).json({
+        success: false,
+        pushStatus: "user_without_token",
+        error: "El usuario no tiene token push válido guardado",
+      });
+    }
+
+    const sent = await sendExpoPushNotification({
+      to: token,
+      title: "Prueba de notificación",
+      body: "Si ves esto, las push de GoPlan funcionan en este dispositivo.",
+      data: { type: "push_test" },
+    });
+
+    return res.json({
+      success: sent,
+      pushStatus: sent ? "sent" : "failed",
+    });
+  } catch (e) {
+    console.error("POST /users/:userId/push-token/test ERROR:", e);
+    return res.status(500).json({ error: "No se pudo enviar la push de prueba" });
+  }
+});
+
 /* ==== FOTO PERFIL ==== */
 
 // Configuración multer para fotos de perfil (reusa uploadsBaseDir)
