@@ -106,11 +106,17 @@ const buildAbsolutePhoto = (photoPath) => {
   if (!photoPath || typeof photoPath !== 'string') return null;
   const trimmed = photoPath.trim();
   if (!trimmed) return null;
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+  if (/^(data:image\/|file:\/\/)/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^https?:\/\//i.test(trimmed)) {
     return toHttps(trimmed);
   }
-  return `${API_URL}${trimmed}`;
+  return `${API_URL}${trimmed.startsWith('/') ? '' : '/'}${trimmed}`;
 };
+
+const isRenderableImageUri = (s) =>
+  typeof s === 'string' && /^(https?:\/\/|data:image\/|file:\/\/)/i.test(s.trim());
 
 const getAttendeeAvatar = (att) => {
   if (!att) return null;
@@ -118,7 +124,7 @@ const getAttendeeAvatar = (att) => {
   // 1) Campo "photo" (como en usuarios)
   if (att.photo) {
     const abs = buildAbsolutePhoto(att.photo);
-    if (abs && isHttpUrl(abs)) return abs;
+    if (isRenderableImageUri(abs)) return abs;
   }
 
   // 2) Otros campos típicos
@@ -138,7 +144,7 @@ const getAttendeeAvatar = (att) => {
     if (typeof v === 'string' && v.trim()) {
       const candidate = buildAbsolutePhoto(v.trim()) || v.trim();
       const clean = toHttps(candidate);
-      if (isHttpUrl(clean)) return clean;
+      if (isRenderableImageUri(clean)) return clean;
     }
   }
 
@@ -168,6 +174,37 @@ const getInitials = (raw) => {
     return parts[0].slice(0, 2).toUpperCase();
   }
   return (parts[0][0] + parts[1][0]).toUpperCase();
+};
+
+const PersonAvatar = ({
+  uri,
+  initials,
+  imageStyle,
+  fallbackStyle,
+  initialsStyle,
+}) => {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [uri]);
+
+  if (uri && !failed) {
+    return (
+      <Image
+        source={{ uri }}
+        style={imageStyle}
+        resizeMode="cover"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <View style={fallbackStyle}>
+      <Text style={initialsStyle}>{initials}</Text>
+    </View>
+  );
 };
 
 const getAttendeeUserId = (att) => {
@@ -203,13 +240,20 @@ const getCommentAvatar = (c) => {
   if (!c) return null;
 
   // 1) photo (mismo campo que users)
-  if (c.photo) return buildAbsolutePhoto(c.photo);
+  if (c.photo) {
+    const abs = buildAbsolutePhoto(c.photo);
+    if (isRenderableImageUri(abs)) return abs;
+  }
 
   // 2) típicos
   const keys = ['avatar', 'avatarUrl', 'avatar_url', 'profileImage', 'profile_image', 'image', 'image_url'];
   for (const k of keys) {
     const v = c[k];
-    if (typeof v === 'string' && v.trim()) return buildAbsolutePhoto(v.trim()) || v.trim();
+    if (typeof v === 'string' && v.trim()) {
+      const candidate = buildAbsolutePhoto(v.trim()) || v.trim();
+      const clean = toHttps(candidate);
+      if (isRenderableImageUri(clean)) return clean;
+    }
   }
 
   return null;
@@ -336,6 +380,36 @@ export default function EventDetailScreen({ route, navigation }) {
     }, [computedBuyUrl]);
 
   const buyUrl = computedBuyUrl || stableBuyUrlRef.current;
+  const isNumericIdLocal = (v) => typeof v === 'number' || (/^\d+$/.test(String(v ?? '')));
+
+  const buildEventUrl = useCallback((subpath = '', extraParams = {}) => {
+    const base = `${API_URL}/events/${current.id}${subpath}`;
+    const params = new URLSearchParams();
+    Object.entries(extraParams || {}).forEach(([k, val]) => {
+      if (val != null) params.set(k, String(val));
+    });
+
+    if (!isNumericIdLocal(current.id)) {
+      params.set('source', current.source || 'ticketmaster');
+      const externalId = current.externalId ?? current.external_id ?? current.tm_id ?? current.sourceId ?? current.id;
+      params.set('externalId', externalId);
+      params.set('external_id', externalId);
+      params.set('title', current.title || current.name || '');
+      params.set('description', current.description || current.desc || '');
+      params.set('event_at', current.date || current.event_at || current.starts_at || '');
+      params.set('startsAt', current.startsAt || current.starts_at || current.event_at || current.date || '');
+      params.set('venue_name', current.venue_name || current.venueName || current.location || '');
+      params.set('city', current.city || '');
+      params.set('country', current.country || '');
+      params.set('url', current.url || current.purchaseUrl || current.externalUrl || current.buyUrl || '');
+      if (current.image) params.set('image', current.image);
+      if (current.latitude != null) params.set('latitude', String(current.latitude));
+      if (current.longitude != null) params.set('longitude', String(current.longitude));
+    }
+
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
+  }, [current]);
 
   // ----- Asistentes -----
   const [attendees, setAttendees] = useState([]);
@@ -347,7 +421,7 @@ export default function EventDetailScreen({ route, navigation }) {
     const fetchAttendees = async () => {
       if (!current?.id) return;
       try {
-        const res = await fetch(`${API_URL}/events/${current.id}/attendees`);
+        const res = await fetch(buildEventUrl('/attendees'));
         if (res.ok) {
           const data = await res.json();
           if (cancelled) return;
@@ -367,7 +441,7 @@ export default function EventDetailScreen({ route, navigation }) {
     };
     fetchAttendees();
     return () => { cancelled = true; };
-  }, [current.id, user?.id]);
+  }, [current.id, current.source, current.externalId, current.external_id, buildEventUrl, user?.id]);
 
   const handleJoinOrLeave = useCallback(async () => {
     if (!user?.id) {
@@ -383,7 +457,7 @@ export default function EventDetailScreen({ route, navigation }) {
       setIsJoined(true);
       setAttendees(prev => [...prev, { id: user.id, name: user.name, photo: user.photo }]);
       try {
-        await joinEvent(current.id);
+        await joinEvent(current);
         await scheduleEventNotification(current);
       } catch (e) {
         setIsJoined(false);
@@ -394,7 +468,7 @@ export default function EventDetailScreen({ route, navigation }) {
       setIsJoined(false);
       setAttendees(prev => prev.filter(a => String(getAttendeeUserId(a)) !== uidStr));
       try {
-        await leaveEvent(current.id);
+        await leaveEvent(current);
       } catch (e) {
         setIsJoined(true);
         setAttendees(prev => [...prev, { id: user.id, name: user.name, photo: user.photo }]);
@@ -403,7 +477,7 @@ export default function EventDetailScreen({ route, navigation }) {
     }
 
     try {
-      const res = await fetch(`${API_URL}/events/${current.id}/attendees`);
+      const res = await fetch(buildEventUrl('/attendees'));
       if (res.ok) {
         const data = await res.json();
         setAttendees(Array.isArray(data) ? data : []);
@@ -413,33 +487,13 @@ export default function EventDetailScreen({ route, navigation }) {
     } catch {}
 
     setJoining(false);
-  }, [user, joining, isJoined, current.id, joinEvent, leaveEvent]);
+  }, [user, joining, isJoined, current, joinEvent, leaveEvent, buildEventUrl]);
 
   // ----- Comentarios -----
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [sending, setSending] = useState(false);
-  const isNumericIdLocal = (v) => typeof v === 'number' || (/^\d+$/.test(String(v ?? '')));
-
-  const buildEventUrl = (subpath = '', extraParams = {}) => {
-    const base = `${API_URL}/events/${current.id}${subpath}`;
-    const params = new URLSearchParams();
-    Object.entries(extraParams || {}).forEach(([k, val]) => {
-      if (val != null) params.set(k, String(val));
-    });
-
-    if (!isNumericIdLocal(current.id)) {
-      params.set('source', current.source || 'ticketmaster');
-      params.set(
-        'externalId',
-        current.externalId ?? current.tm_id ?? current.sourceId ?? current.id
-      );
-    }
-
-    const qs = params.toString();
-    return qs ? `${base}?${qs}` : base;
-  };
 
   const fetchComments = useCallback(async () => {
     setLoadingComments(true);
@@ -452,7 +506,7 @@ export default function EventDetailScreen({ route, navigation }) {
       setComments([]);
     }
     setLoadingComments(false);
-  }, [current.id, current.source, current.externalId]);
+  }, [buildEventUrl]);
 
   const sendComment = useCallback(async () => {
     if (!newComment.trim()) return;
@@ -477,7 +531,8 @@ export default function EventDetailScreen({ route, navigation }) {
         longitude: current.longitude ?? null,
         url: current.url || current.purchaseUrl || current.externalUrl || null,
         source: current.source || 'ticketmaster',
-        externalId: current.externalId ?? current.tm_id ?? current.sourceId ?? current.id,
+        externalId: current.externalId ?? current.external_id ?? current.tm_id ?? current.sourceId ?? current.id,
+        external_id: current.externalId ?? current.external_id ?? current.tm_id ?? current.sourceId ?? current.id,
       };
 
       const res = await fetch(buildEventUrl('/comments'), {
@@ -501,7 +556,7 @@ export default function EventDetailScreen({ route, navigation }) {
     } finally {
       setSending(false);
     }
-  }, [current.id, current.source, current.externalId, user?.id, newComment, fetchComments]);
+  }, [current, user?.id, newComment, fetchComments, buildEventUrl]);
 
   const deleteComment = useCallback(
     (commentId) => {
@@ -533,7 +588,7 @@ export default function EventDetailScreen({ route, navigation }) {
         },
       ]);
     },
-    [current.id, current.source, current.externalId, user?.id, fetchComments]
+    [buildEventUrl, user?.id, fetchComments]
   );
 
   useEffect(() => { fetchComments(); }, [fetchComments]);
@@ -659,6 +714,12 @@ export default function EventDetailScreen({ route, navigation }) {
                 <Text style={styles.typeTagText}>{getCategoryDisplayName(current)}</Text>
               </View>
             )}
+            {current.subcategory_name && (
+              <View style={[styles.typeTag, { marginTop: 6 }]}>
+                <Ionicons name="albums-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.typeTagText}>{current.subcategory_name}</Text>
+              </View>
+            )}
             {current?.source && (
               <View style={[styles.typeTag, { marginTop: 6 }]}>
                 <Ionicons name="link-outline" size={16} color={COLORS.primary} />
@@ -729,16 +790,13 @@ export default function EventDetailScreen({ route, navigation }) {
                         })
                       }
                     >
-                      {avatar ? (
-                        <Image
-                          source={{ uri: avatar }}
-                          style={styles.attendeeAvatarImg}
-                        />
-                      ) : (
-                        <View style={styles.attendeeAvatarFallback}>
-                          <Text style={styles.attendeeAvatarInitials}>{initials}</Text>
-                        </View>
-                      )}
+                      <PersonAvatar
+                        uri={avatar}
+                        initials={initials}
+                        imageStyle={styles.attendeeAvatarImg}
+                        fallbackStyle={styles.attendeeAvatarFallback}
+                        initialsStyle={styles.attendeeAvatarInitials}
+                      />
                       <Text
                         style={styles.attendeeAvatarName}
                         numberOfLines={1}
@@ -871,13 +929,13 @@ export default function EventDetailScreen({ route, navigation }) {
                         }}
                         style={styles.commentAvatarWrap}
                       >
-                        {avatar ? (
-                          <Image source={{ uri: avatar }} style={styles.commentAvatarImg} />
-                        ) : (
-                          <View style={styles.commentAvatarFallback}>
-                            <Text style={styles.commentAvatarInitials}>{initials}</Text>
-                          </View>
-                        )}
+                        <PersonAvatar
+                          uri={avatar}
+                          initials={initials}
+                          imageStyle={styles.commentAvatarImg}
+                          fallbackStyle={styles.commentAvatarFallback}
+                          initialsStyle={styles.commentAvatarInitials}
+                        />
                       </TouchableOpacity>
 
                       {/* Contenido */}

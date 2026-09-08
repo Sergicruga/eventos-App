@@ -1,3 +1,5 @@
+import { categoryFromText } from "./categoryUtils.js";
+
 const DIBA_EVENT_URLS = [
   "https://do.diba.cat/api/dataset/actesturisme_es/format/json",
   "http://do.diba.cat/api/dataset/actesturisme_es/format/json",
@@ -107,35 +109,6 @@ const municipalityCoordinates = (municipality) =>
     longitude: null,
   };
 
-const categoryFromText = (...parts) => {
-  const text = parts.join(" ").toLowerCase();
-
-  if (/musica|música|concert|concierto|festival|jazz|rock|pop|dj|flamenc/.test(text)) {
-    return { slug: "musica", name: "Música" };
-  }
-  if (/esport|deporte|cursa|carrera|futbol|fútbol|basket|tennis|tenis|running/.test(text)) {
-    return { slug: "deportes", name: "Deportes" };
-  }
-  if (/cine|cinema|pel·lícula|pelicula|film|projecci|proyecci/.test(text)) {
-    return { slug: "cine", name: "Cine" };
-  }
-  if (/taller|curso|curs|xerrada|charla|conferència|conferencia|formaci|educa/.test(text)) {
-    return { slug: "educacion", name: "Educación" };
-  }
-  if (/gastronom|mercat|mercado|menjar|comida|vi\b|vino|tapa/.test(text)) {
-    return { slug: "gastronomia", name: "Gastronomía" };
-  }
-  if (
-    /teatre|teatro|dansa|danza|exposici|museu|museo|art|literatura|poesia|circ|circo|comèdia|comedia|tradici|cultura/.test(
-      text,
-    )
-  ) {
-    return { slug: "arte", name: "Arte" };
-  }
-
-  return { slug: "arte", name: "Arte" };
-};
-
 const firstArray = (...values) => values.find(Array.isArray) || [];
 
 const extractItems = (data) =>
@@ -226,6 +199,8 @@ const formatDibaEvent = (item) => {
     purchaseUrl: url,
     category_slug: category.slug,
     category_name: category.name,
+    subcategory_slug: category.subcategory_slug || null,
+    subcategory_name: category.subcategory_name || null,
     genre: category.name,
     price: /gratu/i.test(String(fieldValue(item, "preu") || "")) ? 0 : null,
     currency: "EUR",
@@ -311,3 +286,4 @@ export {
   formatDibaEvent,
   warmBarcelonaDibaCache,
 };
+

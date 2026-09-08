@@ -1,4 +1,5 @@
 import puppeteer from "puppeteer";
+import { categoryFromText } from "./categoryUtils.js";
 
 const ATRAPALO_BASE_URL = "https://www.atrapalo.com";
 const DEFAULT_CITIES = ["Madrid", "Barcelona", "Valencia"];
@@ -44,22 +45,6 @@ const absoluteUrl = (url) => {
   } catch {
     return null;
   }
-};
-
-const categorySlug = (category = "") => {
-  const value = String(category).toLowerCase();
-  if (/m[uú]sica|concierto|festival|tributo/.test(value)) return "musica";
-  if (/deporte/.test(value)) return "deportes";
-  if (/cine/.test(value)) return "cine";
-  if (
-    /teatro|danza|mon[oó]logo|musical|magia|circo|museo|exposici|comedia|drama|impro|zarzuela|cabaret/.test(
-      value,
-    )
-  ) {
-    return "arte";
-  }
-  if (/conferencia|formaci[oó]n|taller/.test(value)) return "educacion";
-  return "otro";
 };
 
 const parseStartDate = (value) => {
@@ -116,6 +101,7 @@ const parseStructuredEvent = (jsonLd, sourceUrl, requestedCity) => {
   const externalId = eventIdFromUrl(sourceUrl);
   const title = event?.name || product?.name;
   if (!externalId || !title) return null;
+  const normalizedCategory = categoryFromText(title, event?.description, product?.description, category);
 
   const images = asArray(event?.image || product?.image);
   const image = typeof images[0] === "string" ? images[0] : images[0]?.url;
@@ -143,8 +129,8 @@ const parseStructuredEvent = (jsonLd, sourceUrl, requestedCity) => {
     source: "atrapalo",
     url: sourceUrl,
     purchaseUrl: sourceUrl,
-    category_slug: categorySlug(category),
-    category_name: category,
+    category_slug: normalizedCategory.slug,
+    category_name: normalizedCategory.name,
     genre: category,
     price: firstOffer.price ? Number(firstOffer.price) : null,
     currency: firstOffer.priceCurrency || null,

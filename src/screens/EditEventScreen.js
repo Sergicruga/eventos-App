@@ -13,7 +13,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { uploadEventImage } from '../api/upload';
 import { Calendar } from 'react-native-calendars'; // Add this import at the top
 import { API_URL } from '../config';
-import { EVENT_CATEGORIES } from '../constants/categories';
+import {
+  EVENT_CATEGORIES,
+  findSubcategoryBySlug,
+  getSubcategoriesForCategory,
+} from '../constants/categories';
 import { formatAddress, normalizeDate } from '../utils/eventFormHelpers';
 
 const COLORS = {
@@ -207,11 +211,16 @@ export default function EditEventScreen({ route, navigation }) {
   // ---------- Save ----------
   const [description, setDescription] = useState(currentEvent?.description || '');
   const [type, setType] = useState(currentEvent?.type || '');
+  const [subcategory, setSubcategory] = useState(currentEvent?.subcategory_slug || '');
   const [typeModalVisible, setTypeModalVisible] = useState(false);
+  const [subcategoryModalVisible, setSubcategoryModalVisible] = useState(false);
+  const subcategoryOptions = getSubcategoriesForCategory(type);
+  const selectedSubcategory = findSubcategoryBySlug(subcategory);
 
   const handleSave = useCallback(async () => {
     if (!title.trim()) return Alert.alert('Falta título', 'Introduce un título para el evento.');
     if (!type) return Alert.alert('Falta tipo', 'Selecciona un tipo de evento.');
+    if (!subcategory) return Alert.alert('Falta subcategoría', 'Selecciona una subcategoría para ordenar mejor el evento.');
     if (!locationName) return Alert.alert('Falta ubicación', 'Selecciona la ubicación en el mapa.');
 
     setSaving(true);
@@ -277,6 +286,8 @@ export default function EditEventScreen({ route, navigation }) {
           location: resolvedAddress,
           description,
           type,
+          subcategory_slug: subcategory,
+          subcategory_name: selectedSubcategory?.name || null,
           image: imageUrl,
           latitude: baseCoords.latitude,
           longitude: baseCoords.longitude,
@@ -290,7 +301,7 @@ export default function EditEventScreen({ route, navigation }) {
       setSaving(false);
     }
   }, [
-    title, type, coords, locationName, imageUri, date, description,
+    title, type, subcategory, selectedSubcategory, coords, locationName, imageUri, date, description,
     updateEvent, navigation, currentEvent, formattedTime
   ]);
 
@@ -499,6 +510,7 @@ export default function EditEventScreen({ route, navigation }) {
                     ]}
                     onPress={() => {
                       setType(opt.value);
+                      setSubcategory('');
                       setTypeModalVisible(false);
                     }}
                   >
@@ -507,6 +519,64 @@ export default function EditEventScreen({ route, navigation }) {
                       type === opt.value && styles.pickerOptionTextSelected
                     ]}>
                       {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </TouchableOpacity>
+          </Modal>
+
+          {/* Subcategoría */}
+          <Text style={styles.label}>Subcategoría</Text>
+          <TouchableOpacity
+            style={[styles.customPickerBox, !type && { opacity: 0.55 }]}
+            onPress={() => {
+              if (!type) {
+                Alert.alert('Selecciona un tipo', 'Primero elige la categoría principal.');
+                return;
+              }
+              setSubcategoryModalVisible(true);
+            }}
+            activeOpacity={0.85}
+            accessibilityLabel="Seleccionar subcategoría de evento"
+          >
+            <Text style={[
+              styles.customPickerText,
+              !subcategory && { color: COLORS.gray }
+            ]}>
+              {selectedSubcategory?.name || 'Selecciona una subcategoría'}
+            </Text>
+            <Ionicons name="chevron-down" size={22} color={COLORS.gray} style={{ marginLeft: 8 }} />
+          </TouchableOpacity>
+          <Modal
+            visible={subcategoryModalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setSubcategoryModalVisible(false)}
+          >
+            <TouchableOpacity
+              style={styles.modalOverlay}
+              activeOpacity={1}
+              onPressOut={() => setSubcategoryModalVisible(false)}
+            >
+              <View style={styles.pickerModal}>
+                {subcategoryOptions.map(opt => (
+                  <TouchableOpacity
+                    key={opt.slug}
+                    style={[
+                      styles.pickerOption,
+                      subcategory === opt.slug && styles.pickerOptionSelected
+                    ]}
+                    onPress={() => {
+                      setSubcategory(opt.slug);
+                      setSubcategoryModalVisible(false);
+                    }}
+                  >
+                    <Text style={[
+                      styles.pickerOptionText,
+                      subcategory === opt.slug && styles.pickerOptionTextSelected
+                    ]}>
+                      {opt.name}
                     </Text>
                   </TouchableOpacity>
                 ))}

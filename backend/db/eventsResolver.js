@@ -12,12 +12,14 @@ export async function resolveEventId(pool, { source, externalId, payload }) {
     title, description, image, eventAt,
     venueName, city, country, latitude, longitude, url
   } = payload ?? {};
+  const location = [venueName, city, country].filter(Boolean).join(', ') || payload?.location || null;
+  const type = payload?.type || source || 'api';
 
   const ins = await pool.query(
-    `INSERT INTO events (title, description, image, event_at, venue_name, city, country, latitude, longitude, url)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    `INSERT INTO events (title, description, image, event_at, location, type, latitude, longitude)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      RETURNING id`,
-    [title, description, image, eventAt, venueName, city, country, latitude, longitude, url]
+    [title, description, image, eventAt, location, type, latitude, longitude]
   );
   const eventId = ins.rows[0].id;
 

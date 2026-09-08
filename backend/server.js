@@ -23,6 +23,50 @@ import {
   fetchBarcelonaDibaEvents,
   warmBarcelonaDibaCache,
 } from "./services/barcelonaDibaService.js";
+import {
+  fetchCatalunyaAgendaEvents,
+  warmCatalunyaAgendaCache,
+} from "./services/catalunyaAgendaService.js";
+import {
+  fetchValencianaIvcEvents,
+  warmValencianaIvcCache,
+} from "./services/valencianaIvcService.js";
+import {
+  fetchMurciaAyuntamientoEvents,
+  warmMurciaAyuntamientoCache,
+} from "./services/murciaAyuntamientoService.js";
+import {
+  fetchAndaluciaJuntaEvents,
+  warmAndaluciaJuntaCache,
+} from "./services/andaluciaJuntaService.js";
+import {
+  fetchEuskadiKulturklikEvents,
+  warmEuskadiKulturklikCache,
+} from "./services/euskadiKulturklikService.js";
+import {
+  fetchGaliciaAxendaEvents,
+  warmGaliciaAxendaCache,
+} from "./services/galiciaAxendaService.js";
+import {
+  fetchZaragozaAgendaEvents,
+  warmZaragozaAgendaCache,
+} from "./services/zaragozaAgendaService.js";
+import {
+  fetchCastillaLeonAgendaEvents,
+  warmCastillaLeonAgendaCache,
+} from "./services/castillaLeonAgendaService.js";
+import {
+  fetchGijonAgendaEvents,
+  warmGijonAgendaCache,
+} from "./services/gijonAgendaService.js";
+import {
+  fetchCastillaManchaAgendaEvents,
+  fetchPamplonaAgendaEvents,
+  fetchRiojaTeatrosEvents,
+  warmCastillaManchaAgendaCache,
+  warmPamplonaAgendaCache,
+  warmRiojaTeatrosCache,
+} from "./services/regionalHtmlAgendaService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,9 +119,18 @@ const pool = new Pool({
 
 pool
   .connect()
-  .then((c) => {
+  .then(async (c) => {
     console.log("✅ Conectado a PostgreSQL (Render)");
-    c.release();
+    try {
+      await c.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token TEXT");
+      await c.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS subcategory_slug TEXT");
+      await c.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS subcategory_name TEXT");
+      console.log("✅ Columna users.expo_push_token lista");
+    } catch (err) {
+      console.warn("⚠️ No se pudo asegurar migraciones automáticas:", err.message);
+    } finally {
+      c.release();
+    }
   })
   .catch((err) => {
     console.error("❌ Error conectando a PostgreSQL:", err.message);
@@ -143,7 +196,12 @@ app.param("eventId", async (req, res, next, rawId) => {
     }
 
     const source = req.query.source || req.body?.source;
-    const externalId = req.query.externalId || req.body?.externalId || rawId;
+    const externalId =
+      req.query.externalId ||
+      req.query.external_id ||
+      req.body?.externalId ||
+      req.body?.external_id ||
+      rawId;
 
     if (!source || !externalId) {
       return res.status(400).json({
@@ -161,22 +219,31 @@ app.param("eventId", async (req, res, next, rawId) => {
       // Intentar crear un evento local mínimo y enlazarlo en api_events
       try {
         const title = req.body?.title || req.query?.title || `Imported event ${externalId}`;
-        const description = req.body?.description || req.body?.desc || null;
-        const image = req.body?.image || null;
-        const eventAt = req.body?.event_at || req.body?.eventAt || null;
-        const venueName = req.body?.venueName || req.body?.venue_name || null;
-        const city = req.body?.city || null;
-        const country = req.body?.country || null;
-        const latitude = req.body?.latitude || null;
-        const longitude = req.body?.longitude || null;
+        const description = req.body?.description || req.query?.description || req.body?.desc || req.query?.desc || null;
+        const image = req.body?.image || req.query?.image || null;
+        const eventAt =
+          req.body?.event_at ||
+          req.query?.event_at ||
+          req.body?.eventAt ||
+          req.query?.eventAt ||
+          req.body?.startsAt ||
+          req.query?.startsAt ||
+          new Date().toISOString().slice(0, 10);
+        const venueName = req.body?.venueName || req.query?.venueName || req.body?.venue_name || req.query?.venue_name || null;
+        const city = req.body?.city || req.query?.city || null;
+        const country = req.body?.country || req.query?.country || null;
+        const latitude = req.body?.latitude || req.query?.latitude || null;
+        const longitude = req.body?.longitude || req.query?.longitude || null;
         const url = req.body?.url || req.query?.url || null;
+        const location = [venueName, city, country].filter(Boolean).join(", ") || req.body?.location || req.query?.location || null;
+        const type = req.body?.type || req.query?.type || "api";
 
         console.log(`Auto-creating event for externalId=${externalId} source=${source}`);
         const ins = await pool.query(
-          `INSERT INTO events (title, description, image, event_at, venue_name, city, country, latitude, longitude, url)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          `INSERT INTO events (title, description, image, event_at, location, type, latitude, longitude)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
            RETURNING id`,
-          [title, description, image, eventAt, venueName, city, country, latitude, longitude, url]
+          [title, description, image, eventAt, location, type, latitude, longitude]
         );
         const newEventId = ins.rows[0].id;
 
@@ -194,9 +261,22 @@ app.param("eventId", async (req, res, next, rawId) => {
           return next();
         } catch (eUp) {
           console.error('error upserting api_events mapping:', eUp.message || eUp);
-          // fallback: still use created event id
-          req.eventId = newEventId;
-          return next();
+          try {
+            const minimal = await pool.query(
+              `INSERT INTO api_events (source, external_id, event_id)
+               VALUES ($1,$2,$3)
+               ON CONFLICT (source, external_id) DO UPDATE SET event_id = EXCLUDED.event_id
+               RETURNING event_id`,
+              [source, externalId, newEventId]
+            );
+            req.eventId = minimal.rows[0]?.event_id || newEventId;
+            return next();
+          } catch (eMinimal) {
+            console.error('error upserting minimal api_events mapping:', eMinimal.message || eMinimal);
+            // fallback: still use created event id for this request
+            req.eventId = newEventId;
+            return next();
+          }
         }
       } catch (eCreate) {
         console.error('error creating local event for externalId:', eCreate.message || eCreate);
@@ -224,6 +304,499 @@ app.param("eventId", async (req, res, next, rawId) => {
 app.get("/", (_req, res) => res.json({ ok: true, msg: "API viva" }));
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+const toNumberOrNull = (value) => {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const toRad = (degrees) => (degrees * Math.PI) / 180;
+
+const distanceKm = (from, to) => {
+  if (
+    !from ||
+    !to ||
+    from.latitude == null ||
+    from.longitude == null ||
+    to.latitude == null ||
+    to.longitude == null
+  ) {
+    return Infinity;
+  }
+
+  const R = 6371;
+  const dLat = toRad(to.latitude - from.latitude);
+  const dLon = toRad(to.longitude - from.longitude);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(from.latitude)) *
+      Math.cos(toRad(to.latitude)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+};
+
+const nearbyCityCatalog = [
+  { name: "Madrid", latitude: 40.4168, longitude: -3.7038 },
+  { name: "Barcelona", latitude: 41.3874, longitude: 2.1686 },
+  { name: "Valencia", latitude: 39.4699, longitude: -0.3763 },
+  { name: "Sevilla", latitude: 37.3891, longitude: -5.9845 },
+  { name: "Zaragoza", latitude: 41.6488, longitude: -0.8891 },
+  { name: "Málaga", latitude: 36.7213, longitude: -4.4214 },
+  { name: "Murcia", latitude: 37.9922, longitude: -1.1307 },
+  { name: "Palma", latitude: 39.5696, longitude: 2.6502 },
+  { name: "Las Palmas de Gran Canaria", latitude: 28.1235, longitude: -15.4363 },
+  { name: "Bilbao", latitude: 43.2630, longitude: -2.9350 },
+  { name: "Alicante", latitude: 38.3452, longitude: -0.4810 },
+  { name: "Córdoba", latitude: 37.8882, longitude: -4.7794 },
+  { name: "Valladolid", latitude: 41.6523, longitude: -4.7245 },
+  { name: "Vigo", latitude: 42.2406, longitude: -8.7207 },
+  { name: "Gijón", latitude: 43.5322, longitude: -5.6611 },
+  { name: "A Coruña", latitude: 43.3623, longitude: -8.4115 },
+  { name: "Granada", latitude: 37.1773, longitude: -3.5986 },
+  { name: "Vitoria-Gasteiz", latitude: 42.8467, longitude: -2.6727 },
+  { name: "Elche", latitude: 38.2699, longitude: -0.7126 },
+  { name: "Oviedo", latitude: 43.3619, longitude: -5.8494 },
+  { name: "Santa Cruz de Tenerife", latitude: 28.4636, longitude: -16.2518 },
+  { name: "Badalona", latitude: 41.4500, longitude: 2.2474 },
+  { name: "L'Hospitalet de Llobregat", latitude: 41.3596, longitude: 2.0997 },
+  { name: "Girona", latitude: 41.9794, longitude: 2.8214 },
+  { name: "Lloret de Mar", latitude: 41.6999, longitude: 2.8456 },
+  { name: "Blanes", latitude: 41.6759, longitude: 2.7902 },
+  { name: "Mataró", latitude: 41.5381, longitude: 2.4445 },
+  { name: "Sabadell", latitude: 41.5463, longitude: 2.1086 },
+  { name: "Terrassa", latitude: 41.5632, longitude: 2.0089 },
+  { name: "Tarragona", latitude: 41.1189, longitude: 1.2445 },
+  { name: "Lleida", latitude: 41.6176, longitude: 0.6200 },
+  { name: "Reus", latitude: 41.1498, longitude: 1.1055 },
+  { name: "Castellón de la Plana", latitude: 39.9864, longitude: -0.0513 },
+  { name: "Cartagena", latitude: 37.6257, longitude: -0.9966 },
+  { name: "Santander", latitude: 43.4623, longitude: -3.8099 },
+  { name: "San Sebastián", latitude: 43.3183, longitude: -1.9812 },
+  { name: "Pamplona", latitude: 42.8125, longitude: -1.6458 },
+  { name: "Logroño", latitude: 42.4627, longitude: -2.4449 },
+  { name: "Burgos", latitude: 42.3439, longitude: -3.6969 },
+  { name: "Salamanca", latitude: 40.9701, longitude: -5.6635 },
+  { name: "Toledo", latitude: 39.8628, longitude: -4.0273 },
+  { name: "Albacete", latitude: 38.9943, longitude: -1.8585 },
+  { name: "Almería", latitude: 36.8340, longitude: -2.4637 },
+  { name: "Cádiz", latitude: 36.5271, longitude: -6.2886 },
+  { name: "Huelva", latitude: 37.2614, longitude: -6.9447 },
+  { name: "Jaén", latitude: 37.7796, longitude: -3.7849 },
+  { name: "León", latitude: 42.5987, longitude: -5.5671 },
+  { name: "Ourense", latitude: 42.3358, longitude: -7.8639 },
+  { name: "Pontevedra", latitude: 42.4336, longitude: -8.6479 },
+  { name: "Lugo", latitude: 43.0097, longitude: -7.5568 },
+  { name: "Badajoz", latitude: 38.8794, longitude: -6.9707 },
+  { name: "Cáceres", latitude: 39.4753, longitude: -6.3724 },
+];
+
+const buildCitiesToFetch = ({ userCity, userCoords, radiusKm }) => {
+  if (!userCity && !userCoords) return ["Madrid", "Barcelona", "Valencia"];
+
+  const cities = [];
+  if (userCity) cities.push(userCity);
+
+  if (userCoords) {
+    nearbyCityCatalog
+      .map((city) => ({ ...city, distance: distanceKm(userCoords, city) }))
+      .filter((city) => city.distance <= radiusKm + 5)
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 8)
+      .forEach((city) => cities.push(city.name));
+  }
+
+  return [...new Set(cities.map((city) => String(city).trim()).filter(Boolean))];
+};
+
+const catalunyaAreaHints = [
+  "catalunya",
+  "cataluña",
+  "barcelona",
+  "girona",
+  "gerona",
+  "tarragona",
+  "lleida",
+  "lerida",
+  "lloret",
+  "blanes",
+  "mataró",
+  "mataro",
+  "badalona",
+  "hospitalet",
+  "sabadell",
+  "terrassa",
+  "reus",
+  "figueres",
+];
+
+const catalunyaAnchors = [
+  { latitude: 41.3874, longitude: 2.1686 },
+  { latitude: 41.9794, longitude: 2.8214 },
+  { latitude: 41.1189, longitude: 1.2445 },
+  { latitude: 41.6176, longitude: 0.6200 },
+];
+
+const isNearCatalunyaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && catalunyaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return catalunyaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const valencianaAreaHints = [
+  "comunitat valenciana",
+  "comunidad valenciana",
+  "valencia",
+  "valència",
+  "alicante",
+  "alacant",
+  "castellon",
+  "castelló",
+  "elche",
+  "elx",
+  "peñiscola",
+  "peniscola",
+  "benidorm",
+  "gandia",
+  "torrevieja",
+  "oriola",
+  "orihuela",
+];
+
+const valencianaAnchors = [
+  { latitude: 39.4699, longitude: -0.3763 },
+  { latitude: 38.3452, longitude: -0.4810 },
+  { latitude: 39.9864, longitude: -0.0513 },
+  { latitude: 40.3574, longitude: 0.4069 },
+];
+
+const isNearValencianaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && valencianaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return valencianaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const murciaAreaHints = [
+  "murcia",
+  "cartagena",
+  "lorca",
+  "san javier",
+  "san pedro del pinatar",
+  "torre pacheco",
+  "jumilla",
+  "águilas",
+  "aguilas",
+  "mazarrón",
+  "mazarron",
+  "moratalla",
+  "totana",
+  "yecla",
+  "bullas",
+  "los alcázares",
+  "los alcazares",
+];
+
+const murciaAnchors = [
+  { latitude: 37.9922, longitude: -1.1307 },
+  { latitude: 37.6257, longitude: -0.9966 },
+  { latitude: 37.6713, longitude: -1.7017 },
+  { latitude: 37.8063, longitude: -0.8374 },
+];
+
+const isNearMurciaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && murciaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return murciaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const andaluciaAreaHints = [
+  "andalucia",
+  "andalucía",
+  "sevilla",
+  "malaga",
+  "málaga",
+  "granada",
+  "cordoba",
+  "córdoba",
+  "cadiz",
+  "cádiz",
+  "huelva",
+  "jaen",
+  "jaén",
+  "almeria",
+  "almería",
+  "jerez",
+  "marbella",
+  "algeciras",
+  "ronda",
+  "antequera",
+  "motril",
+];
+
+const andaluciaAnchors = [
+  { latitude: 37.3891, longitude: -5.9845 },
+  { latitude: 36.7213, longitude: -4.4214 },
+  { latitude: 37.1773, longitude: -3.5986 },
+  { latitude: 37.8882, longitude: -4.7794 },
+  { latitude: 36.5271, longitude: -6.2886 },
+  { latitude: 37.2614, longitude: -6.9447 },
+  { latitude: 37.7796, longitude: -3.7849 },
+  { latitude: 36.8340, longitude: -2.4637 },
+];
+
+const isNearAndaluciaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && andaluciaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return andaluciaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const euskadiAreaHints = [
+  "euskadi",
+  "país vasco",
+  "pais vasco",
+  "bilbao",
+  "donostia",
+  "san sebastian",
+  "san sebastián",
+  "vitoria",
+  "gasteiz",
+  "barakaldo",
+  "getxo",
+  "irun",
+  "eibar",
+  "zarautz",
+];
+
+const euskadiAnchors = [
+  { latitude: 43.2630, longitude: -2.9350 },
+  { latitude: 43.3183, longitude: -1.9812 },
+  { latitude: 42.8467, longitude: -2.6727 },
+];
+
+const isNearEuskadiAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && euskadiAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return euskadiAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const galiciaAreaHints = [
+  "galicia",
+  "a coruña",
+  "coruña",
+  "coruna",
+  "vigo",
+  "santiago",
+  "santiago de compostela",
+  "pontevedra",
+  "ourense",
+  "orense",
+  "lugo",
+  "ferrol",
+];
+
+const galiciaAnchors = [
+  { latitude: 43.3623, longitude: -8.4115 },
+  { latitude: 42.2406, longitude: -8.7207 },
+  { latitude: 42.8782, longitude: -8.5448 },
+  { latitude: 42.4336, longitude: -8.6479 },
+  { latitude: 42.3358, longitude: -7.8639 },
+  { latitude: 43.0097, longitude: -7.5568 },
+];
+
+const isNearGaliciaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && galiciaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return galiciaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const aragonAreaHints = [
+  "aragón",
+  "aragon",
+  "zaragoza",
+  "huesca",
+  "teruel",
+  "calatayud",
+  "ejea",
+  "jaca",
+];
+
+const aragonAnchors = [
+  { latitude: 41.6488, longitude: -0.8891 },
+  { latitude: 42.1401, longitude: -0.4089 },
+  { latitude: 40.3457, longitude: -1.1065 },
+];
+
+const isNearAragonAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && aragonAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return aragonAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const castillaLeonAreaHints = [
+  "castilla y leon",
+  "castilla y león",
+  "valladolid",
+  "burgos",
+  "leon",
+  "león",
+  "salamanca",
+  "avila",
+  "ávila",
+  "segovia",
+  "soria",
+  "palencia",
+  "zamora",
+  "ponferrada",
+];
+
+const castillaLeonAnchors = [
+  { latitude: 41.6523, longitude: -4.7245 },
+  { latitude: 42.3439, longitude: -3.6969 },
+  { latitude: 42.5987, longitude: -5.5671 },
+  { latitude: 40.9701, longitude: -5.6635 },
+  { latitude: 40.6565, longitude: -4.6818 },
+  { latitude: 40.9429, longitude: -4.1088 },
+  { latitude: 41.7636, longitude: -2.4649 },
+  { latitude: 42.0097, longitude: -4.5288 },
+  { latitude: 41.5035, longitude: -5.7446 },
+];
+
+const isNearCastillaLeonAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && castillaLeonAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return castillaLeonAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const asturiasAreaHints = [
+  "asturias",
+  "gijon",
+  "gijón",
+  "xixon",
+  "xixón",
+  "oviedo",
+  "aviles",
+  "avilés",
+  "langreo",
+  "mieres",
+  "llanes",
+];
+
+const asturiasAnchors = [
+  { latitude: 43.5322, longitude: -5.6611 },
+  { latitude: 43.3619, longitude: -5.8494 },
+  { latitude: 43.5560, longitude: -5.9247 },
+];
+
+const isNearAsturiasAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && asturiasAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return asturiasAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const castillaManchaAreaHints = [
+  "castilla la mancha",
+  "castilla-la mancha",
+  "castilla-la-mancha",
+  "toledo",
+  "albacete",
+  "ciudad real",
+  "cuenca",
+  "guadalajara",
+  "talavera",
+  "puertollano",
+  "almansa",
+];
+
+const castillaManchaAnchors = [
+  { latitude: 39.8628, longitude: -4.0273 },
+  { latitude: 38.9943, longitude: -1.8585 },
+  { latitude: 38.9848, longitude: -3.9274 },
+  { latitude: 40.0704, longitude: -2.1374 },
+  { latitude: 40.6325, longitude: -3.1602 },
+];
+
+const isNearCastillaManchaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && castillaManchaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return castillaManchaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const navarraAreaHints = [
+  "navarra",
+  "pamplona",
+  "iruña",
+  "iruna",
+  "tudela",
+  "estella",
+  "tafalla",
+  "burlada",
+  "barañain",
+  "baranain",
+];
+
+const navarraAnchors = [
+  { latitude: 42.8125, longitude: -1.6458 },
+  { latitude: 42.0617, longitude: -1.6045 },
+  { latitude: 42.6718, longitude: -2.0323 },
+];
+
+const isNearNavarraAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && navarraAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return navarraAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
+const riojaAreaHints = [
+  "la rioja",
+  "rioja",
+  "logroño",
+  "logrono",
+  "calahorra",
+  "arnedo",
+  "alfaro",
+  "ezcaray",
+  "autol",
+  "najera",
+  "nájera",
+];
+
+const riojaAnchors = [
+  { latitude: 42.4627, longitude: -2.4449 },
+  { latitude: 42.3051, longitude: -1.9654 },
+  { latitude: 42.2280, longitude: -2.1009 },
+  { latitude: 42.3254, longitude: -3.0136 },
+];
+
+const isNearRiojaAgenda = ({ normalizedUserCity, userCoords, radiusKm }) => {
+  if (normalizedUserCity && riojaAreaHints.some((hint) => normalizedUserCity.includes(hint))) {
+    return true;
+  }
+  if (!userCoords) return false;
+  return riojaAnchors.some((anchor) => distanceKm(userCoords, anchor) <= radiusKm + 5);
+};
+
 /* ==========================
    EVENTS
    ========================== */
@@ -233,6 +806,14 @@ app.get("/events", async (req, res) => {
   try {
     const userId = req.query.userId ? Number(req.query.userId) : null;
     const userCity = req.query.city ? String(req.query.city).trim() : null;
+    const userLatitude = toNumberOrNull(req.query.latitude ?? req.query.lat);
+    const userLongitude = toNumberOrNull(req.query.longitude ?? req.query.lon ?? req.query.lng);
+    const requestedRadiusKm = toNumberOrNull(req.query.radius ?? req.query.radiusKm);
+    const radiusKm = requestedRadiusKm && requestedRadiusKm > 0 ? requestedRadiusKm : 25;
+    const userCoords =
+      userLatitude != null && userLongitude != null
+        ? { latitude: userLatitude, longitude: userLongitude }
+        : null;
 
     // Fetch local events from database
     let events = [];
@@ -241,6 +822,7 @@ app.get("/events", async (req, res) => {
       if (!userId) {
         const { rows } = await pool.query(
           `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+                  e.subcategory_slug, e.subcategory_name,
                   e.latitude, e.longitude, e.created_by, e.category_id,
                   ec.slug as category_slug, ec.name as category_name
              FROM events e
@@ -279,18 +861,39 @@ app.get("/events", async (req, res) => {
     }
 
     // Fetch external events (non-blocking, errors don't crash the response)
-    // Prioritize user's city if provided, otherwise use default cities
+    // If the app knows the user's city, only fetch external events for that city.
+    // This keeps users in Murcia, Sevilla, Malaga, etc. from receiving Madrid/Barcelona
+    // events unless they are actually near those cities and the client asks for them.
     let ticketmasterEvents = [];
     let atrapaloEvents = [];
     let madridOpenDataEvents = [];
     let barcelonaDibaEvents = [];
-    const citiesToFetch = userCity
-      ? [userCity, 'Madrid', 'Barcelona']
-      : ['Madrid', 'Barcelona', 'Valencia'];
+    let catalunyaAgendaEvents = [];
+    let valencianaIvcEvents = [];
+    let murciaAyuntamientoEvents = [];
+    let andaluciaJuntaEvents = [];
+    let euskadiKulturklikEvents = [];
+    let galiciaAxendaEvents = [];
+    let zaragozaAgendaEvents = [];
+    let castillaLeonAgendaEvents = [];
+    let gijonAgendaEvents = [];
+    let castillaManchaAgendaEvents = [];
+    let pamplonaAgendaEvents = [];
+    let riojaTeatrosEvents = [];
+    const citiesToFetch = buildCitiesToFetch({ userCity, userCoords, radiusKm });
+    console.log("Ciudades externas consultadas:", {
+      userCity,
+      radiusKm,
+      userCoords,
+      citiesToFetch,
+    });
 
     const normalizedUserCity = String(userCity || "").trim().toLowerCase();
+    const nearMadrid = userCoords
+      ? distanceKm(userCoords, { latitude: 40.4168, longitude: -3.7038 }) <= radiusKm + 5
+      : false;
     const shouldFetchMadridOpenData = userCity
-      ? normalizedUserCity === "madrid"
+      ? normalizedUserCity === "madrid" || nearMadrid
       : true;
     const barcelonaAreaHints = [
       "barcelona",
@@ -328,6 +931,45 @@ app.get("/events", async (req, res) => {
     ];
     const shouldFetchBarcelonaDiba = userCity
       ? barcelonaAreaHints.some((hint) => normalizedUserCity.includes(hint))
+        || (userCoords
+          ? distanceKm(userCoords, { latitude: 41.3874, longitude: 2.1686 }) <= radiusKm + 5
+          : false)
+      : true;
+    const shouldFetchCatalunyaAgenda = userCity || userCoords
+      ? isNearCatalunyaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchValencianaIvc = userCity || userCoords
+      ? isNearValencianaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchMurciaAyuntamiento = userCity || userCoords
+      ? isNearMurciaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchAndaluciaJunta = userCity || userCoords
+      ? isNearAndaluciaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchEuskadiKulturklik = userCity || userCoords
+      ? isNearEuskadiAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchGaliciaAxenda = userCity || userCoords
+      ? isNearGaliciaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchZaragozaAgenda = userCity || userCoords
+      ? isNearAragonAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchCastillaLeonAgenda = userCity || userCoords
+      ? isNearCastillaLeonAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchGijonAgenda = userCity || userCoords
+      ? isNearAsturiasAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchCastillaManchaAgenda = userCity || userCoords
+      ? isNearCastillaManchaAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchPamplonaAgenda = userCity || userCoords
+      ? isNearNavarraAgenda({ normalizedUserCity, userCoords, radiusKm })
+      : true;
+    const shouldFetchRiojaTeatros = userCity || userCoords
+      ? isNearRiojaAgenda({ normalizedUserCity, userCoords, radiusKm })
       : true;
 
     const [
@@ -335,11 +977,35 @@ app.get("/events", async (req, res) => {
       atrapaloResult,
       madridOpenDataResult,
       barcelonaDibaResult,
+      catalunyaAgendaResult,
+      valencianaIvcResult,
+      murciaAyuntamientoResult,
+      andaluciaJuntaResult,
+      euskadiKulturklikResult,
+      galiciaAxendaResult,
+      zaragozaAgendaResult,
+      castillaLeonAgendaResult,
+      gijonAgendaResult,
+      castillaManchaAgendaResult,
+      pamplonaAgendaResult,
+      riojaTeatrosResult,
     ] = await Promise.allSettled([
       fetchMusicEventsMultipleCities(citiesToFetch),
       fetchAtrapaloEventsMultipleCities(citiesToFetch),
       shouldFetchMadridOpenData ? fetchMadridOpenDataEvents() : Promise.resolve([]),
       shouldFetchBarcelonaDiba ? fetchBarcelonaDibaEvents() : Promise.resolve([]),
+      shouldFetchCatalunyaAgenda ? fetchCatalunyaAgendaEvents() : Promise.resolve([]),
+      shouldFetchValencianaIvc ? fetchValencianaIvcEvents() : Promise.resolve([]),
+      shouldFetchMurciaAyuntamiento ? fetchMurciaAyuntamientoEvents() : Promise.resolve([]),
+      shouldFetchAndaluciaJunta ? fetchAndaluciaJuntaEvents() : Promise.resolve([]),
+      shouldFetchEuskadiKulturklik ? fetchEuskadiKulturklikEvents() : Promise.resolve([]),
+      shouldFetchGaliciaAxenda ? fetchGaliciaAxendaEvents() : Promise.resolve([]),
+      shouldFetchZaragozaAgenda ? fetchZaragozaAgendaEvents() : Promise.resolve([]),
+      shouldFetchCastillaLeonAgenda ? fetchCastillaLeonAgendaEvents() : Promise.resolve([]),
+      shouldFetchGijonAgenda ? fetchGijonAgendaEvents() : Promise.resolve([]),
+      shouldFetchCastillaManchaAgenda ? fetchCastillaManchaAgendaEvents() : Promise.resolve([]),
+      shouldFetchPamplonaAgenda ? fetchPamplonaAgendaEvents() : Promise.resolve([]),
+      shouldFetchRiojaTeatros ? fetchRiojaTeatrosEvents() : Promise.resolve([]),
     ]);
 
     if (ticketmasterResult.status === "fulfilled") {
@@ -378,6 +1044,114 @@ app.get("/events", async (req, res) => {
       );
     }
 
+    if (catalunyaAgendaResult.status === "fulfilled") {
+      catalunyaAgendaEvents = catalunyaAgendaResult.value;
+    } else {
+      console.warn(
+        "Generalitat Catalunya events fetch failed, continuing:",
+        catalunyaAgendaResult.reason?.message || catalunyaAgendaResult.reason
+      );
+    }
+
+    if (valencianaIvcResult.status === "fulfilled") {
+      valencianaIvcEvents = valencianaIvcResult.value;
+    } else {
+      console.warn(
+        "Generalitat Valenciana IVC events fetch failed, continuing:",
+        valencianaIvcResult.reason?.message || valencianaIvcResult.reason
+      );
+    }
+
+    if (murciaAyuntamientoResult.status === "fulfilled") {
+      murciaAyuntamientoEvents = murciaAyuntamientoResult.value;
+    } else {
+      console.warn(
+        "Ayuntamiento Murcia events fetch failed, continuing:",
+        murciaAyuntamientoResult.reason?.message || murciaAyuntamientoResult.reason
+      );
+    }
+
+    if (andaluciaJuntaResult.status === "fulfilled") {
+      andaluciaJuntaEvents = andaluciaJuntaResult.value;
+    } else {
+      console.warn(
+        "Junta Andalucia events fetch failed, continuing:",
+        andaluciaJuntaResult.reason?.message || andaluciaJuntaResult.reason
+      );
+    }
+
+    if (euskadiKulturklikResult.status === "fulfilled") {
+      euskadiKulturklikEvents = euskadiKulturklikResult.value;
+    } else {
+      console.warn(
+        "Euskadi Kulturklik events fetch failed, continuing:",
+        euskadiKulturklikResult.reason?.message || euskadiKulturklikResult.reason
+      );
+    }
+
+    if (galiciaAxendaResult.status === "fulfilled") {
+      galiciaAxendaEvents = galiciaAxendaResult.value;
+    } else {
+      console.warn(
+        "Galicia Axenda events fetch failed, continuing:",
+        galiciaAxendaResult.reason?.message || galiciaAxendaResult.reason
+      );
+    }
+
+    if (zaragozaAgendaResult.status === "fulfilled") {
+      zaragozaAgendaEvents = zaragozaAgendaResult.value;
+    } else {
+      console.warn(
+        "Zaragoza Agenda events fetch failed, continuing:",
+        zaragozaAgendaResult.reason?.message || zaragozaAgendaResult.reason
+      );
+    }
+
+    if (castillaLeonAgendaResult.status === "fulfilled") {
+      castillaLeonAgendaEvents = castillaLeonAgendaResult.value;
+    } else {
+      console.warn(
+        "Castilla y Leon Agenda events fetch failed, continuing:",
+        castillaLeonAgendaResult.reason?.message || castillaLeonAgendaResult.reason
+      );
+    }
+
+    if (gijonAgendaResult.status === "fulfilled") {
+      gijonAgendaEvents = gijonAgendaResult.value;
+    } else {
+      console.warn(
+        "Gijon Agenda events fetch failed, continuing:",
+        gijonAgendaResult.reason?.message || gijonAgendaResult.reason
+      );
+    }
+
+    if (castillaManchaAgendaResult.status === "fulfilled") {
+      castillaManchaAgendaEvents = castillaManchaAgendaResult.value;
+    } else {
+      console.warn(
+        "Castilla-La Mancha Agenda events fetch failed, continuing:",
+        castillaManchaAgendaResult.reason?.message || castillaManchaAgendaResult.reason
+      );
+    }
+
+    if (pamplonaAgendaResult.status === "fulfilled") {
+      pamplonaAgendaEvents = pamplonaAgendaResult.value;
+    } else {
+      console.warn(
+        "Pamplona Agenda events fetch failed, continuing:",
+        pamplonaAgendaResult.reason?.message || pamplonaAgendaResult.reason
+      );
+    }
+
+    if (riojaTeatrosResult.status === "fulfilled") {
+      riojaTeatrosEvents = riojaTeatrosResult.value;
+    } else {
+      console.warn(
+        "Red Teatros La Rioja events fetch failed, continuing:",
+        riojaTeatrosResult.reason?.message || riojaTeatrosResult.reason
+      );
+    }
+
     // Combine and return events
     const allEvents = [
       ...events,
@@ -385,6 +1159,18 @@ app.get("/events", async (req, res) => {
       ...atrapaloEvents,
       ...madridOpenDataEvents,
       ...barcelonaDibaEvents,
+      ...catalunyaAgendaEvents,
+      ...valencianaIvcEvents,
+      ...murciaAyuntamientoEvents,
+      ...andaluciaJuntaEvents,
+      ...euskadiKulturklikEvents,
+      ...galiciaAxendaEvents,
+      ...zaragozaAgendaEvents,
+      ...castillaLeonAgendaEvents,
+      ...gijonAgendaEvents,
+      ...castillaManchaAgendaEvents,
+      ...pamplonaAgendaEvents,
+      ...riojaTeatrosEvents,
     ];
     console.log("Eventos devueltos:", {
       local: events.length,
@@ -392,6 +1178,18 @@ app.get("/events", async (req, res) => {
       atrapalo: atrapaloEvents.length,
       madrid_open_data: madridOpenDataEvents.length,
       barcelona_diba: barcelonaDibaEvents.length,
+      catalunya_agenda: catalunyaAgendaEvents.length,
+      valenciana_ivc: valencianaIvcEvents.length,
+      murcia_ayuntamiento: murciaAyuntamientoEvents.length,
+      andalucia_junta: andaluciaJuntaEvents.length,
+      euskadi_kulturklik: euskadiKulturklikEvents.length,
+      galicia_axenda: galiciaAxendaEvents.length,
+      zaragoza_agenda: zaragozaAgendaEvents.length,
+      castilla_leon_agenda: castillaLeonAgendaEvents.length,
+      gijon_agenda: gijonAgendaEvents.length,
+      clm_agenda: castillaManchaAgendaEvents.length,
+      pamplona_agenda: pamplonaAgendaEvents.length,
+      rioja_teatros: riojaTeatrosEvents.length,
       total: allEvents.length,
     });
     if (barcelonaDibaEvents.length) {
@@ -427,6 +1225,8 @@ app.post("/events", async (req, res) => {
       latitude,
       longitude,
       created_by,
+      subcategory_slug,
+      subcategory_name,
     } = req.body;
 
     const DEFAULT_EVENT_IMAGE = "/assets/iconoApp.png";
@@ -454,9 +1254,9 @@ app.post("/events", async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      `INSERT INTO events (title, description, event_at, location, type, category_id, image, latitude, longitude, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       RETURNING id, title, description, event_at, location, type, category_id, image, latitude, longitude, created_by`,
+      `INSERT INTO events (title, description, event_at, location, type, category_id, subcategory_slug, subcategory_name, image, latitude, longitude, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       RETURNING id, title, description, event_at, location, type, category_id, subcategory_slug, subcategory_name, image, latitude, longitude, created_by`,
       [
         title,
         description,
@@ -464,6 +1264,8 @@ app.post("/events", async (req, res) => {
         location,
         type,
         categoryId,
+        subcategory_slug || null,
+        subcategory_name || null,
         image,
         latitude,
         longitude,
@@ -558,6 +1360,8 @@ app.patch("/events/:eventId", async (req, res) => {
     image,
     latitude,
     longitude,
+    subcategory_slug,
+    subcategory_name,
   } = req.body || {};
 
   const set = [];
@@ -585,6 +1389,8 @@ app.patch("/events/:eventId", async (req, res) => {
   pushIfDefined("image", image);
   pushIfDefined("latitude", latitude);
   pushIfDefined("longitude", longitude);
+  pushIfDefined("subcategory_slug", subcategory_slug);
+  pushIfDefined("subcategory_name", subcategory_name);
 
   if (set.length === 0) {
     return res.status(400).json({ error: "No hay campos para actualizar" });
@@ -612,7 +1418,7 @@ app.patch("/events/:eventId", async (req, res) => {
       UPDATE events
          SET ${set.join(", ")}
        WHERE id = $${i}
-       RETURNING id, title, description, event_at, location, type, category_id, image, latitude, longitude, created_by
+       RETURNING id, title, description, event_at, location, type, category_id, subcategory_slug, subcategory_name, image, latitude, longitude, created_by
       `,
       values
     );
@@ -743,6 +1549,59 @@ const updateProfileHandler = async (req, res) => {
 app.put("/users/:userId", updateProfileHandler);
 app.put("/users/:userId/profile", updateProfileHandler);
 
+// Guardar token push Expo del dispositivo para notificaciones remotas
+app.post("/users/:userId/push-token", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { expoPushToken } = req.body || {};
+
+    if (!isExpoPushToken(expoPushToken)) {
+      console.warn("[push-token] token inválido", { userId, expoPushToken });
+      return res.status(400).json({ error: "expoPushToken inválido" });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE users
+       SET expo_push_token = $1
+       WHERE id = $2
+       RETURNING id`,
+      [expoPushToken, userId]
+    );
+
+    if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+    console.log("[push-token] guardado", {
+      userId,
+      tokenPrefix: expoPushToken.slice(0, 24),
+    });
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("POST /users/:userId/push-token ERROR:", e);
+    return res.status(500).json({ error: "No se pudo guardar el token push" });
+  }
+});
+
+// Diagnóstico: permite comprobar si un usuario ya tiene token push guardado sin exponerlo completo
+app.get("/users/:userId/push-token/status", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { rows } = await pool.query(
+      `SELECT expo_push_token FROM users WHERE id = $1`,
+      [userId]
+    );
+
+    if (!rows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+
+    const token = rows[0].expo_push_token;
+    return res.json({
+      hasToken: isExpoPushToken(token),
+      tokenPrefix: token ? String(token).slice(0, 24) : null,
+    });
+  } catch (e) {
+    console.error("GET /users/:userId/push-token/status ERROR:", e);
+    return res.status(500).json({ error: "No se pudo consultar el token push" });
+  }
+});
+
 /* ==== FOTO PERFIL ==== */
 
 // Configuración multer para fotos de perfil (reusa uploadsBaseDir)
@@ -753,14 +1612,73 @@ const profileStorage = multer.diskStorage({
     cb(null, `profile_${req.params.userId}${ext}`);
   },
 });
-const uploadProfile = multer({ storage: profileStorage });
+const uploadProfile = multer({
+  storage: profileStorage,
+  limits: { fileSize: 4 * 1024 * 1024 },
+});
+
+const isExpoPushToken = (token) =>
+  typeof token === "string" &&
+  (/^ExponentPushToken\[[^\]]+\]$/.test(token) || /^ExpoPushToken\[[^\]]+\]$/.test(token));
+
+async function sendExpoPushNotification({ to, title, body, data = {} }) {
+  if (!isExpoPushToken(to)) return false;
+
+  try {
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to,
+        sound: "default",
+        title,
+        body,
+        data,
+      }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      console.warn("Expo push error:", response.status, payload);
+      return false;
+    }
+    console.log("Expo push enviado:", payload);
+    return true;
+  } catch (error) {
+    console.warn("No se pudo enviar Expo push:", error.message);
+    return false;
+  }
+}
 
 // Subir foto de perfil
 app.post("/users/:userId/photo", uploadProfile.single("photo"), async (req, res) => {
-  const { userId } = req.params;
-  const photoUrl = `/uploads/${req.file.filename}`;
-  await pool.query("UPDATE users SET photo = $1 WHERE id = $2", [photoUrl, userId]);
-  res.json({ photo: photoUrl });
+  try {
+    const { userId } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No se subió ninguna foto" });
+    }
+
+    const mimeType = req.file.mimetype || "image/jpeg";
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const photoDataUrl = `data:${mimeType};base64,${fileBuffer.toString("base64")}`;
+
+    await pool.query("UPDATE users SET photo = $1 WHERE id = $2", [
+      photoDataUrl,
+      userId,
+    ]);
+
+    fs.unlink(req.file.path, () => {});
+
+    res.json({ photo: photoDataUrl });
+  } catch (e) {
+    console.error("POST /users/:userId/photo ERROR:", e);
+    res.status(500).json({ error: "No se pudo subir la foto" });
+  }
 });
 
 /* ==== AMIGOS ==== */
@@ -863,15 +1781,54 @@ app.post("/friend-requests", async (req, res) => {
       return res.status(400).json({ error: "senderId/receiverId inválidos" });
     }
 
-    await pool.query(
+    const insertResult = await pool.query(
       `INSERT INTO friend_requests (sender_id, receiver_id)
        VALUES ($1, $2)
-       ON CONFLICT (sender_id, receiver_id) DO NOTHING`,
+       ON CONFLICT (sender_id, receiver_id) DO NOTHING
+       RETURNING id`,
       [senderId, receiverId]
     );
 
-    console.log("[friend-requests] solicitud creada", { senderId, receiverId });
-    return res.json({ success: true });
+    const createdRequestId = insertResult.rows[0]?.id || null;
+
+    let pushStatus = "not_created";
+
+    if (createdRequestId) {
+      console.log("[friend-requests] solicitud creada", { senderId, receiverId });
+
+      const { rows } = await pool.query(
+        `SELECT
+           sender.name AS sender_name,
+           receiver.expo_push_token AS receiver_push_token
+         FROM users sender
+         CROSS JOIN users receiver
+         WHERE sender.id = $1 AND receiver.id = $2`,
+        [senderId, receiverId]
+      );
+
+      const notification = rows[0];
+      if (notification?.receiver_push_token) {
+        const pushSent = await sendExpoPushNotification({
+          to: notification.receiver_push_token,
+          title: "Nueva solicitud de amistad",
+          body: `${notification.sender_name || "Alguien"} quiere conectar contigo en GoPlan`,
+          data: {
+            type: "friend_request",
+            requestId: createdRequestId,
+            senderId,
+          },
+        });
+        pushStatus = pushSent ? "sent" : "failed";
+      } else {
+        pushStatus = "receiver_without_token";
+        console.warn("[friend-requests] receptor sin token push", { receiverId });
+      }
+    } else {
+      pushStatus = "already_exists";
+      console.log("[friend-requests] solicitud ya existente", { senderId, receiverId });
+    }
+
+    return res.json({ success: true, created: Boolean(createdRequestId), pushStatus });
   } catch (e) {
     console.error("POST /friend-requests ERROR:", e);
     return res.status(500).json({ error: "Error creando solicitud" });
@@ -965,7 +1922,7 @@ app.delete("/friend-requests/:requestId", async (req, res) => {
 app.get("/users/:userId/events-created", async (req, res) => {
   const { userId } = req.params;
   const { rows } = await pool.query(
-    `SELECT id, title, description, event_at, location, type, image, latitude, longitude
+    `SELECT id, title, description, event_at, location, type, subcategory_slug, subcategory_name, image, latitude, longitude
        FROM events
       WHERE created_by = $1
       ORDER BY event_at DESC`,
@@ -978,7 +1935,7 @@ app.get("/users/:userId/events-created", async (req, res) => {
 app.get("/users/:friendId/events", async (req, res) => {
   const { friendId } = req.params;
   const { rows } = await pool.query(
-    `SELECT id, title, description, event_at, location, type, image
+    `SELECT id, title, description, event_at, location, type, subcategory_slug, subcategory_name, image
        FROM events
       WHERE created_by = $1
       ORDER BY event_at DESC`,
@@ -992,7 +1949,7 @@ app.get("/users/:userId/events-attending", async (req, res) => {
   const { userId } = req.params;
   try {
     const { rows } = await pool.query(
-      `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+      `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.subcategory_slug, e.subcategory_name, e.image,
               e.latitude, e.longitude
          FROM event_attendees ea
          JOIN events e ON e.id = ea.event_id
@@ -1052,7 +2009,7 @@ app.get("/users/:userId/favorites", async (req, res) => {
 app.get("/users/:userId/favorites/events", async (req, res) => {
   const { userId } = req.params;
   const result = await pool.query(
-    `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
+    `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.subcategory_slug, e.subcategory_name, e.image,
             e.latitude, e.longitude
        FROM event_favorites f
        JOIN events e ON e.id = f.event_id
@@ -1149,7 +2106,7 @@ app.delete("/attendees", async (req, res) => {
 
 // Obtener asistentes de un evento
 app.get("/events/:eventId/attendees", async (req, res) => {
-  const { eventId } = req.params; // ✅ CORREGIDO
+  const eventId = req.eventId;
 
   try {
     const { rows } = await pool.query(
@@ -1171,7 +2128,7 @@ app.get("/events/:eventId/attendees", async (req, res) => {
 
 // Comprobar si un usuario asiste
 app.get("/events/:eventId/attendees/:userId", async (req, res) => {
-  const { eventId } = req.params; // ✅ CORREGIDO
+  const eventId = req.eventId;
   const { userId } = req.params;
 
   try {
@@ -1220,7 +2177,7 @@ app.post("/events/:eventId/comments", async (req, res) => {
   res.status(201).json(rows[0]);
 });
 app.delete("/events/:eventId/comments/:commentId", async (req, res) => {
-  const eventId = req.params.eventId;
+  const eventId = req.eventId;
   const commentId = req.params.commentId;
 
   // Sin JWT: userId por query o body
@@ -1473,6 +2430,18 @@ app.delete("/users/me", authMiddleware, async (req, res) => {
 void warmAtrapaloCache();
 void warmMadridOpenDataCache();
 void warmBarcelonaDibaCache();
+void warmCatalunyaAgendaCache();
+void warmValencianaIvcCache();
+void warmMurciaAyuntamientoCache();
+void warmAndaluciaJuntaCache();
+void warmEuskadiKulturklikCache();
+void warmGaliciaAxendaCache();
+void warmZaragozaAgendaCache();
+void warmCastillaLeonAgendaCache();
+void warmGijonAgendaCache();
+void warmCastillaManchaAgendaCache();
+void warmPamplonaAgendaCache();
+void warmRiojaTeatrosCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);

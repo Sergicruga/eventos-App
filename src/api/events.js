@@ -40,6 +40,8 @@ export async function createEvent(event) {
     event_at: event.date, // YYYY-MM-DD
     location: event.location || "",
     type: event.type || "Otro",
+    subcategory_slug: event.subcategory_slug || null,
+    subcategory_name: event.subcategory_name || null,
     image: event.image || null,
     latitude: event.latitude ?? null,
     longitude: event.longitude ?? null,
@@ -92,6 +94,8 @@ export async function updateEvent(eventId, data = {}, { timeoutMs = 15000 } = {}
     event_at: typeof data.date !== "undefined" ? data.date : undefined, // map date -> event_at
     location: data.location,
     type: data.type,
+    subcategory_slug: data.subcategory_slug,
+    subcategory_name: data.subcategory_name,
     image: data.image,
     latitude: data.latitude,
     longitude: data.longitude,

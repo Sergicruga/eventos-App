@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password TEXT, -- optional now, for migration
   photo TEXT,
+  expo_push_token TEXT,
   privacy_accepted_at TIMESTAMP,
   privacy_version TEXT
 );
@@ -49,6 +50,8 @@ CREATE TABLE IF NOT EXISTS events (
   location TEXT,
   type TEXT,
   category_id INTEGER REFERENCES event_categories(id) ON DELETE SET NULL,
+  subcategory_slug TEXT,
+  subcategory_name TEXT,
   image TEXT,
   latitude FLOAT,
   longitude FLOAT,

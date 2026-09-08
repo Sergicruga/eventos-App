@@ -5,8 +5,8 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
-  Dimensions,
+  ScrollView,
+  StyleSheet,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventContext } from '../EventContext';
@@ -15,7 +15,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import styles from './HomeScreen.styles';
 import { AuthContext } from '../context/AuthContext';
 import { Image as ExpoImage } from 'expo-image';
-import { EVENT_CATEGORIES, eventMatchesCategory, findCategoryBySlug } from '../constants/categories';
+import {
+  eventMatchesCategory,
+  eventMatchesSubcategory,
+  findCategoryBySlug,
+  getSubcategoriesForCategory,
+} from '../constants/categories';
 import { isUpcoming, formatDateDMY } from '../utils/dateHelpers';
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
@@ -103,7 +108,7 @@ export default function CategoryEventsScreen({ route }) {
   } = eventCtx;
   const { user } = useContext(AuthContext);
   const [search, setSearch] = useState('');
-  const [location, setLocation] = useState(null);
+  const [activeSubcategory, setActiveSubcategory] = useState('todos');
   const navigation = useNavigation();
   const myUserId = user?.id != null ? String(user.id) : null;
 
@@ -121,13 +126,28 @@ export default function CategoryEventsScreen({ route }) {
       .filter(ev => eventMatchesCategory(ev, activeSlug));
   }, [locationFilteredEvents, activeSlug, myUserId, favorites]);
 
+  const subcategories = useMemo(() => getSubcategoriesForCategory(activeSlug), [activeSlug]);
+
+  const subcategoryCounts = useMemo(() => {
+    const counts = { todos: categoryEvents.length };
+    subcategories.forEach((sub) => {
+      counts[sub.slug] = categoryEvents.filter((event) =>
+        eventMatchesSubcategory(event, sub.slug)
+      ).length;
+    });
+    return counts;
+  }, [categoryEvents, subcategories]);
+
   // Filter by search
   const filteredEvents = useMemo(() => {
-    return categoryEvents.filter(e =>
-      (e.title || '').toLowerCase().includes(search.toLowerCase()) ||
-      (e.location || '').toLowerCase().includes(search.toLowerCase())
-    );
-  }, [categoryEvents, search]);
+    return categoryEvents
+      .filter(e => eventMatchesSubcategory(e, activeSubcategory))
+      .filter(e =>
+        (e.title || '').toLowerCase().includes(search.toLowerCase()) ||
+        (e.location || '').toLowerCase().includes(search.toLowerCase()) ||
+        (e.subcategory_name || '').toLowerCase().includes(search.toLowerCase())
+      );
+  }, [categoryEvents, search, activeSubcategory]);
 
   // Remove duplicates; for API / Ticketmaster events we collapse
   // variants (VIP, GA, etc.) by normalizing their title so only the first
@@ -190,12 +210,58 @@ export default function CategoryEventsScreen({ route }) {
           onChangeText={setSearch}
         />
       </View>
+      {subcategories.length > 0 && (
+        <View style={subcategoryStyles.bar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={subcategoryStyles.scroll}
+            contentContainerStyle={subcategoryStyles.scrollContent}
+          >
+            {[{ slug: 'todos', name: 'Todos' }, ...subcategories].map((sub) => {
+              const selected = activeSubcategory === sub.slug;
+              const count = subcategoryCounts[sub.slug] || 0;
+              return (
+                <TouchableOpacity
+                  key={sub.slug}
+                  onPress={() => setActiveSubcategory(sub.slug)}
+                  activeOpacity={0.85}
+                  style={[
+                    subcategoryStyles.chip,
+                    selected && subcategoryStyles.chipSelected,
+                  ]}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      subcategoryStyles.chipText,
+                      selected && subcategoryStyles.chipTextSelected,
+                    ]}
+                  >
+                    {sub.name}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      subcategoryStyles.chipCount,
+                      selected && subcategoryStyles.chipCountSelected,
+                    ]}
+                  >
+                    {count}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
       <FlatList
         data={deduped}
         keyExtractor={item => String(item.id)}
         renderItem={renderItem}
         numColumns={2}
-        contentContainerStyle={[styles.listContent, { alignItems: 'center' }]}
+        style={subcategoryStyles.list}
+        contentContainerStyle={[styles.listContent, subcategoryStyles.listContent]}
         columnWrapperStyle={{ justifyContent: 'center' }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
@@ -210,3 +276,68 @@ export default function CategoryEventsScreen({ route }) {
     </View>
   );
 }
+
+const subcategoryStyles = StyleSheet.create({
+  bar: {
+    height: 52,
+    justifyContent: 'center',
+    marginBottom: 14,
+    backgroundColor: '#f3f6fc',
+    zIndex: 5,
+    elevation: 5,
+  },
+  scroll: {
+    height: 44,
+    flexGrow: 0,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  list: {
+    flex: 1,
+    zIndex: 0,
+    elevation: 0,
+  },
+  listContent: {
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    minWidth: 88,
+    maxWidth: 190,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    marginRight: 8,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#D8E0F0',
+  },
+  chipSelected: {
+    backgroundColor: '#3B5BA9',
+    borderColor: '#3B5BA9',
+  },
+  chipText: {
+    flexShrink: 1,
+    color: '#27496D',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  chipTextSelected: {
+    color: '#fff',
+  },
+  chipCount: {
+    flexShrink: 0,
+    color: '#8AA0BF',
+    marginLeft: 6,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  chipCountSelected: {
+    color: '#E7EEFF',
+  },
+});

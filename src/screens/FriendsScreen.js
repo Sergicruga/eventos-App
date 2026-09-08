@@ -28,6 +28,8 @@ const getFriendPhoto = (friend) =>
   friend?.avatar_url ||
   friend?.profileImage ||
   friend?.profile_image ||
+  friend?.photoUrl ||
+  friend?.photo_url ||
   friend?.image ||
   friend?.image_url ||
   null;
@@ -44,6 +46,10 @@ const getAvatarUrl = (friendOrPhoto) => {
 const FriendAvatar = ({ friend, style }) => {
   const [fallback, setFallback] = useState(false);
   const uri = getAvatarUrl(friend);
+
+  useEffect(() => {
+    setFallback(false);
+  }, [uri]);
 
   if (fallback || !uri) {
     return (

@@ -528,6 +528,8 @@ export function EventProvider({ children }) {
       date: ev.date ?? '',
       category_slug: ev.category_slug ?? null,
       category_name: ev.category_name ?? null,
+      subcategory_slug: ev.subcategory_slug ?? null,
+      subcategory_name: ev.subcategory_name ?? null,
       latitude: ev.latitude != null ? Number(ev.latitude) : null,
       longitude: ev.longitude != null ? Number(ev.longitude) : null,
       image: ev.image ?? null,
@@ -571,6 +573,9 @@ export function EventProvider({ children }) {
           const params = [];
           if (uid) params.push(`userId=${uid}`);
           if (city) params.push(`city=${encodeURIComponent(city)}`);
+          if (coords?.latitude != null) params.push(`latitude=${encodeURIComponent(coords.latitude)}`);
+          if (coords?.longitude != null) params.push(`longitude=${encodeURIComponent(coords.longitude)}`);
+          if (searchRadius) params.push(`radius=${encodeURIComponent(searchRadius)}`);
           const queryString = params.length > 0 ? `?${params.join('&')}` : '';
           const url = `${base.replace(/\/$/, '')}/events${queryString}`;
           try {
@@ -632,6 +637,8 @@ export function EventProvider({ children }) {
             city: ev.city || null,
             category_slug: ev.category_slug || null,  // ← ADD THIS
             category_name: ev.category_name || null,  // ← ADD THIS
+            subcategory_slug: ev.subcategory_slug || null,
+            subcategory_name: ev.subcategory_name || null,
             image:
               ev.image && String(ev.image).trim() !== ''
                 ? ev.image
@@ -751,7 +758,7 @@ export function EventProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [uid, authToken, city]);
+  }, [uid, authToken, city, coords?.latitude, coords?.longitude, searchRadius]);
 
   // Persistir eventos por-usuario ante cambios
   useEffect(() => {
@@ -859,6 +866,8 @@ export function EventProvider({ children }) {
       event_at: ev.date ?? '',
       location: ev.location ?? '',
       type: ev.type || 'local',
+      subcategory_slug: ev.subcategory_slug || null,
+      subcategory_name: ev.subcategory_name || null,
       latitude: ev.latitude ?? null,
       longitude: ev.longitude ?? null,
     };
@@ -938,6 +947,8 @@ export function EventProvider({ children }) {
         starts_at: event.startsAt ?? null,
         location: event.location ?? '',
         type: event.type || 'local',
+        subcategory_slug: event.subcategory_slug || null,
+        subcategory_name: event.subcategory_name || null,
         image:
           event.image &&
           !isLocalUri(event.image) &&
@@ -1012,6 +1023,8 @@ export function EventProvider({ children }) {
         type: saved.type || 'local',
         category_slug: saved.category_slug ?? null,
         category_name: saved.category_name ?? null,
+        subcategory_slug: saved.subcategory_slug ?? event.subcategory_slug ?? null,
+        subcategory_name: saved.subcategory_name ?? event.subcategory_name ?? null,
         image:
           (saved.image &&
           String(saved.image).trim() !== ''
@@ -1120,6 +1133,8 @@ export function EventProvider({ children }) {
             null,
           category_slug: json?.category_slug ?? prevEv.category_slug ?? null,
           category_name: json?.category_name ?? prevEv.category_name ?? null,
+          subcategory_slug: json?.subcategory_slug ?? prevEv.subcategory_slug ?? null,
+          subcategory_name: json?.subcategory_name ?? prevEv.subcategory_name ?? null,
         };
 
         const next = [...prev];
@@ -1155,7 +1170,12 @@ export function EventProvider({ children }) {
   };
 
   // ===== Asistir / no asistir (núcleo) =====
-  const attend = async (eventId, attending = true) => {
+  const attend = async (eventOrId, attending = true) => {
+    const eventId =
+      typeof eventOrId === 'object' && eventOrId !== null
+        ? eventOrId.id
+        : eventOrId;
+
     if (!eventId) return;
     if (!effectiveUser?.id) {
       Alert.alert(
@@ -1168,9 +1188,10 @@ export function EventProvider({ children }) {
     try {
       // Asegurarnos de tener un ID válido para el servidor
       let dbId = dbIdFrom(eventId);
-      let eventObj = events.find(
-        (e) => String(e.id) === String(eventId)
-      );
+      let eventObj =
+        typeof eventOrId === 'object' && eventOrId !== null
+          ? eventOrId
+          : events.find((e) => String(e.id) === String(eventId));
 
       if (!dbId && eventObj) {
         // Evento de API: intentamos crearlo/enlazarlo en el backend
@@ -1258,19 +1279,11 @@ export function EventProvider({ children }) {
 
   // ===== Wrappers que usa la UI: joinEvent / leaveEvent =====
   const joinEvent = async (eventOrId) => {
-    const eventId =
-      typeof eventOrId === 'object' && eventOrId !== null
-        ? eventOrId.id
-        : eventOrId;
-    return attend(eventId, true);
+    return attend(eventOrId, true);
   };
 
   const leaveEvent = async (eventOrId) => {
-    const eventId =
-      typeof eventOrId === 'object' && eventOrId !== null
-        ? eventOrId.id
-        : eventOrId;
-    return attend(eventId, false);
+    return attend(eventOrId, false);
   };
 
   // ===== Forzar actualización de evento =====
