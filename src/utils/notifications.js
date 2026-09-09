@@ -5,12 +5,34 @@ import { API_URL } from '../config';
 
 const EXPO_PROJECT_ID = 'ec7b6a65-2245-4b94-9f89-7183cae09276';
 
+async function ensureAndroidNotificationChannel() {
+  if (Platform.OS !== 'android') return;
+
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'default',
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#3B5BA9',
+  });
+}
+
 export async function requestNotificationPermission() {
+  await ensureAndroidNotificationChannel();
+
   const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+  console.log('[notifications] permiso actual', { status, canAskAgain });
 
   if (status !== 'granted' && canAskAgain) {
     const { status: newStatus } = await Notifications.requestPermissionsAsync();
+    console.log('[notifications] permiso solicitado', { status: newStatus });
     return newStatus === 'granted';
+  }
+
+  if (status !== 'granted') {
+    console.warn('[notifications] permiso no concedido y no se puede volver a pedir', {
+      status,
+      canAskAgain,
+    });
   }
 
   return status === 'granted';
@@ -72,15 +94,9 @@ export async function registerPushTokenForUser(userId) {
   if (!userId) return null;
 
   const granted = await requestNotificationPermission();
-  if (!granted) return null;
-
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#3B5BA9',
-    });
+  if (!granted) {
+    console.warn('[notifications] no se registra token porque no hay permiso', { userId });
+    return null;
   }
 
   const tokenData = await Notifications.getExpoPushTokenAsync({
@@ -88,7 +104,10 @@ export async function registerPushTokenForUser(userId) {
   });
   const expoPushToken = tokenData?.data;
 
-  if (!expoPushToken) return null;
+  if (!expoPushToken) {
+    console.warn('[notifications] Expo no devolvió token push', { userId });
+    return null;
+  }
 
   const response = await fetch(`${API_URL}/users/${userId}/push-token`, {
     method: 'POST',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -18,8 +18,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { sendTestNotification, requestNotificationPermission } from "../utils/notifications";
+import {
+  registerPushTokenForUser,
+  sendTestNotification,
+  requestNotificationPermission,
+} from "../utils/notifications";
 import * as Notifications from "expo-notifications";
+import { AuthContext } from "../context/AuthContext";
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -28,6 +33,7 @@ const DEFAULT_SETTINGS = {
 };
 
 export default function NotificationSettingsScreen() {
+  const { user } = useContext(AuthContext);
   const [enabled, setEnabled] = useState(DEFAULT_SETTINGS.enabled);
   const [advance, setAdvance] = useState(DEFAULT_SETTINGS.advance);
   const [saving, setSaving] = useState(false);
@@ -90,6 +96,14 @@ export default function NotificationSettingsScreen() {
 
   const handleTestNotification = async () => {
     try {
+      if (user?.id) {
+        const token = await registerPushTokenForUser(user.id);
+        if (!token) {
+          setShowPermissionModal(true);
+          return;
+        }
+      }
+
       await sendTestNotification();
       Alert.alert("Listo", "Se ha enviado una notificación de prueba.");
     } catch (error) {
@@ -128,9 +142,21 @@ export default function NotificationSettingsScreen() {
               value={enabled}
               onValueChange={async (value) => {
                 if (value) {
+                  const token = user?.id
+                    ? await registerPushTokenForUser(user.id)
+                    : null;
                   const perms = await Notifications.getPermissionsAsync();
-                  if (perms.status !== "granted") {
+
+                  if (!token && perms.status !== "granted") {
                     setShowPermissionModal(true);
+                    return;
+                  }
+
+                  if (!token) {
+                    Alert.alert(
+                      "No se pudo activar",
+                      "La app tiene permiso, pero no pudo registrar el token push. Revisa los logs de la app o inténtalo de nuevo."
+                    );
                     return;
                   }
                 }
