@@ -9,7 +9,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   Modal,
-  Button,
   Keyboard,
   RefreshControl,
   Pressable,
@@ -17,6 +16,7 @@ import {
 import { AuthContext } from "../context/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native"; // <-- Only this is needed
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EventContext } from "../EventContext";
 import { API_URL } from "../config";
 import { resolveImageUrl } from "../utils/imageSource";
@@ -73,6 +73,7 @@ export default function FriendsScreen() {
   const { getEventImageSource, getEffectiveEventImage } = useContext(EventContext);
    const { user } = useContext(AuthContext);
    const navigation = useNavigation();
+   const insets = useSafeAreaInsets();
    // Small component that mirrors HomeScreen loading/fallback behavior
    const EventThumb = ({ event }) => {
     const [thumbFallback, setThumbFallback] = useState(false);
@@ -108,6 +109,7 @@ export default function FriendsScreen() {
   const [friendRequests, setFriendRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeSection, setActiveSection] = useState("friends");
 
   // Fetch friends and requests on mount / when user available
   useEffect(() => {
@@ -318,6 +320,30 @@ export default function FriendsScreen() {
     </View>
   );
 
+  const renderSocialTab = (key, icon, label, count) => {
+    const active = activeSection === key;
+
+    return (
+      <TouchableOpacity
+        style={[styles.socialTab, active && styles.socialTabActive]}
+        onPress={() => setActiveSection(key)}
+        activeOpacity={0.9}
+      >
+        <View style={[styles.socialTabIcon, active && styles.socialTabIconActive]}>
+          <Ionicons name={icon} size={20} color={active ? "#fff" : "#1976d2"} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.socialTabLabel, active && styles.socialTabLabelActive]}>
+            {label}
+          </Text>
+          <Text style={[styles.socialTabCount, active && styles.socialTabCountActive]}>
+            {count} {count === 1 ? "elemento" : "elementos"}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.topCard}>
@@ -327,82 +353,91 @@ export default function FriendsScreen() {
         </View>
       </View>
 
-      <View style={styles.searchWrap}>
-        <Ionicons name="search" size={18} color="#9e9e9e" style={{ marginRight: 8 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar por nombre o email..."
-          value={query}
-          onChangeText={searchUsers}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-        {query.length > 0 ? (
-          <TouchableOpacity onPress={() => { setQuery(''); setSearchResults([]); Keyboard.dismiss(); }} style={{ padding: 8 }}>
-            <Ionicons name="close-circle" size={18} color="#bdbdbd" />
-          </TouchableOpacity>
-        ) : null}
+      <View style={styles.socialTabs}>
+        {renderSocialTab("friends", "people", "Amigos", friends.length)}
+        {renderSocialTab("requests", "person-add", "Solicitudes", friendRequests.length)}
       </View>
 
-      {loading && <ActivityIndicator style={{ marginVertical: 12 }} />}
+      {activeSection === "friends" ? (
+        <>
+          <View style={styles.searchWrap}>
+            <Ionicons name="search" size={18} color="#9e9e9e" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar por nombre o email..."
+              value={query}
+              onChangeText={searchUsers}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {query.length > 0 ? (
+              <TouchableOpacity onPress={() => { setQuery(''); setSearchResults([]); Keyboard.dismiss(); }} style={{ padding: 8 }}>
+                <Ionicons name="close-circle" size={18} color="#bdbdbd" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
 
-      {query.length > 0 && (
+          {loading && <ActivityIndicator style={{ marginVertical: 12 }} />}
+
+          <FlatList
+            data={query.length > 0 ? searchResults : friends}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={query.length > 0 ? renderSearchResult : renderFriend}
+            ListHeaderComponent={
+              query.length === 0 ? (
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.subHeader}>Tus amigos</Text>
+                  <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
+                    <Ionicons name="refresh" size={18} color="#1976d2" />
+                  </TouchableOpacity>
+                </View>
+              ) : null
+            }
+            ListEmptyComponent={
+              !loading && (
+                <Text style={[styles.emptyText, { marginTop: 20 }]}>
+                  {query.length > 0
+                    ? "No se encontraron usuarios."
+                    : "No tienes amigos aún. Busca y añade algunos."}
+                </Text>
+              )
+            }
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: Math.max(insets.bottom, 16) + 88 },
+            ]}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            keyboardShouldPersistTaps="handled"
+          />
+        </>
+      ) : (
         <FlatList
-          data={searchResults}
+          data={friendRequests}
           keyExtractor={(item) => String(item.id)}
-          renderItem={renderSearchResult}
-          style={{ marginHorizontal: 16, marginTop: 8 }}
+          renderItem={renderFriendRequest}
+          ListHeaderComponent={
+            <View style={styles.sectionHeader}>
+              <Text style={styles.subHeader}>Solicitudes pendientes</Text>
+              <Text style={styles.badge}>{friendRequests.length}</Text>
+            </View>
+          }
           ListEmptyComponent={
-            !loading && (
-              <Text style={{ textAlign: "center", color: "#888", padding: 12 }}>
-                No se encontraron usuarios.
+            loadingRequests ? (
+              <ActivityIndicator style={{ marginVertical: 20 }} />
+            ) : (
+              <Text style={[styles.emptyText, { marginTop: 20 }]}>
+                No tienes solicitudes pendientes.
               </Text>
             )
           }
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: Math.max(insets.bottom, 16) + 88 },
+          ]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         />
       )}
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.subHeader}>Solicitudes</Text>
-        <Text style={styles.badge}>{friendRequests.length}</Text>
-      </View>
-
-      {loadingRequests ? (
-        <ActivityIndicator style={{ marginVertical: 12 }} />
-      ) : friendRequests.length > 0 ? (
-        <View style={styles.requestList}>
-          {friendRequests.map((request) => (
-            <React.Fragment key={String(request.id)}>
-              {renderFriendRequest({ item: request })}
-            </React.Fragment>
-          ))}
-        </View>
-      ) : (
-        <Text style={styles.emptyText}>No tienes solicitudes pendientes.</Text>
-      )}
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.subHeader}>Tus amigos</Text>
-        <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
-          <Ionicons name="refresh" size={18} color="#1976d2" />
-        </TouchableOpacity>
-      </View>
-
-      <FlatList
-        data={friends}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderFriend}
-        ListEmptyComponent={
-          !loading && (
-            <Text style={[styles.emptyText, { marginTop: 20 }]}>
-              No tienes amigos aún. Busca y añade algunos.
-            </Text>
-          )
-        }
-        style={{ marginHorizontal: 16 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      />
 
       {/* Friend events modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
@@ -469,7 +504,12 @@ export default function FriendsScreen() {
       {/* Friend actions modal (compact) */}
       <Modal visible={friendActionVisible} transparent animationType="fade" onRequestClose={() => setFriendActionVisible(false)}>
         <Pressable style={styles.actionOverlay} onPress={() => setFriendActionVisible(false)}>
-          <View style={styles.actionSheet}>
+          <View
+            style={[
+              styles.actionSheet,
+              { paddingBottom: Math.max(insets.bottom, 16) + 16 },
+            ]}
+          >
             <Text style={styles.actionTitle}>{currentActionFriend?.name}</Text>
             <TouchableOpacity style={styles.actionRow} onPress={handleActionViewEvents}>
               <Ionicons name="calendar" size={18} color="#1976d2" style={{ marginRight: 12 }} />
@@ -479,7 +519,13 @@ export default function FriendsScreen() {
               <Ionicons name="person-remove" size={18} color="#d32f2f" style={{ marginRight: 12 }} />
               <Text style={[styles.actionText, { color: '#d32f2f' }]}>Eliminar amigo</Text>
             </TouchableOpacity>
-            <Button title="Cerrar" onPress={() => setFriendActionVisible(false)} />
+            <TouchableOpacity
+              style={styles.closeActionBtn}
+              onPress={() => setFriendActionVisible(false)}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.closeActionText}>Cerrar</Text>
+            </TouchableOpacity>
           </View>
         </Pressable>
       </Modal>
@@ -530,6 +576,64 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingVertical: 4,
   },
+  socialTabs: {
+    flexDirection: "row",
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 14,
+  },
+  socialTab: {
+    flex: 1,
+    minHeight: 74,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#e3ebf6",
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  socialTabActive: {
+    backgroundColor: "#1976d2",
+    borderColor: "#1976d2",
+  },
+  socialTabIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e3f2fd",
+  },
+  socialTabIconActive: {
+    backgroundColor: "rgba(255,255,255,0.22)",
+  },
+  socialTabLabel: {
+    color: "#263238",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  socialTabLabelActive: {
+    color: "#fff",
+  },
+  socialTabCount: {
+    marginTop: 2,
+    color: "#78909c",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  socialTabCountActive: {
+    color: "rgba(255,255,255,0.82)",
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
   subHeader: {
     fontSize: 16,
     fontWeight: "700",
@@ -537,7 +641,6 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     marginTop: 18,
-    marginHorizontal: 16,
     marginBottom: 6,
     flexDirection: "row",
     alignItems: "center",
@@ -743,5 +846,19 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 15,
     color: "#37474f",
+  },
+  closeActionBtn: {
+    marginTop: 10,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e3f2fd",
+  },
+  closeActionText: {
+    color: "#1976d2",
+    fontSize: 15,
+    fontWeight: "800",
+    textTransform: "uppercase",
   },
 });

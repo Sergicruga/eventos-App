@@ -396,10 +396,8 @@ export default function EventDetailScreen({ route, navigation }) {
     const params = new URLSearchParams();
     const shareFields = {
       title: current?.title,
-      description: current?.description,
       date: current?.date,
       location: current?.location,
-      image: current?.image,
       type: current?.type,
       source: current?.source,
       externalId: current?.externalId ?? current?.external_id,
@@ -683,7 +681,7 @@ export default function EventDetailScreen({ route, navigation }) {
     try {
       await Share.share({
         title: current.title || 'Evento en GoPlan',
-        message: `${details}\n\nAbre este evento en GoPlan:\n${shareUrl}`,
+        message: `${details}\n\nVer en GoPlan: ${shareUrl}`,
         url: shareUrl,
       });
     } catch (error) {
