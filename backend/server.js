@@ -184,6 +184,51 @@ app.use((req, _res, next) => {
 // Servir archivos estáticos (perfil + eventos)
 app.use("/uploads", express.static(uploadsBaseDir));
 
+app.get("/share/events/:eventId", (req, res) => {
+  const eventId = encodeURIComponent(String(req.params.eventId || ""));
+  const query = new URLSearchParams();
+
+  Object.entries(req.query || {}).forEach(([key, value]) => {
+    if (value == null) return;
+    const cleanValue = Array.isArray(value) ? value[0] : value;
+    if (String(cleanValue).trim()) query.set(key, String(cleanValue));
+  });
+
+  const deepLink = `goplan://event/${eventId}${query.toString() ? `?${query.toString()}` : ""}`;
+  const title = String(req.query.title || "Evento en GoPlan");
+  const safeTitle = title
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+  res.type("html").send(`<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>${safeTitle}</title>
+    <meta http-equiv="refresh" content="0;url=${deepLink}" />
+    <style>
+      body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#f8fafc;color:#1f2937}
+      main{max-width:420px;padding:28px;text-align:center}
+      a{display:inline-block;margin-top:18px;padding:12px 18px;border-radius:999px;background:#2563eb;color:white;text-decoration:none;font-weight:700}
+      p{color:#64748b;line-height:1.45}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${safeTitle}</h1>
+      <p>Abriendo este evento en GoPlan...</p>
+      <a href="${deepLink}">Abrir en GoPlan</a>
+    </main>
+    <script>
+      window.location.href = ${JSON.stringify(deepLink)};
+    </script>
+  </body>
+</html>`);
+});
+
 /* ==========================
    HELPERS
    ========================== */

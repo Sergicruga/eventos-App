@@ -408,7 +408,8 @@ export default function EventDetailScreen({ route, navigation }) {
     });
 
     const query = params.toString();
-    return `goplan://event/${encodeURIComponent(String(current?.id ?? ''))}${query ? `?${query}` : ''}`;
+    const base = API_URL.replace(/\/+$/, '');
+    return `${base}/share/events/${encodeURIComponent(String(current?.id ?? ''))}${query ? `?${query}` : ''}`;
   }, [current]);
 
   const buildEventUrl = useCallback((subpath = '', extraParams = {}) => {
