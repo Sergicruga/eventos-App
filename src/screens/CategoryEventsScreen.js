@@ -132,22 +132,22 @@ export default function CategoryEventsScreen({ route }) {
     const counts = { todos: categoryEvents.length };
     subcategories.forEach((sub) => {
       counts[sub.slug] = categoryEvents.filter((event) =>
-        eventMatchesSubcategory(event, sub.slug)
+        eventMatchesSubcategory(event, sub.slug, activeSlug)
       ).length;
     });
     return counts;
-  }, [categoryEvents, subcategories]);
+  }, [categoryEvents, subcategories, activeSlug]);
 
   // Filter by search
   const filteredEvents = useMemo(() => {
     return categoryEvents
-      .filter(e => eventMatchesSubcategory(e, activeSubcategory))
+      .filter(e => eventMatchesSubcategory(e, activeSubcategory, activeSlug))
       .filter(e =>
         (e.title || '').toLowerCase().includes(search.toLowerCase()) ||
         (e.location || '').toLowerCase().includes(search.toLowerCase()) ||
         (e.subcategory_name || '').toLowerCase().includes(search.toLowerCase())
       );
-  }, [categoryEvents, search, activeSubcategory]);
+  }, [categoryEvents, search, activeSubcategory, activeSlug]);
 
   // Remove duplicates; for API / Ticketmaster events we collapse
   // variants (VIP, GA, etc.) by normalizing their title so only the first

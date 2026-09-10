@@ -246,13 +246,72 @@ export const findSubcategoryBySlug = (slug) => {
   return EVENT_SUBCATEGORIES.find((sub) => sub.slug === normalized) || null;
 };
 
-export const eventMatchesSubcategory = (event, subcategorySlug) => {
+const normalizeTextForMatch = (value = '') =>
+  String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+export const inferEventSubcategorySlug = (event, categorySlug) => {
+  if (!event) return null;
+
+  const explicit = String(event.subcategory_slug || event.subcategorySlug || '')
+    .toLowerCase()
+    .trim();
+
+  if (explicit && findSubcategoryBySlug(explicit)) return explicit;
+
+  const category =
+    categorySlug ||
+    event.category_slug ||
+    event.categorySlug ||
+    normalizeEventCategory(event.type || event.type_evento || event.category)?.slug ||
+    null;
+
+  const text = normalizeTextForMatch(
+    [
+      event.title,
+      event.name,
+      event.description,
+      event.location,
+      event.venue_name,
+      event.venueName,
+      event.genre,
+      event.classification,
+      event.type,
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
+
+  if (category === 'musica') {
+    if (/\b(festival|festivales|fest|primavera sound|cruilla|sonar)\b/.test(text)) return 'festivales';
+    if (/\b(dj|electronic|electronica|techno|house|dance)\b/.test(text)) return 'dj-electronica';
+    if (/\b(flamenco|sevillanas|rumba)\b/.test(text)) return 'flamenco';
+    if (/\b(jazz|blues|swing|soul)\b/.test(text)) return 'jazz-blues';
+    if (/\b(clasica|opera|orquesta|sinfonic|sinfonica|zarzuela)\b/.test(text)) return 'clasica-opera';
+
+    // Ticketmaster y otras fuentes a menudo solo informan "Music" y una sala.
+    // Si ya está dentro de Música, lo más útil para el usuario es tratarlo como concierto.
+    return 'conciertos';
+  }
+
+  if (category === 'arte') {
+    if (/\b(circo|circ|clown|malabares|acrobacia)\b/.test(text)) return 'circo';
+    if (/\b(teatro|teatre|theatre|theater|escenicas)\b/.test(text)) return 'teatro';
+    if (/\b(exposicion|exposicio|exhibition|galeria|pintura|escultura|fotografia)\b/.test(text)) return 'exposiciones';
+    if (/\b(danza|dansa|dance|ballet)\b/.test(text)) return 'danza';
+    if (/\b(comedia|monologo|humor|stand up)\b/.test(text)) return 'comedia-monologos';
+    if (/\b(museo|museu|visita guiada|patrimonio|patrimoni|archivo)\b/.test(text)) return 'museos-visitas';
+    return 'arte-otros';
+  }
+
+  return null;
+};
+
+export const eventMatchesSubcategory = (event, subcategorySlug, categorySlug = null) => {
   if (!event || !subcategorySlug || subcategorySlug === 'todos') return true;
 
   const wanted = String(subcategorySlug).toLowerCase().trim();
-  return (
-    String(event.subcategory_slug || event.subcategorySlug || '')
-      .toLowerCase()
-      .trim() === wanted
-  );
+  return inferEventSubcategorySlug(event, categorySlug) === wanted;
 };

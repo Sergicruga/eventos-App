@@ -94,7 +94,7 @@ const matchSubcategory = (categorySlug, text) => {
     if (/\b(jazz|blues|swing|soul)\b/.test(text)) return SUBCATEGORY.jazzBlues;
     if (/\b(clasica|clásica|opera|ópera|orquesta|sinfonic|sinfónic|sinfonica|sinfónica|zarzuela)\b/.test(text)) return SUBCATEGORY.clasicaOpera;
     if (/\b(concierto|concert|recital|gira|tour|banda|cantante|cantautor|tributo|acustic|acústic)\b/.test(text)) return SUBCATEGORY.conciertos;
-    return SUBCATEGORY.musicaOtros;
+    return SUBCATEGORY.conciertos;
   }
 
   if (categorySlug === "deportes") {
