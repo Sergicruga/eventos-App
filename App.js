@@ -10,6 +10,7 @@ import {
   registerPushTokenForUser,
   requestNotificationPermission,
 } from './src/utils/notifications';
+import AppUpdateGate from './src/components/AppUpdateGate';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -73,6 +74,7 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <NotificationBootstrap />
+        <AppUpdateGate />
         <EventProvider>
           <NavigationContainer linking={linking}>
             <AppNavigator />

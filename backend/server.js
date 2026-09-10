@@ -181,6 +181,32 @@ app.use((req, _res, next) => {
   next();
 });
 
+app.get("/app-version", (req, res) => {
+  const platform = String(req.query.platform || "android").toLowerCase();
+  const packageName = process.env.ANDROID_PACKAGE || "com.sergicruga.eventoapp";
+  const defaultStoreUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
+
+  const latestVersionCode = Number(
+    process.env.ANDROID_LATEST_VERSION_CODE ||
+      process.env.LATEST_VERSION_CODE ||
+      206
+  );
+  const minVersionCode = Number(
+    process.env.ANDROID_MIN_VERSION_CODE ||
+      process.env.MIN_VERSION_CODE ||
+      0
+  );
+
+  return res.json({
+    platform,
+    latestVersion: process.env.ANDROID_LATEST_VERSION || process.env.LATEST_VERSION || "1.0.8",
+    latestVersionCode,
+    minVersionCode,
+    required: false,
+    storeUrl: process.env.ANDROID_STORE_URL || process.env.STORE_URL || defaultStoreUrl,
+  });
+});
+
 // Servir archivos estáticos (perfil + eventos)
 app.use("/uploads", express.static(uploadsBaseDir));
 
