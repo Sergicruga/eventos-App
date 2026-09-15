@@ -306,6 +306,55 @@ export const inferEventSubcategorySlug = (event, categorySlug) => {
     return 'arte-otros';
   }
 
+  if (category === 'deportes') {
+    if (/\b(futbol|football|soccer)\b/.test(text)) return 'futbol';
+    if (/\b(running|carrera|carreras|cursa|maraton|trail)\b/.test(text)) return 'running';
+    if (/\b(yoga|fitness|pilates|gimnasio|zumba)\b/.test(text)) return 'fitness-yoga';
+    if (/\b(senderismo|sendero|trekking|montana|ruta)\b/.test(text)) return 'senderismo';
+    if (/\b(motor|moto|motocicl|kart|rally|formula)\b/.test(text)) return 'motor';
+    if (/\b(basket|basquet|baloncesto)\b/.test(text)) return 'baloncesto';
+    return 'deportes-otros';
+  }
+
+  if (category === 'tecnologia') {
+    if (/\b(gaming|videojuego|esports|e-sports)\b/.test(text)) return 'gaming';
+    if (/\b(startup|emprend|empresa|networking)\b/.test(text)) return 'startups';
+    if (/\b(ia|inteligencia artificial|software|programacion|digital)\b/.test(text)) return 'ia-software';
+    if (/\b(robot|robotica)\b/.test(text)) return 'robotica';
+    return 'tecnologia-otros';
+  }
+
+  if (category === 'educacion') {
+    if (/\b(taller|workshop)\b/.test(text)) return 'talleres';
+    if (/\b(charla|xerrada|conferencia|coloquio)\b/.test(text)) return 'charlas';
+    if (/\b(curso|curs|formacion|seminario)\b/.test(text)) return 'cursos';
+    if (/\b(infantil|familia|familiar|ninos|kids)\b/.test(text)) return 'infantil-familiar';
+    return 'educacion-otros';
+  }
+
+  if (category === 'gastronomia') {
+    if (/\b(feria gastronom|fira gastronom|festival gastronom)\b/.test(text)) return 'ferias-gastronomicas';
+    if (/\b(cata|vino|vi\b|degustacion)\b/.test(text)) return 'catas';
+    if (/\b(mercado|mercat|market)\b/.test(text)) return 'mercados';
+    if (/\b(taller.*cocina|cocina|cuina|showcooking)\b/.test(text)) return 'talleres-cocina';
+    return 'gastronomia-otros';
+  }
+
+  if (category === 'cine') {
+    if (/\b(documental|documentary)\b/.test(text)) return 'documentales';
+    if (/\b(ciclo|proyeccion|projeccio|filmoteca)\b/.test(text)) return 'ciclos-proyecciones';
+    if (/\b(pelicula|film|movie|cine|cinema)\b/.test(text)) return 'peliculas';
+    return 'cine-otros';
+  }
+
+  if (category === 'otro') {
+    if (/\b(fiesta|festes|festa|verbena|romeria)\b/.test(text)) return 'fiestas-populares';
+    if (/\b(feria|fira|salon)\b/.test(text)) return 'ferias';
+    if (/\b(mercadillo|rastro|market|mercado)\b/.test(text)) return 'mercadillos';
+    if (/\b(familia|familiar|infantil|ninos|kids)\b/.test(text)) return 'familia';
+    return 'otros';
+  }
+
   return null;
 };
 

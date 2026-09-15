@@ -171,7 +171,7 @@ export default function CategoryEventsScreen({ route }) {
     let key;
     if (
       String(ev.type) === 'api' ||
-      ['ticketmaster', 'atrapalo'].includes(String(ev.source))
+      ['ticketmaster', 'atrapalo', 'entradas_awin'].includes(String(ev.source))
     ) {
       key = normalizeTitleKey(ev.title);
     } else {

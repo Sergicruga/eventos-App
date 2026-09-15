@@ -67,6 +67,10 @@ import {
   warmPamplonaAgendaCache,
   warmRiojaTeatrosCache,
 } from "./services/regionalHtmlAgendaService.js";
+import {
+  fetchAwinEntradasEvents,
+  warmAwinEntradasCache,
+} from "./services/awinEntradasService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -958,6 +962,7 @@ app.get("/events", async (req, res) => {
     let castillaManchaAgendaEvents = [];
     let pamplonaAgendaEvents = [];
     let riojaTeatrosEvents = [];
+    let awinEntradasEvents = [];
     const citiesToFetch = buildCitiesToFetch({ userCity, userCoords, radiusKm });
     console.log("Ciudades externas consultadas:", {
       userCity,
@@ -1067,6 +1072,7 @@ app.get("/events", async (req, res) => {
       castillaManchaAgendaResult,
       pamplonaAgendaResult,
       riojaTeatrosResult,
+      awinEntradasResult,
     ] = await Promise.allSettled([
       fetchMusicEventsMultipleCities(citiesToFetch),
       fetchAtrapaloEventsMultipleCities(citiesToFetch),
@@ -1084,6 +1090,7 @@ app.get("/events", async (req, res) => {
       shouldFetchCastillaManchaAgenda ? fetchCastillaManchaAgendaEvents() : Promise.resolve([]),
       shouldFetchPamplonaAgenda ? fetchPamplonaAgendaEvents() : Promise.resolve([]),
       shouldFetchRiojaTeatros ? fetchRiojaTeatrosEvents() : Promise.resolve([]),
+      fetchAwinEntradasEvents({ citiesToFetch, userCoords, radiusKm }),
     ]);
 
     if (ticketmasterResult.status === "fulfilled") {
@@ -1230,6 +1237,15 @@ app.get("/events", async (req, res) => {
       );
     }
 
+    if (awinEntradasResult.status === "fulfilled") {
+      awinEntradasEvents = awinEntradasResult.value;
+    } else {
+      console.warn(
+        "Awin entradas.com events fetch failed, continuing:",
+        awinEntradasResult.reason?.message || awinEntradasResult.reason
+      );
+    }
+
     // Combine and return events
     const allEvents = [
       ...events,
@@ -1249,6 +1265,7 @@ app.get("/events", async (req, res) => {
       ...castillaManchaAgendaEvents,
       ...pamplonaAgendaEvents,
       ...riojaTeatrosEvents,
+      ...awinEntradasEvents,
     ];
     console.log("Eventos devueltos:", {
       local: events.length,
@@ -1268,6 +1285,7 @@ app.get("/events", async (req, res) => {
       clm_agenda: castillaManchaAgendaEvents.length,
       pamplona_agenda: pamplonaAgendaEvents.length,
       rioja_teatros: riojaTeatrosEvents.length,
+      entradas_awin: awinEntradasEvents.length,
       total: allEvents.length,
     });
     if (barcelonaDibaEvents.length) {
@@ -2557,6 +2575,7 @@ void warmGijonAgendaCache();
 void warmCastillaManchaAgendaCache();
 void warmPamplonaAgendaCache();
 void warmRiojaTeatrosCache();
+void warmAwinEntradasCache();
 
 app.listen(PORT, () => {
   console.log(`✅ API escuchando en puerto ${PORT}`);

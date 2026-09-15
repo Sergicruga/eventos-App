@@ -41,9 +41,9 @@ const normalizeTitleKey = (title = '') => {
 };
 const isExternalApiEvent = (ev) =>
   String(ev?.type) === 'api' ||
-  ['ticketmaster', 'atrapalo'].includes(String(ev?.source));
+  ['ticketmaster', 'atrapalo', 'entradas_awin'].includes(String(ev?.source));
 
-// Remove duplicate API/Ticketmaster/Atrápalo events by normalized title.
+// Remove duplicate API/Ticketmaster/Atrápalo/entradas.com events by normalized title.
 // Local/database events are kept as-is.
 const dedupeApiEvents = (arr = []) => {
   const groups = {};
