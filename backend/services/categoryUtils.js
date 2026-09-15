@@ -81,7 +81,13 @@ const EDUCATION_RE =
   /\b(taller|curso|curs|charla|xerrada|conferencia|formacion|formacio|educa|jornada|seminario|biblioteca|lectura|infantil|familia)\b/;
 
 const FOOD_RE =
-  /\b(gastronom|mercado|mercat|comida|menjar|food|vino|vi\b|tapa|cata|cuina|cocina|producto)\b/;
+  /\b(gastronom|restaurante|restaurant|comida|menjar|food|vino|vi\b|bodega|tapa|tapas|cata|degustacion|degustacio|maridaje|cuina|cocina|showcooking|chef|queso|formatge|cerveza|cervesa|vermut|vermouth)\b/;
+
+const FOOD_MARKET_RE =
+  /\b(mercado|mercat|market|fira|feria)\b.*\b(gastronom|aliment|comida|menjar|food|vino|vi\b|tapa|cata|degustacion|degustacio|cuina|cocina|producto local|producte local)\b|\b(gastronom|aliment|comida|menjar|food|vino|vi\b|tapa|cata|degustacion|degustacio|cuina|cocina|producto local|producte local)\b.*\b(mercado|mercat|market|fira|feria)\b/;
+
+const STRONG_FOOD_RE =
+  /\b(gastronom|restaurante|restaurant|comida|menjar|food|vino|vi\b|bodega|tapa|tapas|cata|degustacion|degustacio|maridaje|cuina|cocina|showcooking|chef|queso|formatge|cerveza|cervesa|vermut|vermouth)\b/;
 
 const TECH_RE =
   /\b(tecnologia|technology|digital|robot|inteligencia artificial|software|startup|videojuego|gaming)\b/;
@@ -134,7 +140,7 @@ const matchSubcategory = (categorySlug, text) => {
   }
 
   if (categorySlug === "gastronomia") {
-    if (/\b(feria gastronom|fira gastronom|festival gastronom)\b/.test(text)) return SUBCATEGORY.feriasGastronomicas;
+    if (/\b(feria gastronom\w*|fira gastronom\w*|festival gastronom\w*)\b/.test(text)) return SUBCATEGORY.feriasGastronomicas;
     if (/\b(cata|vino|vi\b|degustacion|degustación)\b/.test(text)) return SUBCATEGORY.catas;
     if (/\b(mercado|mercat|market)\b/.test(text)) return SUBCATEGORY.mercados;
     if (/\b(taller.*cocina|cocina|cuina|showcooking)\b/.test(text)) return SUBCATEGORY.talleresCocina;
@@ -157,6 +163,7 @@ const matchSubcategory = (categorySlug, text) => {
 
 function categoryFromText(...parts) {
   const text = normalizeText(parts.filter(Boolean).join(" "));
+  const title = normalizeText(parts[0] || "");
 
   if (!text) {
     return {
@@ -178,11 +185,18 @@ function categoryFromText(...parts) {
   if (has(text, SPORTS_RE)) return withSubcategory(CATEGORY.deportes);
   if (has(text, CINEMA_RE)) return withSubcategory(CATEGORY.cine);
   if (has(text, TECH_RE)) return withSubcategory(CATEGORY.tecnologia);
-  if (has(text, FOOD_RE)) return withSubcategory(CATEGORY.gastronomia);
-  if (has(text, EDUCATION_RE)) return withSubcategory(CATEGORY.educacion);
 
   const isClearlyMusic = has(text, MUSIC_RE);
   const isClearlyArt = has(text, ARTS_RE);
+  const isClearlyFood = has(text, FOOD_RE) || has(text, FOOD_MARKET_RE);
+  const isStrongFood = has(text, STRONG_FOOD_RE) || has(title, FOOD_MARKET_RE);
+
+  if (isClearlyFood && !isClearlyArt) return withSubcategory(CATEGORY.gastronomia);
+  if (isClearlyFood && isClearlyArt && isStrongFood && has(title, STRONG_FOOD_RE)) {
+    return withSubcategory(CATEGORY.gastronomia);
+  }
+
+  if (has(text, EDUCATION_RE)) return withSubcategory(CATEGORY.educacion);
 
   if (isClearlyArt && !isClearlyMusic) return withSubcategory(CATEGORY.arte);
   if (isClearlyMusic && !isClearlyArt) return withSubcategory(CATEGORY.musica);
