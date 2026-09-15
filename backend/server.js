@@ -136,7 +136,25 @@ pool
       await c.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token TEXT");
       await c.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS subcategory_slug TEXT");
       await c.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS subcategory_name TEXT");
-      console.log("✅ Columna users.expo_push_token lista");
+      await c.query(`
+        CREATE TABLE IF NOT EXISTS api_events (
+          source TEXT NOT NULL,
+          external_id TEXT NOT NULL,
+          event_id INTEGER NOT NULL,
+          PRIMARY KEY (source, external_id)
+        )
+      `);
+      await c.query("ALTER TABLE api_events ADD COLUMN IF NOT EXISTS title TEXT");
+      await c.query("ALTER TABLE api_events ADD COLUMN IF NOT EXISTS description TEXT");
+      await c.query("ALTER TABLE api_events ADD COLUMN IF NOT EXISTS image TEXT");
+      await c.query("ALTER TABLE api_events ADD COLUMN IF NOT EXISTS event_at TEXT");
+      await c.query("ALTER TABLE api_events ADD COLUMN IF NOT EXISTS venue_name TEXT");
+      await c.query("ALTER TABLE api_events ADD COLUMN IF NOT EXISTS city TEXT");
+      await c.query("ALTER TABLE api_events ADD COLUMN IF NOT EXISTS country TEXT");
+      await c.query("ALTER TABLE api_events ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION");
+      await c.query("ALTER TABLE api_events ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION");
+      await c.query("ALTER TABLE api_events ADD COLUMN IF NOT EXISTS url TEXT");
+      console.log("✅ Migraciones automáticas listas");
     } catch (err) {
       console.warn("⚠️ No se pudo asegurar migraciones automáticas:", err.message);
     } finally {
