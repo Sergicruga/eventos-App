@@ -2258,17 +2258,29 @@ app.delete("/attendees", async (req, res) => {
 // Obtener asistentes de un evento
 app.get("/events/:eventId/attendees", async (req, res) => {
   const eventId = req.eventId;
+  const viewerId = req.query.userId ? Number(req.query.userId) : null;
 
   try {
     const { rows } = await pool.query(
       `SELECT 
          u.id,
          u.name,
-         u.photo
+         u.photo,
+         CASE
+           WHEN $2::int IS NULL THEN false
+           WHEN u.id = $2::int THEN false
+           ELSE EXISTS (
+             SELECT 1
+               FROM friends f
+              WHERE (f.user_id = $2::int AND f.friend_id = u.id)
+                 OR (f.user_id = u.id AND f.friend_id = $2::int)
+           )
+         END AS is_friend
        FROM event_attendees a
        JOIN users u ON u.id = a.user_id
-      WHERE a.event_id = $1`,
-      [eventId]
+      WHERE a.event_id = $1
+      ORDER BY is_friend DESC, u.name ASC`,
+      [eventId, viewerId]
     );
     res.json(rows);
   } catch (e) {

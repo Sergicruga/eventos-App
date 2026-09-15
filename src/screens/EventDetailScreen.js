@@ -451,7 +451,9 @@ export default function EventDetailScreen({ route, navigation }) {
     const fetchAttendees = async () => {
       if (!current?.id) return;
       try {
-        const res = await fetch(buildEventUrl('/attendees'));
+        const res = await fetch(
+          buildEventUrl('/attendees', user?.id ? { userId: user.id } : {})
+        );
         if (res.ok) {
           const data = await res.json();
           if (cancelled) return;
@@ -507,7 +509,9 @@ export default function EventDetailScreen({ route, navigation }) {
     }
 
     try {
-      const res = await fetch(buildEventUrl('/attendees'));
+      const res = await fetch(
+        buildEventUrl('/attendees', user?.id ? { userId: user.id } : {})
+      );
       if (res.ok) {
         const data = await res.json();
         setAttendees(Array.isArray(data) ? data : []);
@@ -518,6 +522,11 @@ export default function EventDetailScreen({ route, navigation }) {
 
     setJoining(false);
   }, [user, joining, isJoined, current, joinEvent, leaveEvent, buildEventUrl]);
+
+  const friendAttendees = useMemo(
+    () => attendees.filter((attendee) => attendee?.is_friend === true),
+    [attendees]
+  );
 
   // ----- Comentarios -----
   const [comments, setComments] = useState([]);
@@ -821,9 +830,20 @@ export default function EventDetailScreen({ route, navigation }) {
 
           {/* Asistentes */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>
-              <Ionicons name="people-outline" size={18} color={COLORS.primary} /> Asistentes ({attendees.length})
-            </Text>
+            <View style={styles.attendeeHeaderRow}>
+              <View>
+                <Text style={styles.sectionTitle}>
+                  <Ionicons name="people-outline" size={18} color={COLORS.primary} /> Quién va
+                </Text>
+                <Text style={styles.attendeeSummary}>
+                  {attendees.length === 0
+                    ? 'Sé el primero en apuntarte'
+                    : friendAttendees.length > 0
+                    ? `${friendAttendees.length} ${friendAttendees.length === 1 ? 'amigo va' : 'amigos van'} · ${attendees.length} en total`
+                    : `${attendees.length} ${attendees.length === 1 ? 'persona va' : 'personas van'}`}
+                </Text>
+              </View>
+            </View>
 
             {attendees.length > 0 ? (
               <ScrollView
@@ -864,12 +884,19 @@ export default function EventDetailScreen({ route, navigation }) {
                       >
                         {name}
                       </Text>
+                      {a?.is_friend === true && (
+                        <View style={styles.friendBadge}>
+                          <Text style={styles.friendBadgeText}>Amigo</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
               </ScrollView>
             ) : (
-              <Text style={{ color: COLORS.gray, marginTop: 4 }}>Sé el primero en apuntarte</Text>
+              <Text style={{ color: COLORS.gray, marginTop: 4 }}>
+                Cuando un amigo se apunte, aparecerá aquí.
+              </Text>
             )}
           </View>
 
@@ -1171,8 +1198,20 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontWeight: 'bold', fontSize: 18, color: COLORS.primary, marginBottom: 6 },
   attendeeText: { color: COLORS.text, fontSize: 15, marginVertical: 1, marginLeft: 2 },
+  attendeeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  attendeeSummary: {
+    color: COLORS.gray,
+    fontSize: 13,
+    marginTop: -2,
+    marginBottom: 4,
+  },
   attendeeAvatarList: { paddingVertical: 4 },
-  attendeeAvatarWrap: { width: 64, marginRight: 10, alignItems: 'center' },
+  attendeeAvatarWrap: { width: 74, marginRight: 10, alignItems: 'center' },
   attendeeAvatarImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.inputBg },
   attendeeAvatarFallback: {
     width: 48, height: 48, borderRadius: 24,
@@ -1181,6 +1220,20 @@ const styles = StyleSheet.create({
   },
   attendeeAvatarInitials: { fontWeight: '700', color: COLORS.primary },
   attendeeAvatarName: { marginTop: 4, fontSize: 11, color: COLORS.text, textAlign: 'center' },
+  friendBadge: {
+    marginTop: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#E8F2FF',
+    borderWidth: 1,
+    borderColor: '#CFE2FF',
+  },
+  friendBadgeText: {
+    color: COLORS.primary,
+    fontSize: 10,
+    fontWeight: '800',
+  },
 
   actionBtnContainer: {
     width: '92%',
