@@ -166,7 +166,10 @@ export default function CategoryEventsScreen({ route }) {
   };
 
   const deduped = [];
-  const seen = new Set();
+  const seenIndexByKey = new Map();
+  const hasBuyUrl = (ev) =>
+    Boolean(ev?.url || ev?.purchaseUrl || ev?.purchase_url || ev?.buyUrl || ev?.buy_url);
+
   for (const ev of filteredEvents) {
     let key;
     if (
@@ -177,9 +180,15 @@ export default function CategoryEventsScreen({ route }) {
     } else {
       key = `${ev.type}-${ev.id}`;
     }
-    if (!seen.has(key)) {
+
+    if (!seenIndexByKey.has(key)) {
       deduped.push(ev);
-      seen.add(key);
+      seenIndexByKey.set(key, deduped.length - 1);
+    } else {
+      const index = seenIndexByKey.get(key);
+      if (!hasBuyUrl(deduped[index]) && hasBuyUrl(ev)) {
+        deduped[index] = ev;
+      }
     }
   }
 

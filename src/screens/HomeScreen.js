@@ -118,7 +118,9 @@ export default function HomeScreen() {
 
   const dedupeEvents = (events = []) => {
     const deduped = [];
-    const seen = new Set();
+    const seenIndexByKey = new Map();
+    const hasBuyUrl = (ev) =>
+      Boolean(ev?.url || ev?.purchaseUrl || ev?.purchase_url || ev?.buyUrl || ev?.buy_url);
 
     for (const ev of events) {
       let key;
@@ -126,16 +128,22 @@ export default function HomeScreen() {
       if (
         String(ev.type) === 'api' ||
         String(ev.source) === 'ticketmaster' ||
-        String(ev.source) === 'atrapalo'
+        String(ev.source) === 'atrapalo' ||
+        String(ev.source) === 'entradas_awin'
       ) {
         key = normalizeTitleKey(ev.title);
       } else {
         key = `${ev.type}-${ev.id}`;
       }
 
-      if (!seen.has(key)) {
+      if (!seenIndexByKey.has(key)) {
         deduped.push(ev);
-        seen.add(key);
+        seenIndexByKey.set(key, deduped.length - 1);
+      } else {
+        const index = seenIndexByKey.get(key);
+        if (!hasBuyUrl(deduped[index]) && hasBuyUrl(ev)) {
+          deduped[index] = ev;
+        }
       }
     }
 

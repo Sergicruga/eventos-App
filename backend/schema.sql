@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS events (
   image TEXT,
   latitude FLOAT,
   longitude FLOAT,
+  url TEXT,
   created_by INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 

@@ -43,6 +43,9 @@ const isExternalApiEvent = (ev) =>
   String(ev?.type) === 'api' ||
   ['ticketmaster', 'atrapalo', 'entradas_awin'].includes(String(ev?.source));
 
+const hasBuyUrl = (ev) =>
+  Boolean(ev?.url || ev?.purchaseUrl || ev?.purchase_url || ev?.buyUrl || ev?.buy_url);
+
 // Remove duplicate API/Ticketmaster/Atrápalo/entradas.com events by normalized title.
 // Local/database events are kept as-is.
 const dedupeApiEvents = (arr = []) => {
@@ -76,13 +79,8 @@ const dedupeApiEvents = (arr = []) => {
         !/\b(vip|packages?|package)\b/i.test(String(ev.title || ''))
       );
       
-      if (nonVipEvents.length > 0) {
-        // Keep the first non-VIP event
-        result.push(nonVipEvents[0]);
-      } else {
-        // If all are VIP, keep the first one
-        result.push(group[0]);
-      }
+      const candidates = nonVipEvents.length > 0 ? nonVipEvents : group;
+      result.push(candidates.find(hasBuyUrl) || candidates[0]);
     }
   });
   

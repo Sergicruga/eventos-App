@@ -136,6 +136,7 @@ pool
       await c.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS expo_push_token TEXT");
       await c.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS subcategory_slug TEXT");
       await c.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS subcategory_name TEXT");
+      await c.query("ALTER TABLE events ADD COLUMN IF NOT EXISTS url TEXT");
       await c.query(`
         CREATE TABLE IF NOT EXISTS api_events (
           source TEXT NOT NULL,
@@ -315,6 +316,22 @@ app.param("eventId", async (req, res, next, rawId) => {
       "SELECT event_id FROM api_events WHERE source=$1 AND external_id=$2",
       [source, externalId]
     );
+    if (r.rows.length && r.rows[0].event_id) {
+      const url = req.body?.url || req.query?.url || null;
+      if (url) {
+        await pool.query("UPDATE events SET url = COALESCE(url, $1) WHERE id = $2", [
+          url,
+          r.rows[0].event_id,
+        ]);
+        await pool.query(
+          `UPDATE api_events
+              SET url = COALESCE(url, $3)
+            WHERE source = $1 AND external_id = $2`,
+          [source, externalId, url]
+        );
+      }
+    }
+
     if (!r.rows.length || !r.rows[0].event_id) {
       // Intentar crear un evento local mínimo y enlazarlo en api_events
       try {
@@ -340,10 +357,10 @@ app.param("eventId", async (req, res, next, rawId) => {
 
         console.log(`Auto-creating event for externalId=${externalId} source=${source}`);
         const ins = await pool.query(
-          `INSERT INTO events (title, description, image, event_at, location, type, latitude, longitude)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+          `INSERT INTO events (title, description, image, event_at, location, type, latitude, longitude, url)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
            RETURNING id`,
-          [title, description, image, eventAt, location, type, latitude, longitude]
+          [title, description, image, eventAt, location, type, latitude, longitude, url]
         );
         const newEventId = ins.rows[0].id;
 
@@ -924,9 +941,16 @@ app.get("/events", async (req, res) => {
           `SELECT e.id, e.title, e.description, e.event_at, e.location, e.type, e.image,
                   e.subcategory_slug, e.subcategory_name,
                   e.latitude, e.longitude, e.created_by, e.category_id,
+                  COALESCE(e.url, ae.url) as url,
                   ec.slug as category_slug, ec.name as category_name
              FROM events e
              LEFT JOIN event_categories ec ON e.category_id = ec.id
+             LEFT JOIN LATERAL (
+               SELECT url
+                 FROM api_events
+                WHERE event_id = e.id AND url IS NOT NULL
+                LIMIT 1
+             ) ae ON true
             ORDER BY e.event_at DESC`
         );
         events = rows;
@@ -934,6 +958,7 @@ app.get("/events", async (req, res) => {
         const { rows } = await pool.query(
           `SELECT
               e.*,
+              COALESCE(e.url, ae.url) as url,
               ec.slug as category_slug,
               ec.name as category_name,
               EXISTS (
@@ -950,6 +975,12 @@ app.get("/events", async (req, res) => {
               ) AS attendees_count
            FROM events e
            LEFT JOIN event_categories ec ON e.category_id = ec.id
+           LEFT JOIN LATERAL (
+             SELECT url
+               FROM api_events
+              WHERE event_id = e.id AND url IS NOT NULL
+              LIMIT 1
+           ) ae ON true
            ORDER BY e.event_at DESC`,
           [userId]
         );
