@@ -92,6 +92,9 @@ const STRONG_FOOD_RE =
 const TECH_RE =
   /\b(tecnologia|technology|digital|robot|inteligencia artificial|software|startup|videojuego|gaming)\b/;
 
+const EDUCATION_TITLE_RE =
+  /\b(taller|workshop|curso|curs|charla|xerrada|conferencia|formacion|formacio|seminario|biblioteca|lectura)\b/;
+
 const matchSubcategory = (categorySlug, text) => {
   if (categorySlug === "musica") {
     if (/\b(festival|festivales|fest|primavera sound|cruilla|sonar|sónar)\b/.test(text)) return SUBCATEGORY.festivales;
@@ -182,31 +185,42 @@ function categoryFromText(...parts) {
     };
   };
 
-  if (has(text, SPORTS_RE)) return withSubcategory(CATEGORY.deportes);
-  if (has(text, CINEMA_RE)) return withSubcategory(CATEGORY.cine);
-  if (has(text, TECH_RE)) return withSubcategory(CATEGORY.tecnologia);
-
+  const isClearlySport = has(text, SPORTS_RE);
+  const isClearlyCinema = has(text, CINEMA_RE);
+  const isClearlyTech = has(text, TECH_RE);
   const isClearlyMusic = has(text, MUSIC_RE);
   const isClearlyArt = has(text, ARTS_RE);
   const isClearlyFood = has(text, FOOD_RE) || has(text, FOOD_MARKET_RE);
   const isStrongFood = has(text, STRONG_FOOD_RE) || has(title, FOOD_MARKET_RE);
+  const isClearlyEducation = has(text, EDUCATION_RE);
+  const titleLooksEducational = has(title, EDUCATION_TITLE_RE);
+
+  // Categorías muy específicas: si aparecen de forma clara, deben ganar a textos
+  // genéricos como "cultural", "jornada" o "familia".
+  if (isClearlyCinema) return withSubcategory(CATEGORY.cine);
+  if (isClearlyTech) return withSubcategory(CATEGORY.tecnologia);
+  if (isClearlySport) return withSubcategory(CATEGORY.deportes);
 
   if (isClearlyFood && !isClearlyArt) return withSubcategory(CATEGORY.gastronomia);
   if (isClearlyFood && isClearlyArt && isStrongFood && has(title, STRONG_FOOD_RE)) {
     return withSubcategory(CATEGORY.gastronomia);
   }
 
-  if (has(text, EDUCATION_RE)) return withSubcategory(CATEGORY.educacion);
+  // Si el título dice "taller/curso/charla..." es más útil verlo en Educación,
+  // salvo que ya haya ganado una categoría específica como deporte, cine,
+  // tecnología o gastronomía.
+  if (titleLooksEducational && !isClearlyFood) return withSubcategory(CATEGORY.educacion);
 
   if (isClearlyArt && !isClearlyMusic) return withSubcategory(CATEGORY.arte);
   if (isClearlyMusic && !isClearlyArt) return withSubcategory(CATEGORY.musica);
 
   if (isClearlyArt && isClearlyMusic) {
-    const title = normalizeText(parts[0] || "");
     return has(title, MUSIC_RE) && !has(title, ARTS_RE)
       ? withSubcategory(CATEGORY.musica)
       : withSubcategory(CATEGORY.arte);
   }
+
+  if (isClearlyEducation) return withSubcategory(CATEGORY.educacion);
 
   return withSubcategory(CATEGORY.otro);
 }
