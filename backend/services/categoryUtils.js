@@ -95,6 +95,21 @@ const TECH_RE =
 const EDUCATION_TITLE_RE =
   /\b(taller|workshop|curso|curs|charla|xerrada|conferencia|formacion|formacio|seminario|biblioteca|lectura)\b/;
 
+const TITLE_MUSIC_RE =
+  /\b(musica|concierto|concert|recital|gira|tour|dj|jazz|rock|pop|rap|hip hop|reggaeton|flamenco|opera|orquesta|banda|cantante|cantautor|tributo|acustic|acustico|zarzuela|primavera sound|cruilla|sonar)\b/;
+
+const TITLE_ART_RE =
+  /\b(exposicion|exposicio|exhibition|museo|museu|galeria|arte|pintura|escultura|fotografia|teatro|teatre|danza|dansa|ballet|giselle|circo|circ|comedia|monologo|performance|visita guiada)\b/;
+
+const TITLE_SPORTS_RE =
+  /\b(carrera|cursa|running|maraton|trail|ironman|ultra|futbol|basket|baloncesto|tenis|yoga|senderismo|moto|motor)\b/;
+
+const TITLE_CINEMA_RE =
+  /\b(cine|cinema|pelicula|film|documental|proyeccion|projeccio|festival cinema)\b/;
+
+const TITLE_TECH_RE =
+  /\b(tecnologia|technology|digital|robot|inteligencia artificial|software|startup|videojuego|gaming|hackathon)\b/;
+
 const matchSubcategory = (categorySlug, text) => {
   if (categorySlug === "musica") {
     if (/\b(festival|festivales|fest|primavera sound|cruilla|sonar|sónar)\b/.test(text)) return SUBCATEGORY.festivales;
@@ -108,7 +123,7 @@ const matchSubcategory = (categorySlug, text) => {
 
   if (categorySlug === "deportes") {
     if (/\b(futbol|fútbol|football|soccer)\b/.test(text)) return SUBCATEGORY.futbol;
-    if (/\b(running|carrera|carreras|cursa|maraton|maratón|trail)\b/.test(text)) return SUBCATEGORY.running;
+    if (/\b(running|carrera|carreras|cursa|maraton|maratón|trail|ironman|ultra)\b/.test(text)) return SUBCATEGORY.running;
     if (/\b(yoga|fitness|pilates|gimnasio|zumba)\b/.test(text)) return SUBCATEGORY.fitnessYoga;
     if (/\b(senderismo|sendero|trekking|montaña|montana|ruta)\b/.test(text)) return SUBCATEGORY.senderismo;
     if (/\b(motor|moto|motocicl|kart|rally|formula|fórmula)\b/.test(text)) return SUBCATEGORY.motor;
@@ -194,12 +209,25 @@ function categoryFromText(...parts) {
   const isStrongFood = has(text, STRONG_FOOD_RE) || has(title, FOOD_MARKET_RE);
   const isClearlyEducation = has(text, EDUCATION_RE);
   const titleLooksEducational = has(title, EDUCATION_TITLE_RE);
+  const titleLooksMusic = has(title, TITLE_MUSIC_RE);
+  const titleLooksArt = has(title, TITLE_ART_RE);
+  const titleLooksSport = has(title, TITLE_SPORTS_RE);
+  const titleLooksCinema = has(title, TITLE_CINEMA_RE);
+  const titleLooksTech = has(title, TITLE_TECH_RE);
+
+  // El título es la señal más fiable. Evita que palabras del recinto o de una
+  // descripción larga manden un ballet/exposición/concierto a otra categoría.
+  if (titleLooksSport) return withSubcategory(CATEGORY.deportes);
+  if (titleLooksCinema && !titleLooksMusic && !titleLooksArt) return withSubcategory(CATEGORY.cine);
+  if (titleLooksMusic && !titleLooksArt) return withSubcategory(CATEGORY.musica);
+  if (titleLooksArt) return withSubcategory(CATEGORY.arte);
+  if (titleLooksTech && !isClearlyArt && !isClearlyMusic) return withSubcategory(CATEGORY.tecnologia);
 
   // Categorías muy específicas: si aparecen de forma clara, deben ganar a textos
   // genéricos como "cultural", "jornada" o "familia".
-  if (isClearlyCinema) return withSubcategory(CATEGORY.cine);
-  if (isClearlyTech) return withSubcategory(CATEGORY.tecnologia);
   if (isClearlySport) return withSubcategory(CATEGORY.deportes);
+  if (isClearlyCinema && !isClearlyArt && !isClearlyMusic) return withSubcategory(CATEGORY.cine);
+  if (isClearlyTech && !isClearlyArt && !isClearlyMusic) return withSubcategory(CATEGORY.tecnologia);
 
   if (isClearlyFood && !isClearlyArt) return withSubcategory(CATEGORY.gastronomia);
   if (isClearlyFood && isClearlyArt && isStrongFood && has(title, STRONG_FOOD_RE)) {

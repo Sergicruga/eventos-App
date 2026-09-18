@@ -4,6 +4,7 @@ import React, {
   useState,
   useEffect,
   useMemo,
+  useCallback,
 } from 'react';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -357,6 +358,7 @@ export function EventProvider({ children }) {
 
   // ===== Estado principal =====
   const [events, setEvents] = useState([]);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   // Formulario
   const [formEvent, setFormEvent] = useState({
@@ -756,7 +758,11 @@ export function EventProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [uid, authToken, city, coords?.latitude, coords?.longitude, searchRadius]);
+  }, [uid, authToken, city, coords?.latitude, coords?.longitude, searchRadius, refreshTick]);
+
+  const refreshEvents = useCallback(() => {
+    setRefreshTick((tick) => tick + 1);
+  }, []);
 
   // Persistir eventos por-usuario ante cambios
   useEffect(() => {
@@ -1416,6 +1422,7 @@ export function EventProvider({ children }) {
     () => ({
       events,
       setEvents,
+      refreshEvents,
       myEvents,
       communityEvents,
       locationFilteredEvents,
@@ -1448,6 +1455,7 @@ export function EventProvider({ children }) {
     }),
     [
       events,
+      refreshEvents,
       myEvents,
       communityEvents,
       locationFilteredEvents,

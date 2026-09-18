@@ -5,6 +5,7 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { EventContext } from '../EventContext';
@@ -54,6 +55,7 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const [adReady, setAdReady] = useState(false);
   const [showRadiusOptions, setShowRadiusOptions] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const myUserId = user?.id != null ? String(user.id) : null;
   
   const locLoading = eventCtx.locLoading ?? false;
@@ -61,6 +63,7 @@ export default function HomeScreen() {
   const city = eventCtx.city ?? null;
   const searchRadius = eventCtx.searchRadius ?? 25;
   const setSearchRadius = eventCtx.setSearchRadius ?? (() => {});
+  const refreshEvents = eventCtx.refreshEvents ?? (() => {});
 
   useEffect(() => {
     (async () => {
@@ -173,6 +176,16 @@ export default function HomeScreen() {
     setShowRadiusOptions(false);
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      refreshEvents();
+      setTimeout(() => setRefreshing(false), 1200);
+    } catch {
+      setRefreshing(false);
+    }
+  };
+
   const renderCategoryGrid = ({ item }) => (
     <CategoryCard
       category={item}
@@ -262,6 +275,14 @@ export default function HomeScreen() {
           marginBottom: 12,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#1976d2"
+            colors={['#1976d2']}
+          />
+        }
       />
 
       {/* ✅ BANNER FIJO ABAJO (TEST) */}
