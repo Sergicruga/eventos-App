@@ -81,34 +81,37 @@ const EDUCATION_RE =
   /\b(taller|curso|curs|charla|xerrada|conferencia|formacion|formacio|educa|jornada|seminario|biblioteca|lectura|infantil|familia)\b/;
 
 const FOOD_RE =
-  /\b(gastronom|restaurante|restaurant|comida|menjar|food|vino|vi\b|bodega|tapa|tapas|cata|degustacion|degustacio|maridaje|cuina|cocina|showcooking|chef|queso|formatge|cerveza|cervesa|vermut|vermouth)\b/;
+  /\b(gastronom\w*|restaurante|restaurant|comida|menjar|food|vino|vi\b|bodega|tapa|tapas|cata|tast|degustacion|degustacio|maridaje|cuina|cocina|showcooking|chef|queso|formatge|cerveza|cervesa|vermut|vermouth)\b/;
 
 const FOOD_MARKET_RE =
-  /\b(mercado|mercat|market|fira|feria)\b.*\b(gastronom|aliment|comida|menjar|food|vino|vi\b|tapa|cata|degustacion|degustacio|cuina|cocina|producto local|producte local)\b|\b(gastronom|aliment|comida|menjar|food|vino|vi\b|tapa|cata|degustacion|degustacio|cuina|cocina|producto local|producte local)\b.*\b(mercado|mercat|market|fira|feria)\b/;
+  /\b(mercado|mercat|market|fira|feria)\b.*\b(gastronom\w*|aliment|comida|menjar|food|vino|vi\b|tapa|cata|tast|degustacion|degustacio|cuina|cocina|producto local|producte local)\b|\b(gastronom\w*|aliment|comida|menjar|food|vino|vi\b|tapa|cata|tast|degustacion|degustacio|cuina|cocina|producto local|producte local)\b.*\b(mercado|mercat|market|fira|feria)\b/;
 
 const STRONG_FOOD_RE =
-  /\b(gastronom|restaurante|restaurant|comida|menjar|food|vino|vi\b|bodega|tapa|tapas|cata|degustacion|degustacio|maridaje|cuina|cocina|showcooking|chef|queso|formatge|cerveza|cervesa|vermut|vermouth)\b/;
+  /\b(gastronom\w*|restaurante|restaurant|comida|menjar|food|vino|vi\b|bodega|tapa|tapas|cata|tast|degustacion|degustacio|maridaje|cuina|cocina|showcooking|chef|queso|formatge|cerveza|cervesa|vermut|vermouth)\b/;
 
 const TECH_RE =
   /\b(tecnologia|technology|digital|robot|inteligencia artificial|software|startup|videojuego|gaming)\b/;
 
 const EDUCATION_TITLE_RE =
-  /\b(taller|workshop|curso|curs|charla|xerrada|conferencia|formacion|formacio|seminario|biblioteca|lectura)\b/;
+  /\b(taller|workshop|curso|curs|charla|xerrada|conferencia|formacion|formacio|seminario|biblioteca|lectura|club de lectura|presentacion|presentacio|jornada|masterclass)\b/;
 
 const TITLE_MUSIC_RE =
-  /\b(musica|concierto|concert|recital|gira|tour|dj|jazz|rock|pop|rap|hip hop|reggaeton|flamenco|opera|orquesta|banda|cantante|cantautor|tributo|acustic|acustico|zarzuela|primavera sound|cruilla|sonar)\b/;
+  /\b(musica|concierto|concert|recital|gira|tour|dj|jazz|rock|pop|rap|hip hop|reggaeton|flamenco|opera|orquesta|orquestra|banda|cantante|cantautor|tributo|tribut|acustic|acustico|zarzuela|primavera sound|cruilla|sonar)\b/;
 
 const TITLE_ART_RE =
-  /\b(exposicion|exposicio|exhibition|museo|museu|galeria|arte|pintura|escultura|fotografia|teatro|teatre|danza|dansa|ballet|giselle|circo|circ|comedia|monologo|performance|visita guiada)\b/;
+  /\b(exposicion|exposicio|exhibition|museo|museu|galeria|arte|pintura|escultura|fotografia|teatro|teatre|danza|dansa|ballet|giselle|circo|circ|comedia|monologo|performance|visita guiada|visita|portes obertes|puertas abiertas|patrimoni|patrimonio|espectaculo|espectacle|magia|clown|titelles|titeres|poesia|literatura)\b/;
 
 const TITLE_SPORTS_RE =
-  /\b(carrera|cursa|running|maraton|trail|ironman|ultra|futbol|basket|baloncesto|tenis|yoga|senderismo|moto|motor)\b/;
+  /\b(carrera|cursa|running|maraton|trail|ironman|ultra|triathlon|triatlo|triatlon|futbol|basket|basquet|baloncesto|tenis|padel|yoga|pilates|fitness|senderismo|senderisme|caminada|bicicleta|bici|ciclismo|ciclisme|mtb|moto|motor)\b/;
 
 const TITLE_CINEMA_RE =
-  /\b(cine|cinema|pelicula|film|documental|proyeccion|projeccio|festival cinema)\b/;
+  /\b(cine|cinema|pelicula|pelicula|film|films|documental|documentals|proyeccion|projeccio|projeccions|curtmetratge|cortometraje|festival cinema|filmets)\b/;
 
 const TITLE_TECH_RE =
   /\b(tecnologia|technology|digital|robot|inteligencia artificial|software|startup|videojuego|gaming|hackathon)\b/;
+
+const TITLE_FOOD_RE =
+  /\b(gastronom\w*|restaurant|restaurante|cata|tast|degustacion|degustacio|vino|vi\b|tapa|tapas|cuina|cocina|showcooking|chef|vermut|vermouth|mercat gastronom\w*|mercado gastronom\w*|fira gastronom\w*|feria gastronom\w*)\b/;
 
 const matchSubcategory = (categorySlug, text) => {
   if (categorySlug === "musica") {
@@ -123,7 +126,7 @@ const matchSubcategory = (categorySlug, text) => {
 
   if (categorySlug === "deportes") {
     if (/\b(futbol|fútbol|football|soccer)\b/.test(text)) return SUBCATEGORY.futbol;
-    if (/\b(running|carrera|carreras|cursa|maraton|maratón|trail|ironman|ultra)\b/.test(text)) return SUBCATEGORY.running;
+    if (/\b(running|carrera|carreras|cursa|maraton|maratón|trail|ironman|ultra|triathlon|triatlo|triatlon|caminada)\b/.test(text)) return SUBCATEGORY.running;
     if (/\b(yoga|fitness|pilates|gimnasio|zumba)\b/.test(text)) return SUBCATEGORY.fitnessYoga;
     if (/\b(senderismo|sendero|trekking|montaña|montana|ruta)\b/.test(text)) return SUBCATEGORY.senderismo;
     if (/\b(motor|moto|motocicl|kart|rally|formula|fórmula)\b/.test(text)) return SUBCATEGORY.motor;
@@ -214,10 +217,12 @@ function categoryFromText(...parts) {
   const titleLooksSport = has(title, TITLE_SPORTS_RE);
   const titleLooksCinema = has(title, TITLE_CINEMA_RE);
   const titleLooksTech = has(title, TITLE_TECH_RE);
+  const titleLooksFood = has(title, TITLE_FOOD_RE) || has(title, FOOD_MARKET_RE);
 
   // El título es la señal más fiable. Evita que palabras del recinto o de una
   // descripción larga manden un ballet/exposición/concierto a otra categoría.
   if (titleLooksSport) return withSubcategory(CATEGORY.deportes);
+  if (titleLooksFood && !titleLooksArt) return withSubcategory(CATEGORY.gastronomia);
   if (titleLooksCinema && !titleLooksMusic && !titleLooksArt) return withSubcategory(CATEGORY.cine);
   if (titleLooksMusic && !titleLooksArt) return withSubcategory(CATEGORY.musica);
   if (titleLooksArt) return withSubcategory(CATEGORY.arte);
